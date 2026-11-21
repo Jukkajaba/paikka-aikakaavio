@@ -1,0 +1,20 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:1000}});const errs=[];p.on('pageerror',e=>errs.push(e.message+(e.stack||'').split('\n')[1]));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('[data-ptog=fc]');await p.waitForTimeout(100);console.log('no status:',(await p.textContent('#fcCard')).slice(0,120));
+// select Runko line, set actuals in Tilanne: Kerros1 100%, Kerros2 20%; status 20.1.
+const bd=p.locator('#chart path[data-role="body"]').first();const bb=await bd.boundingBox();await p.mouse.click(bb.x+bb.width/2,bb.y+bb.height/2);
+await p.click('[data-ptog=st]');await p.waitForTimeout(100);
+const pc=()=>p.locator('#stCard [data-field="apct"]');
+await pc().nth(0).fill('100');await pc().nth(0).dispatchEvent('change');
+await pc().nth(1).fill('20');await pc().nth(1).dispatchEvent('change');
+await p.fill('#st-day','2027-01-20');await p.dispatchEvent('#st-day','change');await p.waitForTimeout(200);
+console.log((await p.textContent('#fcCard')).slice(0,420).replace(/\s+/g,' '));
+console.log('forecast paths',await p.locator('#chart path[stroke-dasharray="7 4"]').count());
+await p.screenshot({path:'shot62a.png'});
+await p.click('#vGantt');await p.waitForTimeout(200);
+console.log('hdr',await p.evaluate(()=>[...document.querySelectorAll('#ganttHead text.ax')].map(t=>t.textContent).filter(x=>!/^\d+$/.test(x)).join(',')),'dashed rects',await p.locator('#gantt rect[stroke-dasharray="4 3"]').count());
+console.log(await p.evaluate(()=>[...document.querySelectorAll('#gantt text.gc')].slice(0,14).map(t=>t.textContent).join(' ')));
+await p.screenshot({path:'shot62b.png'});
+await p.uncheck('#fc-prod');await p.waitForTimeout(200);console.log('prod off',(await p.textContent('#fcCard')).match(/Ennuste valmis[^T]*/)[0].slice(0,50),errs);
+await b.close();})();

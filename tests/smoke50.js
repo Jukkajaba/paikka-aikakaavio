@@ -1,0 +1,10 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');await p.selectOption('#lvlSel','x');await p.waitForTimeout(100);
+const box=await p.locator('#gantt').boundingBox();const rowY=i=>box.y+i*26+13;
+const rowsF=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gt')].filter(t=>!/^[▸▾]$/.test(t.textContent)).map(t=>(+t.getAttribute('x')>40?'  ':'')+t.textContent.replace(/(.+)\1$/,'$1')).join('|'));
+await p.mouse.click(box.x+150,rowY(1));await p.click('#gAddTask');console.log(await rowsF());
+await p.mouse.click(box.x+150,rowY(3));await p.click('#gAddGrp');console.log(await rowsF());
+await p.click('[data-act="grpaddtask"]');console.log(await rowsF());
+await p.click('#gAddTask');console.log(await rowsF(),errs);await b.close();})();

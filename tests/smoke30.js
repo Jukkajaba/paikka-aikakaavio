@@ -1,0 +1,11 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
+const g=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gg')].map(t=>t.textContent.slice(0,t.textContent.length/2)).join(','));
+await p.selectOption('#lvlSel','x');
+const box=await p.locator('#gantt').boundingBox();
+const starts=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gc')].filter((t,i)=>i%4==0).map(t=>t.textContent).join(' '));
+console.log(await g(),await starts());
+const y=box.y+3*26+13;await p.mouse.move(box.x+700,y);await p.mouse.down();await p.mouse.move(box.x+250,y,{steps:10});await p.mouse.up();
+console.log(await g(),await starts());await b.close();})();

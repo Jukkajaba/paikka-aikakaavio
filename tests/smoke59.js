@@ -1,0 +1,17 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:1000}});const errs=[];p.on('pageerror',e=>errs.push(e.message+(e.stack||'').split('\n')[1]));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+const bd=p.locator('#chart path[data-role="body"]').first();const bb=await bd.boundingBox();await p.mouse.click(bb.x+bb.width/2,bb.y+bb.height/2);await p.waitForTimeout(100);
+console.log('task panel has act inputs',await p.locator('#panel [data-field="apct"]').count());
+await p.click('[data-ptog=st]');await p.waitForTimeout(100);
+const pc=p.locator('#stCard [data-field="apct"]');console.log('st inputs',await pc.count());
+await pc.nth(0).fill('100');await pc.nth(0).dispatchEvent('change');await p.waitForTimeout(100);
+await p.locator('#stCard [data-field="apct"]').nth(1).fill('50');await p.locator('#stCard [data-field="apct"]').nth(1).dispatchEvent('change');await p.waitForTimeout(100);
+await p.fill('#st-day','2027-01-20');await p.dispatchEvent('#st-day','change');await p.waitForTimeout(150);
+console.log('on: actual',await p.locator('#chart path[stroke-width="3"]').count(),'status',await p.locator('#chart line[stroke="#e08a1e"]').count());
+await p.click('#vGantt');await p.waitForTimeout(200);
+console.log('gantt on hdr',await p.evaluate(()=>[...document.querySelectorAll('#ganttHead text.ax')].map(t=>t.textContent).filter(x=>x.length>1&&!/\d/.test(x)).join(',')));
+await p.click('[data-ptog=st]');await p.waitForTimeout(200);
+console.log('gantt off hdr',await p.evaluate(()=>[...document.querySelectorAll('#ganttHead text.ax')].map(t=>t.textContent).filter(x=>x.length>1&&!/\d/.test(x)).join(',')),'status lines',await p.locator('#gantt line[stroke="#e08a1e"]').count());
+await p.click('#vFlow');await p.waitForTimeout(100);console.log('flow off: actual',await p.locator('#chart path[stroke-width="3"]').count(),errs);
+await b.close();})();

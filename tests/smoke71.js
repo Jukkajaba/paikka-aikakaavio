@@ -1,0 +1,11 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+const sum0=await p.locator('#summary').innerText().catch(()=>'');
+const body=p.locator('#chart path[data-role="body"]').first();
+const pt=await body.evaluate(el=>{const L=el.getTotalLength();const q=el.getPointAtLength(L*0.5);const m=el.getScreenCTM();return {x:q.x*m.a+m.e,y:q.y*m.d+m.f}});
+await p.mouse.move(pt.x,pt.y);await p.mouse.down();for(let i=1;i<=8;i++)await p.mouse.move(pt.x+i*10,pt.y);
+const during=await p.evaluate(()=>({undo:document.getElementById('undo').disabled}));
+await p.mouse.up();await p.waitForTimeout(100);
+console.log('during',during,'after undo enabled',!(await p.evaluate(()=>document.getElementById('undo').disabled)),'list items',await p.locator('#listCard .item').count());
+const sel=await p.evaluate(()=>document.querySelector('#listCard .item[aria-current]')?.textContent.slice(0,40));console.log('sel',sel,errs);await b.close();})();

@@ -1,0 +1,12 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');await p.selectOption('#lvlSel','x');
+const g=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gg')].map(t=>t.textContent.slice(0,t.textContent.length/2)).join(','));
+const box=await p.locator('#gantt').boundingBox();console.log(await g());
+const drag=async(a,bY)=>{await p.mouse.move(box.x+90,box.y+a*26+13);await p.mouse.down();await p.mouse.move(box.x+90,box.y+bY*26+4,{steps:8});await p.screenshot({path:'shot31.png',clip:{x:40,y:300,width:900,height:300}});await p.mouse.up();};
+await drag(3,1);console.log('3->top of Ikkunat',await g());
+await drag(0,6);console.log('first->end',await g());
+await drag(2,2);console.log('noop',await g());
+await p.click('#undo');console.log('undo',await g());
+console.log(errs);await b.close();})();

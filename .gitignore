@@ -1,0 +1,4 @@
+res/
+*.png
+backup-*.html
+node_modules/

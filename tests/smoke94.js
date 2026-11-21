@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.click('[data-ptog=st]');await p.waitForTimeout(300);
+const info=()=>p.evaluate(()=>({lab:(document.querySelector('#stCard .lab2')||{}).textContent,tasks:document.querySelectorAll('#stCard .task').length}));
+await p.selectOption('#lvlSel','x').catch(()=>{});
+const names=await p.$$eval('#gantt text.gt',e=>e.map(x=>x.firstChild.textContent));console.log(names.slice(0,8));
+const els=await p.$$('#gantt text.gt');const bb=await els[1].boundingBox();await p.mouse.click(bb.x+bb.width/2,bb.y+bb.height/2);await p.waitForTimeout(200);console.log('trade click',await info());
+{const e0=await p.$$('#gantt text.gt');const ab=await e0[0].boundingBox();await p.mouse.click(ab.x+4,ab.y+ab.height/2);}await p.waitForTimeout(200);
+const e2=await p.$$('#gantt text.gt');const nm2=await Promise.all(e2.map(x=>x.evaluate(y=>y.firstChild.textContent)));console.log(nm2.slice(0,6));
+const bb2=await e2[2].boundingBox();await p.mouse.click(bb2.x+bb2.width/2,bb2.y+bb2.height/2);await p.waitForTimeout(200);console.log('leaf click',await info());
+await p.click('#vFlow');await p.waitForTimeout(300);
+console.log('virheet',errs);await b.close();})();

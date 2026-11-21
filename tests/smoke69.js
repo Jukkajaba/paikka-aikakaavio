@@ -1,0 +1,12 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1300,height:900}})).newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.evaluate(()=>{window.__u=[];window.open=u=>{window.__u.push(u);return null;};});
+await p.click('#projBtn');await p.fill('#pj-tpl','https://viewer.example.com/open?m={model}&ids={ids}&t={task}');await p.press('#pj-tpl','Tab');
+const body=p.locator('#chart [data-role="body"]').first();
+await body.click({force:true,button:'right'});await p.click('#ctxMenu [data-cx="edit"]');
+await p.fill('#f-mdl-m','M 1/rakenne');await p.fill('#f-mdl-i','abc 123, def;456');await p.press('#f-mdl-i','Tab');
+await p.click('[data-act="mdlopen"]');
+console.log(await p.evaluate(()=>window.__u),await p.evaluate(()=>document.getElementById('toast').innerText));
+await p.fill('#f-mdl-u','https://direct.example.com/x?y=1');await p.press('#f-mdl-u','Tab');await p.click('[data-act="mdlopen"]');console.log(await p.evaluate(()=>window.__u));
+console.log(errs);await b.close();})();

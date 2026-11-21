@@ -1,0 +1,12 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+const pts=await p.evaluate(()=>{const e=[...document.querySelectorAll('#chart path[data-role="body"]')][3];const s=document.getElementById('chart').getBoundingClientRect();return [...e.getAttribute('d').matchAll(/([ML])([\d.]+) ([\d.]+)/g)].map(a=>[+a[2]+s.left,+a[3]+s.top])});
+const d=()=>p.evaluate(()=>[...document.querySelectorAll('#chart path[data-role="body"]')][3].getAttribute('d').slice(0,120));
+const d0=await d();
+await p.mouse.move(pts[3][0]+3,pts[3][1]-3);await p.keyboard.down('Shift');await p.mouse.move(pts[3][0]+2,pts[3][1]-2);
+const balls=await p.evaluate(()=>[...document.querySelectorAll('#fhand circle')].map(c=>{const r=c.getBoundingClientRect();return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2),c.dataset.loc]}));
+console.log(JSON.stringify(balls),'n',balls.length);
+await p.screenshot({path:'shot44.png',clip:{x:300,y:300,width:600,height:350}});
+const bb=balls[1];await p.mouse.move(bb[0],bb[1]);await p.mouse.down();await p.mouse.move(bb[0]+40,bb[1],{steps:5});await p.mouse.up();await p.keyboard.up('Shift');
+console.log((await d())!==d0,errs);await b.close();})();

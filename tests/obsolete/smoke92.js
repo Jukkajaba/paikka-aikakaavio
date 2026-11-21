@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+console.log('pop hidden',!(await p.isVisible('#seurPop')),'panel',await p.isVisible('.fp[data-p=seur]'));
+await p.click('[data-seurbtn]');console.log('pop',await p.isVisible('#seurPop'));
+await p.check('[data-seur=bl]');console.log('panel',await p.isVisible('.fp[data-p=seur]'),'pop still',await p.isVisible('#seurPop'),'tabs',await p.$$eval('.fp[data-p=seur] [data-tab]',e=>e.map(x=>x.hidden)));
+await p.check('[data-seur=st]');console.log('st card',await p.isVisible('#stCard'),'bl card',await p.isVisible('#blCard'),'tabs',await p.$$eval('.fp[data-p=seur] [data-tab]',e=>e.map(x=>x.hidden)));
+await p.click('.fp[data-p=seur] [data-tab=bl]');console.log('bl card',await p.isVisible('#blCard'));
+await p.click('[data-seurbtn]');await p.uncheck('[data-seur=bl]');console.log('after uncheck bl: panel',await p.isVisible('.fp[data-p=seur]'),'st',await p.isVisible('#stCard'));
+await p.uncheck('[data-seur=st]');console.log('panel',await p.isVisible('.fp[data-p=seur]'));
+await p.click('h1');console.log('pop closed',!(await p.isVisible('#seurPop')));
+await p.click('[data-seurbtn]');await p.check('[data-seur=fc]');await p.click('.fp[data-p=seur] [data-close=seur]');console.log('x closes all',await p.isVisible('.fp[data-p=seur]'));
+await p.reload();await p.waitForSelector('#chart path');console.log('virheet',errs);await b.close();})();

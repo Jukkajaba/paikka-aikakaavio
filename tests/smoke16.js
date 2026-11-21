@@ -1,0 +1,20 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
+const rows=async()=>p.evaluate(()=>{const t=[...document.querySelectorAll('#gantt text.gc')].map(x=>x.textContent);const o=[];for(let i=0;i<7;i++)o.push(t.slice(i*4,i*4+4).join(' '));return o.join(' | ')});
+await p.locator('#gantt [data-gi="0"]').first().click({position:{x:300,y:10},force:true});
+// make messy overrides first: drag child end
+const eb=await p.locator('#gantt [data-gr="gend"][data-gi="3"]').boundingBox();
+await p.mouse.move(eb.x+eb.width/2,eb.y+eb.height/2);await p.mouse.down();await p.mouse.move(eb.x+eb.width/2+60,eb.y+eb.height/2,{steps:3});await p.mouse.up();
+console.log('messy   ',await rows());
+if((await p.getAttribute('[data-act="tctl"]','aria-pressed'))!=='true')await p.click('[data-act="tctl"]');await p.fill('#f-total','28');await p.dispatchEvent('#f-total','change');
+console.log('total 28',await rows());
+if((await p.getAttribute('[data-act="tctl"]','aria-pressed'))!=='true')await p.click('[data-act="tctl"]');await p.fill('#f-total','30');await p.dispatchEvent('#f-total','change');
+console.log('total 30',await rows());
+if((await p.getAttribute('[data-act="tctl"]','aria-pressed'))!=='true')await p.click('[data-act="tctl"]');await p.fill('#f-total','31.5');await p.dispatchEvent('#f-total','change');
+console.log('total31.5',await rows(), '| field', await p.inputValue('#f-total'));
+await p.click('#vFlow');await p.waitForTimeout(200);
+console.log('flow ok',await p.locator('#chart path').count()>0,'summary',(await p.locator('#summary').innerText()).replace(/\n/g,' '));
+console.log('errors',errs);await b.close();})();

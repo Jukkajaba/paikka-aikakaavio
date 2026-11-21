@@ -1,0 +1,15 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+const st=()=>p.$$eval('#listCard .item small',e=>e.slice(0,2).map(x=>x.textContent.split('·')[1]));
+await p.click('[data-ptog=list]');
+await p.click('#listCard .item >> nth=0');for(let i=0;i<10;i++) await p.keyboard.press('ArrowRight');
+console.log('pushed',await st());
+await p.click('#listCard .item >> nth=0');for(let i=0;i<5;i++) await p.keyboard.press('ArrowLeft');
+console.log('non-rigid left',await st());
+await p.click('#listCard .item >> nth=1');await p.check('#panel [data-field=deprigid] >> nth=0');
+console.log('colors',await p.$$eval('line[data-role=dep]',e=>1), await p.$$eval('svg line[stroke="var(--dep2)"]',e=>e.length));
+await p.click('#listCard .item >> nth=0');for(let i=0;i<5;i++) await p.keyboard.press('ArrowLeft');
+console.log('rigid left',await st());
+console.log('errors',errs);await b.close();})();

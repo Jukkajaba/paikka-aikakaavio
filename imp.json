@@ -1,0 +1,259 @@
+{
+ "app": "paikka-aikakaavio",
+ "v": 1,
+ "name": "Kerrostalo A",
+ "state": {
+  "v": 1,
+  "lines": [
+   {
+    "id": 1,
+    "trade": "runko",
+    "from": "l1",
+    "to": "l6",
+    "start": 3,
+    "dur": 5,
+    "gap": 0,
+    "qty": 180,
+    "prod": 6,
+    "ov": {},
+    "ord": 10
+   },
+   {
+    "id": 2,
+    "trade": "ikkunat",
+    "from": "l1",
+    "to": "l6",
+    "start": 12,
+    "dur": 4,
+    "gap": 1,
+    "qty": 24,
+    "prod": 1.5,
+    "ov": {},
+    "ord": 20
+   },
+   {
+    "id": 3,
+    "trade": "lvi",
+    "from": "l1",
+    "to": "l6",
+    "start": 20,
+    "dur": 5,
+    "gap": 0,
+    "qty": 260,
+    "prod": 14,
+    "ov": {},
+    "ord": 30
+   },
+   {
+    "id": 4,
+    "trade": "sahko",
+    "from": "l1",
+    "to": "l6",
+    "start": 22,
+    "dur": 5,
+    "gap": 0,
+    "qty": 900,
+    "prod": 60,
+    "ov": {},
+    "ord": 40
+   },
+   {
+    "id": 5,
+    "trade": "levytys",
+    "from": "l1",
+    "to": "l6",
+    "start": 28,
+    "dur": 5,
+    "gap": 0,
+    "qty": 400,
+    "prod": 12,
+    "ov": {},
+    "ord": 50
+   },
+   {
+    "id": 6,
+    "trade": "pinta",
+    "from": "l1",
+    "to": "l6",
+    "start": 31,
+    "dur": 6,
+    "gap": 0,
+    "qty": 900,
+    "prod": 25,
+    "ov": {},
+    "ord": 60
+   }
+  ],
+  "groups": [],
+  "baselines": [],
+  "blShow": null,
+  "statusDay": null,
+  "mdlTpl": "",
+  "deps": [
+   {
+    "id": 1,
+    "a": {
+     "l": 1,
+     "loc": "l1"
+    },
+    "b": {
+     "l": 2,
+     "loc": "l1"
+    }
+   },
+   {
+    "id": 2,
+    "a": {
+     "l": 3,
+     "loc": "l1"
+    },
+    "b": {
+     "l": 5,
+     "loc": "l1"
+    }
+   }
+  ],
+  "locs": [
+   {
+    "id": "l1",
+    "name": "Kerros 1",
+    "share": 1
+   },
+   {
+    "id": "l2",
+    "name": "Kerros 2",
+    "share": 1
+   },
+   {
+    "id": "l3",
+    "name": "Kerros 3",
+    "share": 1
+   },
+   {
+    "id": "l4",
+    "name": "Kerros 4",
+    "share": 1
+   },
+   {
+    "id": "l5",
+    "name": "Kerros 5",
+    "share": 1
+   },
+   {
+    "id": "l6",
+    "name": "Kerros 6",
+    "share": 1
+   }
+  ],
+  "lt": [
+   {
+    "id": "l1",
+    "name": "Kerros 1",
+    "share": 1,
+    "par": null
+   },
+   {
+    "id": "l2",
+    "name": "Kerros 2",
+    "share": 1,
+    "par": null
+   },
+   {
+    "id": "l3",
+    "name": "Kerros 3",
+    "share": 1,
+    "par": null
+   },
+   {
+    "id": "l4",
+    "name": "Kerros 4",
+    "share": 1,
+    "par": null
+   },
+   {
+    "id": "l5",
+    "name": "Kerros 5",
+    "share": 1,
+    "par": null
+   },
+   {
+    "id": "l6",
+    "name": "Kerros 6",
+    "share": 1,
+    "par": null
+   }
+  ],
+  "trades": [
+   {
+    "id": "runko",
+    "name": "Runko",
+    "unit": "m³",
+    "qty": 180,
+    "prod": 6,
+    "rank": 1,
+    "maxCrew": 8,
+    "col": "--t-runko"
+   },
+   {
+    "id": "ikkunat",
+    "name": "Ikkunat",
+    "unit": "kpl",
+    "qty": 24,
+    "prod": 1.5,
+    "rank": 2,
+    "maxCrew": 8,
+    "col": "--t-ikkunat"
+   },
+   {
+    "id": "lvi",
+    "name": "LVI-asennus",
+    "unit": "m",
+    "qty": 260,
+    "prod": 14,
+    "rank": 3,
+    "maxCrew": 8,
+    "col": "--t-lvi"
+   },
+   {
+    "id": "sahko",
+    "name": "Sähköasennus",
+    "unit": "m",
+    "qty": 900,
+    "prod": 60,
+    "rank": 3,
+    "maxCrew": 8,
+    "col": "--t-sahko"
+   },
+   {
+    "id": "levytys",
+    "name": "Levytys",
+    "unit": "m²",
+    "qty": 400,
+    "prod": 12,
+    "rank": 4,
+    "maxCrew": 8,
+    "col": "--t-levytys"
+   },
+   {
+    "id": "pinta",
+    "name": "Pintatyöt",
+    "unit": "m²",
+    "qty": 900,
+    "prod": 25,
+    "rank": 5,
+    "maxCrew": 8,
+    "col": "--t-pinta"
+   }
+  ],
+  "target": 16,
+  "weeks": 52,
+  "nextId": 7,
+  "nextDepId": 3,
+  "drawTrade": "runko",
+  "view": {
+   "lcol": [],
+   "hid": [],
+   "gc": {}
+  }
+ }
+}

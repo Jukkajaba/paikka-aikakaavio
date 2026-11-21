@@ -1,0 +1,11 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
+await p.click('#gAddTask');await p.waitForTimeout(100);
+const rows=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gt')].filter(t=>!/^[▸▾]$/.test(t.textContent)).map(t=>t.textContent.replace(/(.+)\1$/,'$1')).slice(-4).join('|'));
+console.log(await rows());
+await p.selectOption('#f-lfrom',{label:'Kerros 2'});await p.waitForTimeout(100);console.log(await rows());
+await p.selectOption('[data-field="lto"]',{label:'Kerros 4'});await p.waitForTimeout(100);console.log(await rows());
+await p.click('#vFlow');await p.waitForTimeout(100);console.log('flow paths',await p.locator('#chart path').count());
+await p.click('#vGantt');await p.selectOption('#f-lfrom',{label:'Ei sijaintia'});await p.waitForTimeout(100);console.log(await rows(),errs);await b.close();})();

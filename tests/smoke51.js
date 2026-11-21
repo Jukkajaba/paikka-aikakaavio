@@ -1,0 +1,10 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
+const box=await p.locator('#gantt').boundingBox();const rowY=i=>box.y+i*26+13;
+const rowsF=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gt')].filter(t=>!/^[▸▾]$/.test(t.textContent)).map(t=>t.textContent.replace(/(.+)\1$/,'$1')).slice(0,5).join('|'));
+await p.mouse.dblclick(box.x+120,rowY(0));await p.keyboard.type('Runko ja vesikatto');await p.keyboard.press('Enter');console.log(await rowsF());
+await p.mouse.dblclick(box.x+120,rowY(1));await p.keyboard.type('Elementit K1');await p.keyboard.press('Enter');console.log(await rowsF());
+await p.click('#vFlow');await p.waitForTimeout(100);console.log('flow has runko-nimi',(await p.locator('#chart').innerHTML()).includes('Runko ja vesikatto'),errs);
+await p.click('#vGantt');await p.keyboard.press('Control+z');console.log(await rowsF());await b.close();})();

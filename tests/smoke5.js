@@ -1,0 +1,13 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('[data-ptog=list]');await p.click('[data-ptog=locs]');await p.click('#listCard .item >> nth=0');
+await p.click('[data-act=qlock]');
+console.log('locked',await p.getAttribute('[data-act=qlock]','aria-pressed'),await p.inputValue('#f-tqty'),await p.isDisabled('#f-qty'));
+await p.click('[data-act=locsplit][data-id=l3]');
+console.log('after split',await p.inputValue('#f-tqty'),await p.inputValue('#f-qty'));
+await p.click('[data-act=qlock]');
+console.log('unlocked',await p.getAttribute('[data-act=qlock]','aria-pressed'),await p.inputValue('#f-tqty'),await p.isDisabled('#f-qty'));
+await p.click('[data-act=qlock]');await p.screenshot({path:'shot5.png',clip:{x:800,y:300,width:400,height:420}});
+console.log('errors',errs);await b.close();})();

@@ -1,0 +1,22 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message+' @'+(e.stack||'').split('\n').slice(1,3).join(' ')));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('button:has-text("Projekti")');await p.waitForTimeout(200);
+await p.click('[data-pj="new"]');await p.click('[data-pj="newblank"]');await p.waitForTimeout(400);
+await p.click('#vGantt');await p.waitForTimeout(200);
+await p.click('#gAddTask');await p.click('#gAddTask');await p.click('#gAddGrp');await p.click('[data-act="grpaddtask"]');await p.waitForTimeout(200);
+console.log('rows',await p.evaluate(()=>[...document.querySelectorAll('#gantt text.gt')].map(t=>t.textContent.slice(0,t.textContent.length/2)).join('|')),errs);
+const box=await p.locator('#gantt').boundingBox();
+const bar=await p.locator('#gantt [data-gr="gmove"]').first().boundingBox();
+await p.mouse.move(bar.x+bar.width/2,bar.y+8);await p.mouse.down();await p.mouse.move(bar.x+bar.width/2+50,bar.y+8,{steps:5});await p.mouse.up();
+await p.click('#vFlow');await p.waitForTimeout(200);console.log('flow ok',errs);
+await p.click('#vGantt');await p.keyboard.press('Control+z');
+// add a location in flow panel and a trade, draw
+await p.click('#vFlow');
+await p.click('button:has-text("Sijainnit")');await p.click('[data-act="locadd"]');await p.click('[data-act="locadd"]');
+await p.waitForTimeout(200);
+const cb=await p.locator('#chart').boundingBox();
+await p.mouse.move(cb.x+130,cb.y+60);await p.mouse.down();await p.mouse.move(cb.x+250,cb.y+100,{steps:6});await p.mouse.up();
+console.log('paths',await p.locator('#chart path').count(),errs);
+await p.screenshot({path:'shot54.png'});
+await b.close();})();

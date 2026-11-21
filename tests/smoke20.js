@@ -1,0 +1,17 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
+const rows=async()=>p.evaluate(()=>{const t=[...document.querySelectorAll('#gantt text.gc')].map(x=>x.textContent);const o=[];for(let i=0;i<5;i++)o.push(t.slice(i*4,i*4+4).join(' '));return o.join(' | ')});
+await p.locator('#gantt [data-gi="0"]').first().click({position:{x:300,y:10},force:true});
+const det=p.locator('#panel details');if(await det.count()&&!(await det.first().evaluate(d=>d.open)))await det.first().locator('summary').click();
+console.log('before',await rows());
+const g=p.locator('input[data-field="gap-v"]');await g.fill('-2');await g.dispatchEvent('change');
+console.log('gap -2',await rows(),'| field',await g.inputValue());
+await p.locator('[data-act="gap-"]').click();
+console.log('gap-',await g.inputValue());
+const t=p.locator('input[data-field="tsh-v"]').first();await t.fill('1');await t.dispatchEvent('change');
+console.log('shift +1 (task2)',await rows());
+await p.screenshot({path:'shot20.png',clip:{x:40,y:330,width:900,height:300}});
+console.log('errors',errs);await b.close();})();

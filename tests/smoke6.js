@@ -1,0 +1,16 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+const lbl=await p.$('[data-role=lbl][data-id="3"]');const bb=await lbl.boundingBox();
+console.log('before',bb.x|0,bb.y|0);
+await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await p.mouse.down();
+await p.mouse.move(bb.x+bb.width/2+60,bb.y+bb.height/2-90,{steps:8});await p.mouse.up();
+const bb2=await (await p.$('[data-role=lbl][data-id="3"]')).boundingBox();
+console.log('after',bb2.x|0,bb2.y|0);
+console.log('line count',await p.$$eval('[data-role=body]',e=>e.length));
+await p.click('#undo');
+const bb3=await (await p.$('[data-role=lbl][data-id="3"]')).boundingBox();console.log('undo',bb3.x|0,bb3.y|0);
+await p.mouse.move(bb.x+bb.width/2+60,bb.y+bb.height/2-90);
+await p.screenshot({path:'shot6.png',clip:{x:0,y:300,width:1200,height:500}});
+console.log('errors',errs);await b.close();})();

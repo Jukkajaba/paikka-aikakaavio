@@ -1,0 +1,14 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:800}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+console.log('toolbar',await p.$$eval('.toolbar .chip, .toolbar button',e=>e.map(x=>x.textContent.trim()).filter(Boolean)));
+console.log('paneelit',await p.$$eval('#ptog .chip',e=>e.map(x=>x.textContent)));
+console.log('res pressed',await p.getAttribute('#resBtn','aria-pressed'));await p.click('#resBtn');console.log('after',await p.getAttribute('#resBtn','aria-pressed'));await p.click('#resBtn');
+await p.click('[data-ptog=list]');await p.click('[data-ptog=notes]');console.log('list/notes',await p.isVisible('.fp[data-p=list]'),await p.isVisible('.fp[data-p=notes]'));
+await p.click('#vGantt');await p.waitForTimeout(300);
+const n0=await p.locator('#gantt text.gt').count();await p.click('#gAddTask');await p.waitForTimeout(200);console.log('tehtävä lisätty',n0,await p.locator('#gantt text.gt').count());
+await p.click('#gAddGrp');await p.waitForTimeout(200);console.log('ylätehtävä lisätty',await p.locator('#gantt text.gt').count());
+await p.evaluate(()=>document.querySelectorAll('.fp').forEach(x=>x.style.visibility='hidden'));
+await p.screenshot({path:'clean2.png',clip:{x:100,y:150,width:900,height:200}});
+await p.reload();await p.waitForTimeout(500);console.log('persist',await p.$$eval('.fp:not([hidden])',e=>e.map(x=>x.dataset.p)));
+console.log('virheet',errs);await b.close();})();

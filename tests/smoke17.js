@@ -1,0 +1,23 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
+const rows=async()=>p.evaluate(()=>{const t=[...document.querySelectorAll('#gantt text.gc')].map(x=>x.textContent);const o=[];for(let i=0;i<4;i++)o.push(t.slice(i*4,i*4+4).join(' '));return o.join(' | ')});
+await p.locator('#gantt [data-gi="0"]').first().click({position:{x:300,y:10},force:true});
+console.log('default: field disabled',await p.locator('#f-total').isDisabled(),'| summary end handle',await p.locator('#gantt [data-gr="gend"][data-gi="0"]').count(),'| child end handle',await p.locator('#gantt [data-gr="gend"][data-gi="1"]').count());
+console.log('before',await rows());
+const eb=await p.locator('#gantt [data-gr="gend"][data-gi="2"]').boundingBox();
+await p.mouse.move(eb.x+eb.width/2,eb.y+eb.height/2);await p.mouse.down();await p.mouse.move(eb.x+eb.width/2+40,eb.y+eb.height/2,{steps:3});await p.mouse.up();
+console.log('child2 ext',await rows(),'| field',await p.inputValue('#f-total'));
+// turn on
+await p.click('[data-act="tctl"]');
+console.log('on: disabled',await p.locator('#f-total').isDisabled(),'btn',await p.locator('[data-act="tctl"]').innerText(),'summary handle',await p.locator('#gantt [data-gr="gend"][data-gi="0"]').count());
+await p.fill('#f-total','30');await p.dispatchEvent('#f-total','change');
+console.log('total30',await rows());
+const sb=await p.locator('#gantt [data-gr="gend"][data-gi="0"]').boundingBox();
+await p.mouse.move(sb.x+sb.width/2,sb.y+sb.height/2);await p.mouse.down();await p.mouse.move(sb.x+sb.width/2+40,sb.y+sb.height/2,{steps:3});await p.mouse.up();
+console.log('summary drag',await rows());
+await p.click('[data-act="tctl"]');
+console.log('off again: disabled',await p.locator('#f-total').isDisabled(),await rows());
+console.log('errors',errs);await b.close();})();
