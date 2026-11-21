@@ -28,5 +28,12 @@ const { chromium } = require('playwright');
   await p.click('#projBtn'); await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(500);
   n = await run("Suorite\tMäärä\tYks\nLaatta\t500\tm2"); ok(n === 1 && await p.evaluate(() => __aik().lines.slice(-1)[0].flat === true), 'blank project flat');
   await p.click('#impBtn'); ok((await p.inputValue('#impTxt')) === '' && (await p.locator('#impBody').innerHTML()) === '', 'reset after new project');
+  // yksikkökohtainen tuottavuus: kg:n oletus on suuri
+  await p.evaluate(() => { document.getElementById('impBox').classList.remove('on'); });
+  await p.click('#impBtn'); await p.fill('#impTxt', "Nimike\tMäärä\tYksikkö\nTeräkset\t4000\tkg\nSeinä\t100\tm2"); await p.click('#impParse');
+  ok(+await p.inputValue('[data-iu="kg"]') === 400 && +await p.inputValue('[data-iu="m2"]') === 10, 'unit defaults');
+  ok(+await p.inputValue('[data-ip="0"]') === 400 && +await p.inputValue('[data-ip="1"]') === 10, 'row defaults from unit');
+  await p.fill('[data-iu="kg"]', '200'); await p.dispatchEvent('[data-iu="kg"]', 'change'); ok(+await p.inputValue('[data-ip="0"]') === 200, 'unit change propagates');
+  ok(/pv/.test(await p.locator('#impBody').innerText()), 'duration estimate');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
