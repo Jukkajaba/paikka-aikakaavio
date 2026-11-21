@@ -1491,7 +1491,7 @@ function qlMatch(name, leaves) {
       const total = ids.length ? ids.reduce((x, k) => x + mapped[k], 0) : it.total;
       const flat = !ids.length && (IMP.mode === 'koko' || !LOCS.length);
       if (!t) { t = newTrade(); t.name = it.name.slice(0, flat ? 40 : 24); t.unit = it.unit || 'kpl'; t.prod = prod; t.qty = total || 1; t.maxCrew = Math.max(8, crew); if (flat) t.flat = true; }
-      const l = { id: nextId++, trade: t.id, from: null, to: null, start: 0, dur: 5, gap: 0, qty: total || 1, prod: t.prod, ov: {}, ord: (ord += 10) };
+      const l = { id: nextId++, trade: t.id, from: null, to: null, start: nl * 5, dur: 5, gap: 0, qty: total || 1, prod: t.prod, ov: {}, ord: (ord += 10) };
       if (flat) { l.flat = true; l.lockC = crew; }
       else if (ids.length) { const ix = ids.map(k => leaves[k]), a = Math.min.apply(null, ix), b = Math.max.apply(null, ix); l.from = LOCS[a].id; l.to = LOCS[b].id; ids.forEach(k => { l.ov[k] = { q: mapped[k] }; }); l.qty = total / ids.length; l.lockC = crew; }
       else { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.lockQ = total; l.lockC = crew; }
