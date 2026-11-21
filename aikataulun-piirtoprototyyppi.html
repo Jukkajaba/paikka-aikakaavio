@@ -263,7 +263,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Näytä tai piilota resurssihistogrammi (hlö/pv). Hyvin isoissa aikatauluissa se on oletuksena piilossa.">Resurssit</button>
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
-      <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määräluettelo</button>
+      <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määrät</button>
       <button id="undo" type="button">Kumoa</button>
     </div>
   </div>
@@ -1482,7 +1482,7 @@ function qlMatch(name, leaves) {
   const impProd = i => { if (IMP.prod[i] != null) return IMP.prod[i]; const u = uKey(IMP.items[i] && IMP.items[i].unit); return IMP.uProd[u] != null ? IMP.uProd[u] : (UPROD[u] != null ? UPROD[u] : IMP.dProd); };
   const IMP = { uProd: {}, grid: null, g: null, roles: [], locMap: {}, mode: 'jaa', items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, B: null };
   const impBox = document.createElement('div'); impBox.id = 'impBox';
-  impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määräluettelo"><h2>Tuo määräluettelo</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
+  impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
   function impReset() { try { IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; IMP.uProd = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
   const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)']];
