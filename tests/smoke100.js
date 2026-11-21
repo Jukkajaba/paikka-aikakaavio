@@ -44,5 +44,9 @@ const { chromium } = require('playwright');
   await p.check('input[name=impLM][value=koko]'); ok(await p.locator('[data-lm]').count() === 0, 'no location mapping when off');
   await p.click('#impGo'); await p.waitForTimeout(200);
   ok(await p.evaluate(() => { const A = __aik(), l = A.lines.slice(-1)[0]; return !!l.flat && Math.round(A.totalQty(l)) === 200 || l.qty === 200; }) && (await p.evaluate(() => __aik().LOCS.length)) === locsBefore, 'imported without locations');
+  // harva sijaintimatriisi: tyhjä väli-sijainti ohitetaan (ei turhaa nollatehtävää)
+  await p.evaluate(() => { document.getElementById('impBox').classList.remove('on'); });
+  await p.click('#impBtn'); await p.fill('#impTxt', "Suorite\tMäärä\tYks\tKerros 1\tKerros 2\tKerros 3\nX\t20\tm2\t10\t\t10"); await p.click('#impParse'); await p.click('#impGo'); await p.waitForTimeout(250);
+  ok(await p.evaluate(() => { const A = __aik(), l = A.lines.slice(-1)[0]; return A.tasks(l).length === 2; }), 'sparse import makes no empty-location task');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
