@@ -260,8 +260,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <label class="tgt">Rivit <select id="rowSel"><option value="c">Tiivis</option><option value="n">Normaali</option><option value="w">Väljä</option></select></label>
       <button id="helpBtn" type="button" class="chip" aria-pressed="false" title="Näytä tai piilota ohjetekstit">Ohje</button>
       <button id="depToggle" type="button" class="chip" aria-pressed="true">Riippuvuudet</button>
-      <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Näytä tai piilota resurssihistogrammi. Hyvin isoissa aikatauluissa se on oletuksena piilossa.">Resurssit</button>
-      <select id="resSel" aria-label="Näytettävä resurssi" hidden></select>
+      <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Resurssit-paneeli: resurssityypit, työlajien resurssit ja resurssikuvaaja">Resurssit</button>
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
       <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määrät</button>
@@ -281,6 +280,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
     <section class="fp" data-p="bl" hidden><div class="fp-bar"><span>Tavoite</span><button type="button" data-close="bl" aria-label="Piilota paneeli Tavoite">×</button></div><div class="fp-body" id="blCard"></div></section>
     <section class="fp" data-p="st" hidden><div class="fp-bar"><span>Tilanne</span><button type="button" data-close="st" aria-label="Piilota paneeli Tilanne">×</button></div><div class="fp-body" id="stCard"></div></section>
     <section class="fp" data-p="fc" hidden><div class="fp-bar"><span>Ennuste</span><button type="button" data-close="fc" aria-label="Piilota paneeli Ennuste">×</button></div><div class="fp-body" id="fcCard"></div></section>
+    <section class="fp" data-p="res" hidden><div class="fp-bar"><span>Resurssit</span><button type="button" data-close="res" aria-label="Piilota paneeli Resurssit">×</button></div><div class="fp-body" id="resCard"></div></section>
     <section class="fp" data-p="proj" hidden><div class="fp-bar"><span>Projektit</span><button type="button" data-close="proj" aria-label="Piilota paneeli Projektit">×</button></div><div class="fp-body" id="projCard"></div></section>
   </div>
 </div>
@@ -545,7 +545,16 @@ const resIdOf = t => (t && t.res && RES.some(r => r.id === t.res)) ? t.res : RES
 const resUnit = t => resById(resIdOf(t)).unit || 'kpl';
 function histogram(lines, rid) {
   const h = Array.from({ length: N_DAYS }, () => []);
-  for (const l of lines) if (rid == null || resIdOf(trade(l.trade)) === rid) for (const t of tasks(l)) for (let d = Math.floor(t.s + 1e-9); d < Math.ceil(t.e - 1e-9) && d < N_DAYS; d++) h[d].push({ id: l.id, trade: l.trade, crew: t.crew });
+  for (const l of lines) {
+    const t = trade(l.trade); if (!t) continue;
+    const main = resIdOf(t), ex = (t.extra || []).filter(e => e && e.res === rid && e.res !== main && e.n > 0);
+    if (main !== rid && !ex.length) continue;
+    for (const k of tasks(l)) {
+      const amt = (main === rid ? k.crew : 0) + ex.reduce((q, e) => q + Math.ceil(k.crew * e.n - 1e-9), 0);
+      if (amt <= 0) continue;
+      for (let d = Math.floor(k.s + 1e-9); d < Math.ceil(k.e - 1e-9) && d < N_DAYS; d++) h[d].push({ id: l.id, trade: l.trade, crew: amt });
+    }
+  }
   return h;
 }
 // sijaintien muokkaus: viivojen alueet päivitetään indekseillä
@@ -945,7 +954,7 @@ function qlMatch(name, leaves) {
     fltSet(hide);
   });
   lvlSel.addEventListener('change', () => { const v = lvlSel.value; if (v === 'c') return; lcol.clear(); Object.keys(gClosed).forEach(k => { if (/^L\d+$/.test(k) || k.indexOf('N') >= 0) delete gClosed[k]; }); const k = +v; if (v === 'x') lines.forEach(l => { if (!l.flat) gClosed['L' + l.id] = true; }); else if (k > 0) ltLevels().at(k).forEach(id => lcol.add(id)); saveView(); render(); if (vis.locs) renderLocs(); });
-  function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { syncResSel(); } catch (err) { } _tc = new Map(); try { renderInner(); } finally { _tc = null; } PH('end'); refreshLvl(); const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
+  function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { renderResPanel(); } catch (err) { } _tc = new Map(); try { renderInner(); } finally { _tc = null; } PH('end'); refreshLvl(); const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
   function renderInner() {
     if (needRoom) { needRoom = false; gEnsureRoom(); }
     PH('prep'); ensureOrd();
@@ -1556,6 +1565,46 @@ function qlMatch(name, leaves) {
     impBox.classList.remove('on');
   }
 
+
+  // ---- Resurssit-paneeli ----
+  const resCard = document.getElementById('resCard'); let resSig = '';
+  function renderResPanel(force) {
+    if (!vis.res || !resCard) return;
+    if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
+    const selT = byId(selId) ? byId(selId).trade : null, o = (v, sel, t) => '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(t) + '</option>';
+    let h = '<div class="row" style="border-top:0;padding-top:0"><button type="button" class="chip" data-ract="graph" aria-pressed="' + !!resOn + '">Näytä resurssikuvaaja</button>' + (RES.length > 1 ? ' <label class="tgt">Kuvaaja <select data-ract="show">' + RES.map(r => o(r.id, hRes, r.name)).join('') + '</select></label>' : '') + '</div>';
+    h += '<div class="lab2" style="margin-top:8px">Resurssityypit</div><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th align="left">Nimi</th><th align="left">Yks.</th><th align="left" title="Montako on käytössä. Tyhjä = ei rajaa">Käytössä</th><th></th></tr>' +
+      RES.map((r, i) => '<tr><td><input class="txt" style="width:100px" type="text" maxlength="24" value="' + esc(r.name) + '" data-rf="name" data-rid="' + esc(r.id) + '" aria-label="Nimi"></td><td><input class="txt" style="width:44px" type="text" maxlength="6" value="' + esc(r.unit) + '" data-rf="unit" data-rid="' + esc(r.id) + '" aria-label="Yksikkö"></td><td><input class="num" style="width:56px" type="number" min="1" step="1" value="' + (r.avail || '') + '" data-rf="avail" data-rid="' + esc(r.id) + '" aria-label="Käytössä"></td><td>' + (i ? '<button type="button" data-ract="del" data-rid="' + esc(r.id) + '" aria-label="Poista resurssi" title="Poista resurssi (työlajit palaavat oletusresurssiin)">✕</button>' : '') + '</td></tr>').join('') + '</table>' +
+      '<div class="row"><input id="rp-new" class="txt" style="width:100px" type="text" maxlength="24" placeholder="Kaivinkone"> <input id="rp-unit" class="txt" style="width:44px" type="text" maxlength="6" value="kpl" aria-label="Yksikkö"> <button type="button" data-ract="add">Lisää resurssi</button></div>';
+    h += '<div class="lab2" style="margin-top:8px">Työlajien resurssit</div><p class="ok" style="margin:2px 0 6px">Pääresurssi määrää keston (määrä ÷ (tuottavuus × lukumäärä)). Lisäresurssi tarvitaan pääresurssia kohden annetun määrän verran.</p>';
+    h += TRADES.filter(t => !t.flat || lines.some(l => l.trade === t.id)).map(t => {
+      const main = resIdOf(t), ex = (t.extra || []).filter(e => e.res !== main);
+      const free = RES.filter(r => r.id !== main && !ex.some(e => e.res === r.id));
+      return '<div class="task" style="' + (t.id === selT ? 'background:var(--band);outline:1px solid var(--ink);border-radius:4px;' : '') + 'margin:0 0 6px;padding:4px 6px"><div class="tmeta"><b>' + esc(t.name) + '</b></div>' +
+        '<div class="trow"><span class="lab">Pääresurssi</span><select data-tm="' + esc(t.id) + '">' + RES.map(r => o(r.id, main, r.name + ' (' + r.unit + ')')).join('') + '</select></div>' +
+        ex.map((e, k) => '<div class="trow"><span class="lab">+ ' + esc(resById(e.res).name) + '</span><input class="num" style="width:52px" type="number" min="0.1" step="any" value="' + e.n + '" data-xn="' + esc(t.id) + '" data-xi="' + k + '" aria-label="Määrä pääresurssia kohden"> ' + esc(resById(e.res).unit) + '/' + esc(resById(main).unit) + ' <button type="button" data-ract="xdel" data-tm="' + esc(t.id) + '" data-xi="' + k + '" aria-label="Poista lisäresurssi">✕</button></div>').join('') +
+        (free.length ? '<div class="trow"><select data-xadd="' + esc(t.id) + '"><option value="">+ Lisäresurssi…</option>' + free.map(r => o(r.id, '', r.name)).join('') + '</select></div>' : '') + '</div>';
+    }).join('');
+    if (!force && h === resSig) return; resSig = h; resCard.innerHTML = h;
+  }
+  resCard.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-ract]'); if (!b || b.tagName === 'SELECT') return; const a = b.dataset.ract;
+    if (a === 'graph') { resMode = resOn ? 'off' : 'on'; try { localStorage.setItem(RKEY, resMode); } catch (err) { } render(); return; }
+    if (a === 'add') {
+      const nm = (resCard.querySelector('#rp-new').value || '').trim().slice(0, 24), un = ((resCard.querySelector('#rp-unit').value || 'kpl').trim() || 'kpl').slice(0, 6);
+      if (!nm || RES.some(r => r.name.toLowerCase() === nm.toLowerCase())) return; pushUndo(snapshot()); const r = { id: uid('R'), name: nm, unit: un }; RES.push(r); hRes = r.id; render(); return;
+    }
+    if (a === 'del') { const id = b.dataset.rid; if (RES[0].id === id) return; pushUndo(snapshot()); RES = RES.filter(r => r.id !== id); TRADES.forEach(t => { if (t.res === id) delete t.res; if (t.extra) { t.extra = t.extra.filter(x => x.res !== id); if (!t.extra.length) delete t.extra; } }); if (hRes === id) hRes = RES[0].id; render(); return; }
+    if (a === 'xdel') { const t = trade(b.dataset.tm); if (!t) return; const main = resIdOf(t); pushUndo(snapshot()); const ex = (t.extra || []).filter(x => x.res !== main); ex.splice(+b.dataset.xi, 1); t.extra = ex; if (!ex.length) delete t.extra; render(); }
+  });
+  resCard.addEventListener('change', e => {
+    const t = e.target, d = t.dataset || {};
+    if (d.ract === 'show') { hRes = t.value; render(); return; }
+    if (d.rf) { const r = RES.find(x => x.id === d.rid); if (!r) return; pushUndo(snapshot()); if (d.rf === 'name') { const v = t.value.trim().slice(0, 24); if (v) r.name = v; } else if (d.rf === 'unit') { const v = t.value.trim().slice(0, 6); if (v) r.unit = v; } else if (d.rf === 'avail') { const v = Math.round(+t.value); if (v >= 1) r.avail = v; else delete r.avail; } render(); return; }
+    if (d.tm != null && t.tagName === 'SELECT') { const tr = trade(d.tm); if (!tr || !RES.some(r => r.id === t.value)) return; pushUndo(snapshot()); tr.res = t.value; if (tr.extra) { tr.extra = tr.extra.filter(x => x.res !== t.value); if (!tr.extra.length) delete tr.extra; } render(); return; }
+    if (d.xadd != null) { const tr = trade(d.xadd); if (!tr || !t.value || !RES.some(r => r.id === t.value)) return; pushUndo(snapshot()); tr.extra = (tr.extra || []).concat([{ res: t.value, n: 1 }]); render(); return; }
+    if (d.xn != null) { const tr = trade(d.xn); if (!tr) return; const main = resIdOf(tr), ex = (tr.extra || []).filter(x => x.res !== main), x = ex[+d.xi], v = +t.value; if (!x || !(v > 0)) return; pushUndo(snapshot()); x.n = Math.round(v * 100) / 100; tr.extra = ex; render(); }
+  });
   window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
@@ -1883,9 +1932,6 @@ function qlMatch(name, leaves) {
     const sw = PALETTE.map(c => '<button type="button" style="background:var(' + c + ')" aria-label="Väri" aria-pressed="' + (t.col === c) + '" data-act="tcol" data-col="' + c + '" data-id="' + t.id + '"></button>').join('');
     return '<details data-sec="trade"' + (tradeOpen ? ' open' : '') + '><summary>Työlajin asetukset</summary>' +
       '<div class="row"><label for="tr-rank" title="Työjärjestys: pienempi numero tulee ensin">Järjestys (1 = ensin)</label><input id="tr-rank" class="num" type="number" min="1" max="20" step="1" value="' + t.rank + '" data-field="tr-rank" data-id="' + t.id + '"></div>' +
-      '<div class="row"><label for="tr-res" title="Pääresurssi määrää keston: määrä ÷ (tuottavuus × resurssien lukumäärä)">Resurssi</label><select id="tr-res" data-field="tr-res" data-id="' + t.id + '">' + RES.map(r => '<option value="' + esc(r.id) + '"' + (r.id === resIdOf(t) ? ' selected' : '') + '>' + esc(r.name) + ' (' + esc(r.unit) + ')</option>').join('') + '</select></div>' +
-      '<div class="row"><label for="res-avail" title="Montako tätä resurssia on käytössä. Tyhjä = ei rajaa. Ylityksestä tulee huomio.">Käytössä (kpl)</label><input id="res-avail" class="num" type="number" min="1" step="1" value="' + (resById(resIdOf(t)).avail || '') + '" data-field="tr-avail" data-id="' + t.id + '"></div>' +
-      '<div class="row"><label for="res-new">Uusi resurssi</label><span><input id="res-new" class="txt" style="width:90px" type="text" maxlength="24" placeholder="Kaivinkone"> <input id="res-unit" class="txt" style="width:44px" type="text" maxlength="6" placeholder="kpl" value="kpl"> <button type="button" data-act="resadd" data-id="' + t.id + '">Lisää</button></span></div>' +
       '<div class="row"><label for="tr-max">Enimmäismäärä (' + esc(resUnit(t)) + ')</label><input id="tr-max" class="num" type="number" min="1" max="99" step="1" value="' + t.maxCrew + '" data-field="tr-max" data-id="' + t.id + '"></div>' +
       '<div class="swatches" role="group" aria-label="Väri">' + sw + '</div></details>';
   }
@@ -2337,7 +2383,7 @@ function qlMatch(name, leaves) {
   function finish(commit) {
     flushRender();
     if (!drag) return;
-    if (drag.type === 'draw' && preview && commit) { /* väliaikainen pohja poistetaan alla */ const tpl = trade(drawTrade), nt = newTrade(); if (tpl) { nt.unit = tpl.unit; nt.qty = tpl.qty; nt.prod = tpl.prod; nt.maxCrew = tpl.maxCrew; } const l = Object.assign({}, preview, { id: nextId++, trade: nt.id, qty: nt.qty, prod: nt.prod }); lines.push(l); selId = l.id; TRADES = TRADES.filter(x => !x.tmp || lines.some(q => q.trade === x.id)); }
+    if (drag.type === 'draw' && preview && commit) { /* väliaikainen pohja poistetaan alla */ const tpl = trade(drawTrade), nt = newTrade(); if (tpl) { nt.unit = tpl.unit; nt.qty = tpl.qty; nt.prod = tpl.prod; nt.maxCrew = tpl.maxCrew; if (tpl.res) nt.res = tpl.res; if (tpl.extra) nt.extra = tpl.extra.map(e => ({ res: e.res, n: e.n })); } const l = Object.assign({}, preview, { id: nextId++, trade: nt.id, qty: nt.qty, prod: nt.prod }); lines.push(l); selId = l.id; TRADES = TRADES.filter(x => !x.tmp || lines.some(q => q.trade === x.id)); }
     if ((drag.type === 'gdep' || drag.type === 'gdepend') && commit) {
       const tg = gTaskAt(drag.cur);
       if (tg && gCanLink(tg)) {
@@ -2440,11 +2486,6 @@ function qlMatch(name, leaves) {
       return;
     }
     if (a === 'tdelunused') { const used = new Set(lines.map(l => l.trade)), rm = TRADES.filter(t => !t.flat && !used.has(t.id)); if (!rm.length) return; pushUndo(snapshot()); TRADES = TRADES.filter(t => t.flat || used.has(t.id)); if (!trade(drawTrade)) drawTrade = pickTrade(); render(); return; }
-    if (a === 'resadd') {
-      const nm = ((document.getElementById('res-new') || {}).value || '').trim().slice(0, 24), un = (((document.getElementById('res-unit') || {}).value || 'kpl').trim() || 'kpl').slice(0, 6);
-      const t0 = trade(id); if (nm && t0) { pushUndo(snapshot()); let r = RES.find(x => x.name.toLowerCase() === nm.toLowerCase()); if (!r) { r = { id: uid('R'), name: nm, unit: un }; RES.push(r); } t0.res = r.id; hRes = r.id; render(); }
-      return;
-    }
     if (a === 'tcol' || a === 'tdel') {
       const t = trade(id); if (!t) return;
       if (a === 'tdel') { delTrade(id); return; }
@@ -2543,8 +2584,6 @@ function qlMatch(name, leaves) {
       else if (f === 'tr-qty' && v > 0) t.qty = v;
       else if (f === 'tr-prod' && v > 0) t.prod = v;
       else if (f === 'tr-rank' && v >= 1) t.rank = clamp(Math.round(v), 1, 20);
-      else if (f === 'tr-res') { if (RES.some(r => r.id === e.target.value)) { t.res = e.target.value; hRes = t.res; } }
-      else if (f === 'tr-avail') { const r = resById(resIdOf(t)); if (v >= 1) r.avail = Math.round(v); else delete r.avail; }
       else if (f === 'tr-max' && v >= 1) t.maxCrew = clamp(Math.round(v), 1, 99);
     }
     if (f.indexOf('mdl-') === 0) { // piirretään vasta kun tarkennus on siirtynyt seuraavaan kenttään, ettei Tab-näppäimellä kirjoittaminen katkea
@@ -2599,12 +2638,12 @@ function qlMatch(name, leaves) {
   });
 
   // leijuvat paneelit: näkyvyys ja sijainti (muistetaan selaimessa, jos mahdollista)
-  const PN = [['panel', 'Tehtävä'], ['list', 'Työvaiheet'], ['notes', 'Huomiot'], ['locs', 'Sijainnit'], ['bl', 'Tavoite'], ['st', 'Tilanne'], ['fc', 'Ennuste'], ['proj', 'Projektit']];
+  const PN = [['panel', 'Tehtävä'], ['list', 'Työvaiheet'], ['notes', 'Huomiot'], ['locs', 'Sijainnit'], ['bl', 'Tavoite'], ['st', 'Tilanne'], ['fc', 'Ennuste'], ['proj', 'Projektit'], ['res', 'Resurssit']];
     const KEY = 'aik-paneelit-v1';
-  let vis = { proj: false, panel: true, list: false, notes: false, locs: false, bl: false, st: false, fc: false }, pos = {}, zTop = 10, pdrag = null;
+  let vis = { res: false, proj: false, panel: true, list: false, notes: false, locs: false, bl: false, st: false, fc: false }, pos = {}, zTop = 10, pdrag = null;
   try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o) { Object.assign(vis, o.vis || {}); pos = o.pos || {}; if (o.vis && o.vis.lista) { if (o.tab && o.tab.lista === 'notes') vis.notes = true; else vis.list = true; } delete vis.lista; if (o.vis && o.vis.seur && !(vis.bl || vis.st || vis.fc)) vis.bl = true; delete vis.seur; if (o.showDeps === false) showDeps = false; if (o.fcProd === false) fcProd = false; } } catch (err) { }
   const stage = document.getElementById('stage'), ptog = document.getElementById('ptog');
-  const savePn = () => { try { localStorage.setItem(KEY, JSON.stringify({ vis: { proj: vis.proj, panel: vis.panel, list: vis.list, notes: vis.notes, locs: vis.locs, bl: vis.bl, st: vis.st, fc: vis.fc }, tab: tab, pos: pos, showDeps: showDeps, fcProd: fcProd })); } catch (err) { } };
+  const savePn = () => { try { localStorage.setItem(KEY, JSON.stringify({ vis: { res: vis.res, proj: vis.proj, panel: vis.panel, list: vis.list, notes: vis.notes, locs: vis.locs, bl: vis.bl, st: vis.st, fc: vis.fc }, tab: tab, pos: pos, showDeps: showDeps, fcProd: fcProd })); } catch (err) { } };
   const isNarrow = () => window.matchMedia('(max-width: 700px)').matches;
   const fpEl = n => stage.querySelector('.fp[data-p="' + n + '"]');
   function place(n) {
@@ -2618,11 +2657,10 @@ function qlMatch(name, leaves) {
     pos[n] = p; el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
   }
   function placeAll() { PN.forEach(x => place(x[0])); }
-  function syncResSel() { const rs = document.getElementById('resSel'); if (!rs) return; rs.hidden = RES.length < 2; const h = RES.map(r => '<option value="' + esc(r.id) + '">' + esc(r.name) + '</option>').join(''); if (rs.dataset.h !== h) { rs.innerHTML = h; rs.dataset.h = h; } rs.value = hRes; }
   function renderToggles() {
     { const pb = document.getElementById('projBtn'); if (pb) pb.setAttribute('aria-pressed', String(!!vis.proj)); }
     const chip = x => '<button type="button" class="chip' + (x[0] === 'bl' ? ' pgap' : '') + '" data-ptog="' + x[0] + '" aria-pressed="' + !!vis[x[0]] + '">' + x[1] + '</button>';
-    { const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); syncResSel(); }
+    { const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(!!vis.res)); }
     ptog.innerHTML = '<span class="lab2">Paneelit</span>' + PN.filter(x => ['panel', 'list', 'notes', 'locs'].indexOf(x[0]) >= 0).map(chip).join('') + PN.filter(x => ['bl', 'st', 'fc'].indexOf(x[0]) >= 0).map(chip).join('');
   }
   function setVis(n, v) {
@@ -2631,11 +2669,11 @@ function qlMatch(name, leaves) {
     if (n === 'st') { if (v) renderSt(); render(); }
     if (n === 'fc') render();
     if (n === 'locs' && v) renderLocs();
+    if (n === 'res' && v) renderResPanel(true);
     if (v) { const el = fpEl(n); if (el) el.style.zIndex = ++zTop; }
     place(n); renderToggles(); savePn();
   }
-  document.getElementById('resSel').addEventListener('change', e => { hRes = e.target.value; render(); });
-  document.getElementById('resBtn').addEventListener('click', () => { resMode = resOn ? 'off' : 'on'; try { localStorage.setItem(RKEY, resMode); } catch (err) { } render(); renderToggles(); });
+  document.getElementById('resBtn').addEventListener('click', () => setVis('res', !vis.res));
   document.getElementById('projBtn').addEventListener('click', () => setVis('proj', !vis.proj));
   ptog.addEventListener('click', e => { const b = e.target.closest('[data-ptog]'); if (b) setVis(b.dataset.ptog, !vis[b.dataset.ptog]); });
   stage.addEventListener('click', e => { const b = e.target.closest('[data-close]'); if (b) setVis(b.dataset.close, false); });
