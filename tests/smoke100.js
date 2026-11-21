@@ -1,17 +1,27 @@
-const {chromium}=require('playwright');
-(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
-await p.click('[data-ptog="locs"]');
-if(!(await p.locator('#ld-text').isVisible())){await p.evaluate(()=>{document.querySelectorAll('#locCard details').forEach(d=>d.open=true)});}
-await p.locator('#ld-text').fill('Talo A\n  Kerros 1\n    Asunto 1\n    Asunto 2\n  Kerros 2\n    Asunto 1\nTalo B\n  Kerros 1\n    Asunto 1\n    Asunto 2');
-await p.click('[data-act="locimp"][data-mode="replace"]');await p.waitForTimeout(200);await p.click('[data-ptog="locs"]');
-await p.click('#vGantt');await p.selectOption('#gGroup','trade');await p.selectOption('#lvlSel','2');await p.waitForTimeout(300);
-const rows=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gt')].filter(t=>!/^[▾▸]$/.test(t.textContent.trim())).slice(0,6).map(t=>{const y=t.getAttribute('y');const c=[...document.querySelectorAll('#gantt text.gc')].filter(x=>x.getAttribute('y')===y).slice(0,2).map(x=>x.textContent).join('–');return t.firstChild.textContent+' '+c}));
-console.log('before',await rows());
-const g=await p.$$('#gantt [data-gr=glmove]');console.log('glmove rects',g.length);
-// Talo B -rivin (2. glmove) veto
-const names=await p.$$eval('#gantt text.gt',e=>e.map(x=>x.firstChild.textContent));
-const bb=await g[2].boundingBox();console.log('box',bb&&bb.x);
-await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await p.mouse.down();await p.mouse.move(bb.x+bb.width/2+40,bb.y+bb.height/2,{steps:5});await p.mouse.up();await p.waitForTimeout(300);
-console.log('after',await rows());
-console.log('virheet',errs);await b.close();})();
+// määräluettelon tuonti: sarakkeet, rivit, ei sijainteja
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(), p = await b.newPage(), errs = []; p.on('pageerror', e => errs.push(e.message));
+  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForTimeout(400);
+  let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
+  const run = async (txt, mode) => {
+    await p.click('#impBtn'); await p.fill('#impTxt', txt); await p.click('#impParse');
+    if (mode) await p.check('input[name=impMode][value=' + mode + ']');
+    const n0 = await p.evaluate(() => __aik().lines.length); await p.click('#impGo'); await p.waitForTimeout(150);
+    return (await p.evaluate(() => __aik().lines.length)) - n0;
+  };
+  await p.evaluate(() => { document.querySelector('[data-pj=example]') && 0; });
+  let n = await run("Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2\tKerros 3\n1\tPerustukset\t\t\t\t\t\n1.1\tAnturamuotti ja valu\t300\tm2\t100\t100\t100\n1.2\tSokkeliharkko\t80\tm2\t30\t30\t20");
+  ok(n === 2, 'cols lines ' + n);
+  const r = await p.evaluate(() => { const A = __aik(), l = A.lines[A.lines.length - 1]; const T = A.tasks(l); return { q: T.map(t => t.qty), tq: A.totalQty(l), g: A.groups.some(g => g.name === 'Perustukset'), locs: A.LOCS.length, grp: !!l.grp }; });
+  ok(r.q.length >= 3 && r.q.slice(-3).join() === '30,30,20' || r.q.join().indexOf('30,30,20') >= 0, 'per-loc qty ' + r.q);
+  ok(Math.round(r.tq) === 80, 'total ' + r.tq); ok(r.g && r.grp, 'group');
+  n = await run("Nimike\tSijainti\tMäärä\tYksikkö\nMuuraus\tKerros 1\t10\tm2\nMuuraus\tKerros 2\t20\tm2");
+  ok(n === 1, 'rows lines ' + n);
+  n = await run("Perustukset\n  Anturamuotti\t300\tm2\n  Sokkeli\t90\tm2", 'koko');
+  ok(n === 2 && await p.evaluate(() => __aik().lines.slice(-1)[0].flat === true), 'flat');
+  n = await run("Suorite\tMäärä\tYks\nLaatta\t500\tm2", 'jaa');
+  ok(n === 1 && await p.evaluate(() => __aik().lines.slice(-1)[0].lockQ === 500), 'distributed');
+  await p.click('#undo'); ok(await p.evaluate(() => !__aik().lines.some(l => l.lockQ === 500)), 'undo');
+  ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
+})();

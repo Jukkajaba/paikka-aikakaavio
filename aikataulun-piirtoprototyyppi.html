@@ -230,6 +230,14 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
 .seg { display: inline-flex; gap: 4px; }
 #gCtl { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 #gCtl[hidden] { display: none; }
+
+  #impBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
+  #impBox.on{display:flex}
+  #impBox .imp{background:var(--bg,#fff);color:inherit;border:1px solid #888;border-radius:8px;max-width:1100px;width:100%;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  #impBox h2{margin:0 0 6px;font-size:16px}#impBox h3{margin:12px 0 4px;font-size:13px}
+  #impBox textarea{width:100%;height:110px;font:12px monospace;box-sizing:border-box}
+  #impBox table{border-collapse:collapse;font-size:12px;width:100%}#impBox td,#impBox th{border:1px solid #bbb;padding:2px 5px;text-align:left}
+  #impBox input.num{width:64px}#impBox .w{color:#b45309}#impBox .row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:4px 0}
 </style>
 
 <div class="wrap">
@@ -253,6 +261,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Näytä tai piilota resurssihistogrammi (hlö/pv). Hyvin isoissa aikatauluissa se on oletuksena piilossa.">Resurssit</button>
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
+      <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määräluettelo</button>
       <button id="undo" type="button">Kumoa</button>
     </div>
   </div>
@@ -433,12 +442,12 @@ function tasks(l) {
 function tasksCalc(l) {
   const r = range(l), out = [], lc = l.lockC != null ? l.lockC : null, dist = (l.total != null && lc == null) ? distribute(l, r) : null, q = effQty(l); let prevEnd = 0, prevS = 0;
   for (let k = 0; k < r.n; k++) {
-    const idx = r.a + r.dir * k, loc = locAt(idx), o = (l.ov && l.ov[loc.id]) || {};
-    const d = o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(q * shr(l, loc) / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc)))));
+    const idx = r.a + r.dir * k, loc = locAt(idx), o = (l.ov && l.ov[loc.id]) || {}, qk = o.q != null ? o.q : q * shr(l, loc);
+    const d = o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(qk / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc)))));
     const sh = k === 0 ? 0 : (o.shift || 0);
     const s = k === 0 ? l.start : r1(Math.max(prevS, prevEnd + l.gap + sh)); // negatiivinen viive = päällekkäisyys, mutta ei ennen edellisen alkua
-    const crew = (lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(q * shr(l, loc) / l.prod / d - 1e-9));
-    out.push({ loc: idx, locId: loc.id, s: s, e: r1(s + d), d: d, crew: crew, name: o.name || '', ovd: o.d != null, shift: sh, qty: q * shr(l, loc) });
+    const crew = (lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(qk / l.prod / d - 1e-9));
+    out.push({ loc: idx, locId: loc.id, s: s, e: r1(s + d), d: d, crew: crew, name: o.name || '', ovd: o.d != null, shift: sh, qty: qk });
     prevEnd = r1(s + d); prevS = s;
   }
   return out;
@@ -452,7 +461,7 @@ function fit(l) {
   else if (l.lockC == null) while (span(l) > N_DAYS && l.dur > 1 && g++ < 300) l.dur--;
   l.start = Math.max(0, Math.min(l.start, N_DAYS - span(l)));
 }
-function cleanOv(ov) { const o = {}; for (const k in (ov || {})) { const v = ov[k], c = {}; if (v.name) c.name = v.name; if (v.pct != null) c.pct = v.pct; if (v.as != null) c.as = v.as; if (v.ae != null) c.ae = v.ae; if (Object.keys(c).length) o[k] = c; } return o; }
+function cleanOv(ov) { const o = {}; for (const k in (ov || {})) { const v = ov[k], c = {}; if (v.name) c.name = v.name; if (v.pct != null) c.pct = v.pct; if (v.as != null) c.as = v.as; if (v.ae != null) c.ae = v.ae; if (v.q != null) c.q = v.q; if (Object.keys(c).length) o[k] = c; } return o; }
 function setSpan(l, s, fromId, e, toId) {
   l.from = fromId; l.to = toId; l.total = null; l.lockC = null;
   const r = range(l); let W = 0;
@@ -469,7 +478,11 @@ function setSpan(l, s, fromId, e, toId) {
 // Lukittu kokonaismäärä (l.lockQ) pysyy samana, kun sijainnit tai osuudet muuttuvat; sijaintikohtainen määrä lasketaan siitä.
 function widthW(l) { const r = range(l); let W = 0; for (let k = 0; k < r.n; k++) W += shr(l, LOCS[r.a + r.dir * k]); return Math.max(W, 0.1); }
 function effQty(l) { return l.lockQ != null ? l.lockQ / widthW(l) : l.qty; }
-function totalQty(l) { return l.lockQ != null ? l.lockQ : l.qty * widthW(l); }
+function totalQty(l) {
+  if (l.lockQ != null) return l.lockQ;
+  if (l.ov && Object.keys(l.ov).some(k => l.ov[k].q != null)) { const r = range(l); let S = 0; for (let k = 0; k < r.n; k++) { const loc = LOCS[r.a + r.dir * k], o = l.ov[loc.id]; S += o && o.q != null ? o.q : l.qty * shr(l, loc); } return S; }
+  return l.qty * widthW(l);
+}
 function setTotalQty(l, Q) { if (l.lockQ != null) l.lockQ = Q; else l.qty = Q / widthW(l); }
 function toggleQtyLock(l) { if (l.lockQ != null) { l.qty = effQty(l); l.lockQ = null; } else l.lockQ = totalQty(l); }
 const r2 = x => Math.round(x * 100) / 100;
@@ -677,6 +690,82 @@ function actOf(l, k) { // k = tasks()-rivi
 function pctOfTasks(items) { let d = 0, w = 0; items.forEach(q => { d += q.k.d; w += q.k.d * actOf(q.l, q.k).pct; }); return d ? w / d : 0; }
 const dateOnly = t => t.replace(/^(ma|ti|ke|to|pe) /, '');
 const weekOf = d => Math.floor(d / 5) + 1;
+// ---- määräluettelon tuonti: puhdas logiikka ----
+// Taulukko (liitetty Excelistä) -> sarakeroolit -> suoritteet (rakenne = ylätehtävä, suorite = viiva).
+function qlParse(text) {
+  const t = String(text || '').replace(/\r/g, ''), rows = t.split('\n').filter(r => r.trim() !== '');
+  const d = t.indexOf('\t') >= 0 ? '\t' : (t.indexOf(';') >= 0 ? ';' : ',');
+  return rows.map(r => r.split(d).map(c => c.trim().replace(/^"(.*)"$/, '$1')));
+}
+function qlNum(s) { if (s == null) return null; const x = String(s).replace(/[\s ]/g, '').replace(/,/g, '.'); return /^-?\d+(\.\d+)?$/.test(x) ? parseFloat(x) : null; }
+// Roolit: skip, code, name, qty, unit, loc (sijainti sarakkeena, solussa määrä), locname (sijainti rivillä)
+function qlGuess(grid) {
+  const n = grid.reduce((m, r) => Math.max(m, r.length), 0), roles = [], H = [
+    ['code', /^(littera|tunnus|koodi|nro|nr\.?|jnro)$/i], ['name', /(suorite|nimike|nimi|kuvaus|työlaji|tehtävä|selite)/i],
+    ['qty', /^(määrä|maara|yhteensä|yht\.?|kokonaismäärä|kok\.? ?määrä)$/i], ['unit', /^(yksikkö|yks\.?|unit)$/i], ['locname', /^(sijainti|osa-alue|alue|tila)$/i]];
+  const first = grid[0] || [];
+  const head = first.some(c => c && H.some(h => h[1].test(c))) && !first.some(c => qlNum(c) != null) ? 0 : -1;
+  const data = grid.slice(head >= 0 ? 1 : 0);
+  const col = j => data.map(r => r[j] || '').filter(x => x !== '');
+  const used = {};
+  for (let j = 0; j < n; j++) {
+    roles[j] = 'skip'; const h = head >= 0 ? (first[j] || '') : ''; const m = h && H.find(x => x[1].test(h));
+    if (m && !used[m[0]]) { roles[j] = m[0]; used[m[0]] = true; }
+  }
+  for (let j = 0; j < n; j++) {
+    if (roles[j] !== 'skip') continue;
+    const v = col(j); if (!v.length) continue;
+    const numR = v.filter(x => qlNum(x) != null).length / v.length;
+    const unitR = v.filter(x => x.length <= 4 && /^[a-zäö²³\/%.0-9]+$/i.test(x)).length / v.length;
+    if (numR >= 0.5) roles[j] = 'loc';
+    else if (!used.unit && unitR >= 0.7 && v.length > 1) { roles[j] = 'unit'; used.unit = true; }
+    else if (!used.name) { roles[j] = 'name'; used.name = true; }
+    else if (!used.code) { roles[j] = 'code'; used.code = true; }
+  }
+  const locs = roles.map((r, j) => r === 'loc' ? j : -1).filter(j => j >= 0);
+  if (!used.qty && locs.length === 1) { roles[locs[0]] = 'qty'; used.qty = true; }
+  else if (!used.qty && locs.length > 1 && head < 0) { roles[locs[0]] = 'qty'; used.qty = true; }
+  if (!used.name) { const j = roles.indexOf('code'); if (j >= 0) { roles[j] = 'name'; } }
+  return { head: head, roles: roles, names: Array.from({ length: n }, (_, j) => (head >= 0 && first[j]) ? first[j] : 'Sarake ' + (j + 1)) };
+}
+function qlBuild(grid, head, roles, names) {
+  const ix = r => roles.indexOf(r), jc = ix('code'), jn = ix('name'), jq = ix('qty'), ju = ix('unit'), jl = ix('locname');
+  const locJ = roles.map((r, j) => r === 'loc' ? j : -1).filter(j => j >= 0);
+  const layout = locJ.length ? 'cols' : (jl >= 0 ? 'rows' : 'none');
+  const items = [], locNames = [], warn = []; let cur = '', curCode = '';
+  const addLoc = nm => { if (nm && locNames.indexOf(nm) < 0) locNames.push(nm); };
+  for (let i = head >= 0 ? 1 : 0; i < grid.length; i++) {
+    const r = grid[i], c = j => (j >= 0 && r[j] != null ? r[j] : '');
+    const code = c(jc), name = c(jn) || code; if (!name) continue;
+    const qty = jq >= 0 ? qlNum(c(jq)) : null, byLoc = {};
+    if (layout === 'cols') locJ.forEach(j => { const v = qlNum(c(j)); if (v != null) { byLoc[names[j]] = (byLoc[names[j]] || 0) + v; addLoc(names[j]); } });
+    let unloc = 0;
+    if (layout === 'rows' && qty != null) { const ln = c(jl); if (ln) { byLoc[ln] = (byLoc[ln] || 0) + qty; addLoc(ln); } else unloc = qty; }
+    if (layout === 'none' && qty != null) unloc = qty;
+    if (qty == null && !Object.keys(byLoc).length) { cur = name; curCode = code; continue; } // ei määrää: rakennerivi
+    const unit = c(ju), key = code + '|' + name + '|' + unit;
+    let it = layout === 'rows' ? items.find(x => x.key === key && x.rak === cur) : null;
+    if (!it) { it = { key: key, rak: cur, rakCode: curCode, code: code, name: name, unit: unit, byLoc: {}, unloc: 0, qtyCol: null, row: i, warns: [] }; items.push(it); }
+    Object.keys(byLoc).forEach(k => { it.byLoc[k] = (it.byLoc[k] || 0) + byLoc[k]; });
+    it.unloc += unloc; if (layout === 'cols' && qty != null) it.qtyCol = (it.qtyCol || 0) + qty;
+  }
+  items.forEach(it => {
+    const has = Object.keys(it.byLoc).length, sum = Object.keys(it.byLoc).reduce((x, k) => x + it.byLoc[k], 0);
+    if (layout === 'cols' && !has && it.qtyCol != null) it.unloc = it.qtyCol; // vain kokonaismäärä: jaetaan osuuksien mukaan
+    it.total = sum + it.unloc;
+    if (!it.unit) it.warns.push('Yksikkö puuttuu');
+    if (!(it.total > 0)) it.warns.push('Määrä on nolla');
+    if (layout === 'cols' && has && it.qtyCol != null && Math.abs(it.qtyCol - sum) > Math.max(0.01, Math.abs(sum) * 0.01)) it.warns.push('Sijaintien summa ' + Math.round(sum * 100) / 100 + ' ≠ määrä ' + Math.round(it.qtyCol * 100) / 100);
+    if (layout === 'rows' && has && it.unloc) it.warns.push('Rivillä ei sijaintia: ' + Math.round(it.unloc * 100) / 100 + ' jää jakamatta');
+  });
+  return { items: items, locNames: locNames, layout: layout, warn: warn };
+}
+const qlNorm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+// leaves: [{id, name (näyttönimi), own (oma nimi)}]; palauttaa osuvat id:t
+function qlMatch(name, leaves) {
+  const n = qlNorm(name); let m = leaves.filter(x => qlNorm(x.name) === n); if (m.length) return m.map(x => x.id);
+  m = leaves.filter(x => qlNorm(x.own) === n); return m.map(x => x.id);
+}
 // </logic>
 
 (function () {
@@ -1354,6 +1443,89 @@ const weekOf = d => Math.floor(d / 5) + 1;
     selId = l.id; selGrp = null; selDep = null; tasksOpen = false; gEnsureRoom(); render();
     const ri = gRows.findIndex(r => r.line === l.id); gScroll.scrollTop = Math.max(0, (ri >= 0 ? ri : gRows.length) * 26 - 120);
   }
+
+  // ---- määräluettelon tuonti (liittämällä) ----
+  const IMP = { grid: null, g: null, roles: [], locMap: {}, mode: 'jaa', items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, B: null };
+  const impBox = document.createElement('div'); impBox.id = 'impBox';
+  impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määräluettelo"><h2>Tuo määräluettelo</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
+  document.body.appendChild(impBox);
+  const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)']];
+  function impRebuild() {
+    IMP.B = qlBuild(IMP.grid, IMP.g.head, IMP.roles, IMP.g.names);
+    const leaves = LOCS.map(x => ({ id: x.id, name: x.name, own: (LT.find(n => n.id === x.id) || {}).name }));
+    IMP.B.locNames.forEach(n => { if (!(n in IMP.locMap)) { const m = qlMatch(n, leaves); IMP.locMap[n] = m.length ? m[0] : 'new'; } });
+    IMP.items = IMP.B.items; IMP.items.forEach((it, i) => { if (!(i in IMP.inc)) IMP.inc[i] = it.total > 0; });
+  }
+  function impDraw() {
+    const body = impBox.querySelector('#impBody'); if (!IMP.B) { body.innerHTML = ''; return; }
+    const B = IMP.B, g = IMP.g, opt = (v, sel, t) => '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(t) + '</option>';
+    let h = '<h3>1. Sarakkeet</h3><table><tr>' + g.names.map((n, j) => '<th>' + esc(n) + '<br><select data-ir="' + j + '">' + ROLES.map(r => opt(r[0], IMP.roles[j], r[1])).join('') + '</select></th>').join('') + '</tr>' +
+      IMP.grid.slice(g.head >= 0 ? 1 : 0, (g.head >= 0 ? 1 : 0) + 3).map(r => '<tr>' + g.names.map((n, j) => '<td>' + esc(r[j] || '') + '</td>').join('') + '</tr>').join('') + '</table>';
+    h += '<p class="ok">Sijaintimuoto: <b>' + (B.layout === 'cols' ? 'sijainnit sarakkeina' : B.layout === 'rows' ? 'sijainnit riveinä' : 'ei sijainteja') + '</b></p>';
+    const anyNoLoc = B.items.some(it => it.unloc > 0 || !Object.keys(it.byLoc).length);
+    if (B.locNames.length) {
+      h += '<h3>2. Sijaintien vastaavuus</h3><table>' + B.locNames.map(n => '<tr><td>' + esc(n) + '</td><td><select data-lm="' + esc(n) + '">' + opt('new', IMP.locMap[n], '+ Luo uusi sijainti') + opt('skip', IMP.locMap[n], 'Ohita') + LOCS.map(x => opt(x.id, IMP.locMap[n], x.name)).join('') + '</select></td></tr>').join('') + '</table>';
+    }
+    if (anyNoLoc) {
+      h += '<h3>' + (B.locNames.length ? '3' : '2') + '. Suoritteet ilman sijaintia</h3><div class="row2"><label><input type="radio" name="impMode" value="jaa"' + (IMP.mode === 'jaa' ? ' checked' : '') + '> Jaa projektin sijainteihin osuuksien mukaan</label><label><input type="radio" name="impMode" value="koko"' + (IMP.mode === 'koko' ? ' checked' : '') + '> Yksi tehtävä koko kohteelle</label></div>';
+    }
+    h += '<h3>Suoritteet</h3><div class="row2">Oletustuottavuus <input class="num" id="impDP" type="number" min="0.1" step="any" value="' + IMP.dProd + '"> yks/hlö/pv · oletustyöryhmä <input class="num" id="impDC" type="number" min="1" step="1" value="' + IMP.dCrew + '"> hlö <button type="button" id="impApplyD">Aseta kaikille</button></div>';
+    h += '<table><tr><th></th><th>Rakenne</th><th>Suorite</th><th>Yks.</th><th>Määrä</th><th>Tuottavuus</th><th>Hlö</th><th>Työlaji</th><th>Huomiot</th></tr>' + IMP.items.map((it, i) => {
+      const p = IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd, c = IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew, tr = IMP.trade[i] || 'new';
+      return '<tr><td><input type="checkbox" data-ii="' + i + '"' + (IMP.inc[i] ? ' checked' : '') + '></td><td>' + esc(it.rak) + '</td><td>' + esc(it.name) + '</td><td>' + esc(it.unit) + '</td><td>' + Math.round(it.total * 100) / 100 + '</td><td><input class="num" type="number" min="0.1" step="any" data-ip="' + i + '" value="' + p + '"></td><td><input class="num" type="number" min="1" step="1" data-ic="' + i + '" value="' + c + '"></td><td><select data-it="' + i + '">' + opt('new', tr, 'Uusi') + TRADES.map(t => opt(t.id, tr, t.name)).join('') + '</select></td><td class="w">' + esc(it.warns.join('; ')) + '</td></tr>';
+    }).join('') + '</table><div class="row2"><button type="button" id="impGo"><b>Tuo valitut</b></button><span id="impMsg" class="ok"></span></div>';
+    body.innerHTML = h;
+  }
+  function impApply() {
+    const B = IMP.B; if (!B) return; const leaves = {}; LOCS.forEach((x, i) => { leaves[x.id] = i; });
+    pushUndo(snapshot()); ensureOrd();
+    const newNodes = []; Object.keys(IMP.locMap).forEach(n => { if (IMP.locMap[n] === 'new' && B.locNames.indexOf(n) >= 0) { const id = uid('L'); newNodes.push({ id: id, name: n, share: 1, par: null }); IMP.locMap[n] = id; } });
+    if (newNodes.length) { LT = normTree(LT.concat(newNodes)); syncLocs(); LOCS.forEach((x, i) => { leaves[x.id] = i; }); }
+    const gmap = {}; let nl = 0, ord = maxOrd();
+    IMP.items.forEach((it, i) => {
+      if (!IMP.inc[i]) return;
+      const mapped = {}; Object.keys(it.byLoc).forEach(n => { const id = IMP.locMap[n]; if (id && id !== 'skip' && leaves[id] != null) mapped[id] = (mapped[id] || 0) + it.byLoc[n]; });
+      const ids = Object.keys(mapped), prod = IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd, crew = Math.max(1, Math.round(IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew));
+      let t = IMP.trade[i] && IMP.trade[i] !== 'new' ? trade(IMP.trade[i]) : null;
+      const total = ids.length ? ids.reduce((x, k) => x + mapped[k], 0) : it.total;
+      const flat = !ids.length && IMP.mode === 'koko';
+      if (!t) { t = newTrade(); t.name = it.name.slice(0, flat ? 40 : 24); t.unit = it.unit || 'kpl'; t.prod = prod; t.qty = total || 1; t.maxCrew = Math.max(8, crew); if (flat) t.flat = true; }
+      const l = { id: nextId++, trade: t.id, from: null, to: null, start: 0, dur: 5, gap: 0, qty: total || 1, prod: t.prod, ov: {}, ord: (ord += 10) };
+      if (flat) { l.flat = true; l.lockC = crew; }
+      else if (ids.length) { const ix = ids.map(k => leaves[k]), a = Math.min.apply(null, ix), b = Math.max.apply(null, ix); l.from = LOCS[a].id; l.to = LOCS[b].id; ids.forEach(k => { l.ov[k] = { q: mapped[k] }; }); l.qty = total / ids.length; l.lockC = crew; }
+      else { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.lockQ = total; l.lockC = crew; }
+      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; groups.push(g); } gmap[it.rak] = g; l.grp = g.id; }
+      lines.push(l); nl++;
+    });
+    lines.forEach(fit); selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
+    const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
+    impBox.classList.remove('on');
+  }
+  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS });
+  document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
+  impBox.addEventListener('click', e => {
+    const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
+    if (e.target === impBox || t.id === 'impClose') { impBox.classList.remove('on'); return; }
+    if (t.id === 'impParse') {
+      const grid = qlParse(impBox.querySelector('#impTxt').value); if (!grid.length) return;
+      IMP.grid = grid; IMP.g = qlGuess(grid); IMP.roles = IMP.g.roles.slice(); IMP.locMap = {}; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {};
+      impRebuild(); impDraw(); return;
+    }
+    if (t.id === 'impGo') impApply();
+    if (t.id === 'impApplyD') { IMP.prod = {}; IMP.crew = {}; impDraw(); }
+  });
+  impBox.addEventListener('change', e => {
+    const t = e.target, d = t.dataset || {};
+    if (d.ir != null) { IMP.roles[+d.ir] = t.value; IMP.locMap = {}; IMP.inc = {}; impRebuild(); impDraw(); }
+    else if (d.lm != null) IMP.locMap[d.lm] = t.value;
+    else if (d.ii != null) IMP.inc[+d.ii] = t.checked;
+    else if (d.ip != null) IMP.prod[+d.ip] = Math.max(0.1, +t.value || 1);
+    else if (d.ic != null) IMP.crew[+d.ic] = Math.max(1, Math.round(+t.value || 1));
+    else if (d.it != null) IMP.trade[+d.it] = t.value;
+    else if (t.name === 'impMode') IMP.mode = t.value;
+    else if (t.id === 'impDP') { IMP.dProd = Math.max(0.1, +t.value || 10); impDraw(); }
+    else if (t.id === 'impDC') { IMP.dCrew = Math.max(1, Math.round(+t.value || 2)); impDraw(); }
+  });
   document.getElementById('gAddTask').addEventListener('click', () => { const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); });
   document.getElementById('gAddGrp').addEventListener('click', () => {
     pushUndo(snapshot()); ensureOrd();
