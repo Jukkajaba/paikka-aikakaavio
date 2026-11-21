@@ -1453,6 +1453,7 @@ function qlMatch(name, leaves) {
     pushUndo(snapshot()); ensureOrd();
     const t = newTrade(); t.name = 'Uusi tehtävä'; t.flat = true;
     const sel = byId(selId), g = gid ? groups.find(x => x.id === gid) : null, kids = g ? itemsOf(g.id).map(x => x.o) : [];
+    { const st = sel && trade(sel.trade); if (st && st.col) t.col = st.col; } // uusi tehtävä saa valitun tehtävän värin
     const st0 = sel ? sel.start : (kids.length ? Math.min.apply(null, kids.map(k => k.start)) : 0);
     const l = { id: nextId++, trade: t.id, from: null, to: null, start: st0, dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: maxOrd() + 10 };
     if (g) l.grp = g.id;
@@ -1524,7 +1525,7 @@ function qlMatch(name, leaves) {
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
     impBox.classList.remove('on'); impReset();
   }
-  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS });
+  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
@@ -1549,7 +1550,16 @@ function qlMatch(name, leaves) {
     else if (t.id === 'impDP') { IMP.dProd = Math.max(0.1, +t.value || 10); impDraw(); }
     else if (t.id === 'impDC') { IMP.dCrew = Math.max(1, Math.round(+t.value || 2)); impDraw(); }
   });
-  document.getElementById('gAddTask').addEventListener('click', () => { const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); });
+  // + ollessa valittuna sijaintirivi: lisää samalle viivalle seuraava sijainti (sama työlaji ja väri)
+  function addNextLoc() {
+    const l = selLoc && selLoc.l === selId ? byId(selId) : null; if (!l || l.flat) return false;
+    const r = range(l), nx = r.b + r.dir, nl = LOCS[nx]; if (!nl) return false;
+    pushUndo(snapshot()); l.total = null; l.to = nl.id; fit(l);
+    selLoc = { l: l.id, loc: nl.id }; selGrp = null; selDep = null; render();
+    const ri = gRows.findIndex(x => x.line === l.id && x.locId === nl.id); if (ri >= 0) gScroll.scrollTop = Math.max(0, Math.min(gScroll.scrollTop, ri * ROWH[gRowK]), ri * ROWH[gRowK] + ROWH[gRowK] * 2 - (gScroll.clientHeight || 500));
+    return true;
+  }
+  document.getElementById('gAddTask').addEventListener('click', () => { if (gGroup === 'trade' && addNextLoc()) return; const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); });
   document.getElementById('gAddGrp').addEventListener('click', () => {
     pushUndo(snapshot()); ensureOrd();
     const sel = byId(selId), g = { id: uid('K'), name: 'Uusi ylätehtävä', ord: maxOrd() + 10 };
