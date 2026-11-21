@@ -1867,7 +1867,6 @@ function qlMatch(name, leaves) {
     }
     const t = trade(l.trade), c = crewOf(l), ts = tasks(l), en = lineEnd(l);
     const uIn = '<input class="txt" style="width:48px" type="text" maxlength="6" value="' + esc(t.unit) + '" data-field="tr-unit" data-id="' + t.id + '" aria-label="Yksikkö" title="Yksikkö (muuttuu koko työlajille)">';
-    const opts = '<option value="" selected>Valitse…</option>' + TRADES.filter(x => !x.flat && x.id !== l.trade).map(x => '<option value="' + x.id + '">' + esc(x.name) + '</option>').join('');
     let th = '<details' + (tasksOpen ? ' open' : '') + '><summary>Tehtävät (' + ts.length + ')</summary>';
     (l.flat ? [] : ts).forEach((k, i) => {
       const dn = t.name + ' · ' + LOCS[k.loc].name;
@@ -1902,7 +1901,7 @@ function qlMatch(name, leaves) {
       '<div class="ph"><span class="dot" style="background:' + colorOf(l.trade) + '"></span><h2>' + esc(t.name) + '</h2></div>' +
       '<p class="meta">' + esc(LOCS[ts[0].loc].name) + ' → ' + esc(LOCS[ts[ts.length - 1].loc].name) + '<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + ')</p>' +
       '<p class="ok hlp" style="margin:0 0 6px">Viivan ajoitus ja koko: kokonaiskesto, aika sijainnissa, viive sijaintien välillä, työryhmä ja määrä vaikuttavat toisiinsa. Lukko pitää arvon paikallaan, ja muut arvot lasketaan sen mukaan. Tehtävät-osiossa voi muuttaa yksittäisen sijainnin kestoa ja viivettä. Työlajin nimi, yksikkö ja tuottavuus koskevat koko työlajia.</p>' +
-      '<div class="row"><label for="f-trade" title="Nimi ei muutu, vain väri, yksikkö, määrä, tuottavuus ja enimmäisväki kopioidaan">Kopioi asetukset työlajista</label><select id="f-trade" data-field="trade" data-id="' + l.id + '">' + opts + '</select></div>' + grpSelect(l) + locSelect(l) +
+      '' + grpSelect(l) + locSelect(l) +
       '<div class="row"><label for="f-tname" title="Nimi muuttuu kaikilla tämän työlajin viivoilla">Työlajin nimi</label><input id="f-tname" class="txt" style="max-width:170px" type="text" maxlength="24" value="' + esc(t.name) + '" data-field="tr-name" data-id="' + t.id + '"></div>' +
       '<div class="row"><label for="f-total">Kokonaiskesto</label><span><input id="f-total" class="num" type="number" min="0.5" max="' + N_DAYS + '" step="0.1" value="' + r1(span(l)) + '" data-field="total" data-id="' + l.id + '"' + (l.tctl && l.lockC == null ? '' : ' disabled') + '> pv · ' + (Math.round(span(l) / 5 * 10) / 10) + ' vk</span></div>' +
       '<div class="row"><label>Kokonaiskesto ohjaa</label><button type="button" class="chip" data-act="tctl" data-id="' + l.id + '" aria-pressed="' + (!!l.tctl) + '">' + (l.tctl ? 'Päällä' : 'Pois') + '</button></div>' +
@@ -2458,7 +2457,6 @@ function qlMatch(name, leaves) {
       }
     }
     else if (f === 'lgrp') { const l = byId(id); if (l) { ensureOrd(); const v2 = e.target.value; if (v2 && groups.some(x => x.id === v2)) { l.grp = v2; } else delete l.grp; l.ord = maxOrd() + 10; } }
-    else if (f === 'trade') { const l = byId(id), t = trade(e.target.value), own = l && trade(l.trade); if (l && t && own && t !== own) { own.col = t.col; own.unit = t.unit; own.qty = t.qty; own.prod = t.prod; own.maxCrew = t.maxCrew; l.qty = t.qty; l.prod = t.prod; } }
     else if (f === 'total') { const l = byId(id); if (l && l.tctl && v > 0) setTotal(l, v); }
     else if (f === 'tqty') { const l = byId(id); if (l && v > 0) setTotalQty(l, v); }
     else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, r1(v) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }

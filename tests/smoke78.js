@@ -7,6 +7,5 @@ await draw(300,300,500,150);
 await p.locator('#f-tname').fill('Muuraus');await p.locator('#f-tname').dispatchEvent('change');await p.waitForTimeout(150);
 await draw(600,300,800,150);
 await p.locator('#f-tname').fill('Laatoitus');await p.locator('#f-tname').dispatchEvent('change');await p.waitForTimeout(150);
-await p.locator('#f-trade').selectOption({label:'Muuraus'});await p.waitForTimeout(200);
 console.log(await p.evaluate(()=>({h:document.querySelector('#panel .ph h2')?.textContent,chips:[...document.querySelectorAll('[data-trade]')].map(c=>c.textContent.trim()).slice(-3),lines:document.querySelectorAll('#chart [data-role="body"]').length})),errs);
 await b.close();})();
