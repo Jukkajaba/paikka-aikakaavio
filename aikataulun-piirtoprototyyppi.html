@@ -256,6 +256,8 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <span class="fltwrap" id="fltWrap"><button id="fltBtn" type="button" class="chip" aria-haspopup="true" aria-expanded="false" aria-controls="fltPop">Näytä: Kaikki ▾</button><div id="fltPop" class="fltpop" role="dialog" aria-label="Rajaa näkyvät sijainnit" hidden><input id="fltQ" class="txt" type="search" placeholder="Hae sijaintia…" aria-label="Hae sijaintia" autocomplete="off"><div class="fltact"><button id="fltOnly" type="button">Vain hakutulokset</button><button id="fltAll" type="button">Näytä kaikki</button></div><div id="fltList" class="fltlist"></div></div></span>
       <span id="gCtl" hidden><label class="tgt">Ryhmittely <select id="gGroup"><option value="trade">Työlajin mukaan</option><option value="loc">Sijainnin mukaan</option></select></label></span>
       <label class="tgt">Näkyvillä vk <input id="gVis" type="number" min="4" max="260" step="1" value="26" style="width:56px"></label>
+      <span class="tgt" title="Zoomaa aikaa (myös Ctrl + rullaus)"><button id="zOut" type="button" aria-label="Zoomaa ulos">−</button> <button id="zIn" type="button" aria-label="Zoomaa sisään">+</button> <button id="zFit" type="button" title="Näytä koko projekti">Koko</button></span>
+      <label class="tgt">Rivit <select id="rowSel"><option value="c">Tiivis</option><option value="n">Normaali</option><option value="w">Väljä</option></select></label>
       <button id="helpBtn" type="button" class="chip" aria-pressed="false" title="Näytä tai piilota ohjetekstit">Ohje</button>
       <button id="depToggle" type="button" class="chip" aria-pressed="true">Riippuvuudet</button>
       <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Näytä tai piilota resurssihistogrammi (hlö/pv). Hyvin isoissa aikatauluissa se on oletuksena piilossa.">Resurssit</button>
@@ -941,7 +943,7 @@ function qlMatch(name, leaves) {
     gOff = clamp(gOff, 0, Math.max(0, N_DAYS - visD));
     const hist = histogram(lines), histN = hist.reduce((q, x) => q + x.length, 0);
     resOn = resMode === 'on' || (resMode === 'auto' && histN <= 15000); // hyvin isoissa aikatauluissa resurssit ovat oletuksena piilossa
-    const rowH = clamp(Math.floor(330 / L), 22, 46), TOP = 30, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
+    const rowH = clamp(Math.floor(330 / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round(46 * ROWF[gRowK])), TOP = 30, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
     G = { LEFT: LEFT, dayW: dayW, rowH: rowH, TOP: TOP, bodyH: bodyH, L: L, rm: RM, rows: VR ? VR.rows : null, W: W, visD: visD, RIGHT: RIGHT };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
     { const need = visD < N_DAYS; fH.hidden = !need; if (need) { const cw = fH.clientWidth || W; fHi.style.width = Math.round(cw * N_DAYS / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(fH.scrollLeft - sl) > 1) { fSyncing = true; fH.scrollLeft = sl; } } }
@@ -1132,6 +1134,7 @@ function qlMatch(name, leaves) {
   let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gSyncing = false, fSyncing = false;
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); } } catch (err) { }
+  let gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
   const saveView = () => { try { localStorage.setItem(VKEY, JSON.stringify({ view: view, group: gGroup, vis: gVisW })); } catch (err) { } try { scheduleSave(); } catch (err) { } };
 
   // baseline: jäädytetty kopio tehtävien ajoista. baselines[] = {id, name, date, t: {viivanId: [[sijaintiId, alku, loppu], ...]}}; blShow = näytettävän id
@@ -1280,7 +1283,7 @@ function qlMatch(name, leaves) {
   function renderGantt() {
     if (view !== 'gantt') return;
     gRows = buildGanttRows();
-    const W = Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = 34, rowH = 26, RIGHT = 14;
+    const W = Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = 34, rowH = ROWH[gRowK], RIGHT = 14;
     const NAME = narrow ? 150 : 215, cw = narrow ? [] : [58, 58, 34, 34].concat(stOn() ? [34] : []).concat(curBl() ? [40] : []).concat(fcOn() ? [40] : []), colX = []; let cx = 12 + NAME; cw.forEach(w => { cx += w; colX.push(cx); });
     const LEFT = cx + 10, visD = Math.min(N_DAYS, Math.max(5, gVisW * 5)), dayW = (W - LEFT - RIGHT) / visD;
     gOff = clamp(gOff, 0, Math.max(0, N_DAYS - visD));
@@ -1348,7 +1351,7 @@ function qlMatch(name, leaves) {
       if (fsp && !r.empty && (Math.abs(fsp.s - r.s) > 0.05 || Math.abs(fsp.e - r.e) > 0.05)) p.push('<rect x="' + X(fsp.s).toFixed(1) + '" y="' + (r.g ? mid - 4 : y + 4) + '" width="' + Math.max(2, X(fsp.e) - X(fsp.s)).toFixed(1) + '" height="' + (r.g ? 8 : rowH - 8) + '" rx="3" fill="none" stroke="' + col + '" stroke-width="1.8" stroke-dasharray="4 3" pointer-events="none"><title>Ennuste</title></rect>');
       if (stOn() && !r.empty && r.pct > 0 && x1 > x0) p.push('<rect x="' + x0.toFixed(1) + '" y="' + (r.g ? mid - 3 : y + by0) + '" width="' + (Math.max(2, x1 - x0) * Math.min(100, r.pct) / 100).toFixed(1) + '" height="' + (r.g ? 6 : bh) + '" fill="#000" opacity=".32" pointer-events="none"/>');
       if (stOn() && r.act && r.act.as != null) { const ae0 = r.act.ae != null ? r.act.ae : (statusDay != null ? Math.max(r.act.as, statusDay) : r.s + (r.e - r.s) * r.act.pct / 100); p.push('<rect x="' + X(r.act.as).toFixed(1) + '" y="' + (y + 13.5) + '" width="' + Math.max(2, X(ae0) - X(r.act.as)).toFixed(1) + '" height="7" rx="2" fill="' + col + '" style="fill:color-mix(in srgb, ' + col + ' 55%, #000)" stroke="var(--ink)" stroke-width=".6" pointer-events="none"><title>Toteuma</title></rect>'); }
-      if (bsp && !r.empty) p.push('<rect x="' + X(bsp.s).toFixed(1) + '" y="' + (y + 22.5) + '" width="' + Math.max(2, X(bsp.e) - X(bsp.s)).toFixed(1) + '" height="3" rx="1.5" fill="var(--ink)" opacity=".38" pointer-events="none"><title>Tavoite</title></rect>');
+      if (bsp && !r.empty) p.push('<rect x="' + X(bsp.s).toFixed(1) + '" y="' + (y + rowH - 3.5) + '" width="' + Math.max(2, X(bsp.e) - X(bsp.s)).toFixed(1) + '" height="3" rx="1.5" fill="var(--ink)" opacity=".38" pointer-events="none"><title>Tavoite</title></rect>');
     }
     const gdh = [], dg = drag && (drag.type === 'gdep' || drag.type === 'gdepend') ? drag : null;
     if (showDeps) {
@@ -1427,6 +1430,25 @@ function qlMatch(name, leaves) {
     if (!G || G.visD >= N_DAYS) return;
     if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { e.preventDefault(); gSetOff(gOff + (e.deltaX || e.deltaY) / G.dayW); }
   }, { passive: false });
+
+  // ---- zoomaus: aika (+/−, Ctrl + rullaus, Koko) ja rivikorkeus ----
+  const rowSelEl = document.getElementById('rowSel'); rowSelEl.value = gRowK;
+  function zoomVis(nw, frac) { // frac = kohdan suhteellinen sijainti näkymässä (0..1), pidetään paikallaan
+    const geo = view === 'gantt' ? gGeo : G; if (!geo) return;
+    const oldV = geo.visD, anchor = gOff + oldV * (frac == null ? .5 : frac);
+    gVisW = clamp(Math.round(nw), 4, Math.max(4, Math.min(260, N_WEEKS))); const nv = Math.min(N_DAYS, Math.max(5, gVisW * 5));
+    gOff = clamp(anchor - nv * (frac == null ? .5 : frac), 0, Math.max(0, N_DAYS - nv));
+    saveView(); if (view === 'gantt') renderGantt(); else render();
+  }
+  document.getElementById('zIn').addEventListener('click', () => zoomVis(Math.max(4, Math.min(gVisW, N_WEEKS) / 1.5), .5));
+  document.getElementById('zOut').addEventListener('click', () => zoomVis(Math.min(gVisW, N_WEEKS) * 1.5, .5));
+  document.getElementById('zFit').addEventListener('click', () => { gOff = 0; zoomVis(N_WEEKS, 0); });
+  rowSelEl.addEventListener('change', () => { gRowK = ROWH[rowSelEl.value] ? rowSelEl.value : 'n'; saveView(); if (view === 'gantt') renderGantt(); else render(); });
+  [[gWrap, () => gGeo, gScroll], [wrap, () => G, wrap]].forEach(([el, geo, ref]) => el.addEventListener('wheel', e => {
+    if (!(e.ctrlKey || e.metaKey) || !geo()) return; e.preventDefault();
+    const g = geo(), r = ref.getBoundingClientRect(), frac = clamp((e.clientX - r.left - g.LEFT) / Math.max(1, g.visD * g.dayW), 0, 1);
+    zoomVis(Math.min(gVisW, N_WEEKS) * (e.deltaY > 0 ? 1.25 : 1 / 1.25), frac);
+  }, { passive: false }));
   function addFlatTask(gid) {
     pushUndo(snapshot()); ensureOrd();
     const t = newTrade(); t.name = 'Uusi tehtävä'; t.flat = true;
@@ -1441,7 +1463,7 @@ function qlMatch(name, leaves) {
       items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'l', id: l.id, o: l }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; });
     }
     selId = l.id; selGrp = null; selDep = null; tasksOpen = false; gEnsureRoom(); render();
-    const ri = gRows.findIndex(r => r.line === l.id); gScroll.scrollTop = Math.max(0, (ri >= 0 ? ri : gRows.length) * 26 - 120);
+    const ri = gRows.findIndex(r => r.line === l.id); gScroll.scrollTop = Math.max(0, (ri >= 0 ? ri : gRows.length) * ROWH[gRowK] - 120);
   }
 
   // ---- määräluettelon tuonti (liittämällä) ----
@@ -1534,7 +1556,7 @@ function qlMatch(name, leaves) {
     groups.push(g);
     { const anc = sel ? (grpOf(sel) ? { k: 'g', id: grpOf(sel).id } : { k: 'l', id: sel.id }) : (selGrp ? { k: 'g', id: selGrp } : null);
       if (anc) { const items = itemsOf(null).filter(x => x.o !== g), ix = items.findIndex(x => x.k === anc.k && String(x.id) === String(anc.id)); items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'g', id: g.id, o: g }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; }); } } selGrp = g.id; selId = null; selDep = null; gClosed['K' + g.id] = false; delete gClosed['K' + g.id]; render();
-    gScroll.scrollTop = Math.max(0, gRows.findIndex(r => r.grp === g.id) * 26 - 60);
+    gScroll.scrollTop = Math.max(0, gRows.findIndex(r => r.grp === g.id) * ROWH[gRowK] - 60);
   });
   // nimen muokkaus suoraan Gantt-rivillä (kaksoisklikkaus nimeen)
   let gTapLast = null;
@@ -2571,7 +2593,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed } });
+  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK } });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -2595,7 +2617,7 @@ function qlMatch(name, leaves) {
     nextDepId = Math.max(parseInt(st.nextDepId, 10) || 1, maxNum(deps) + 1);
     _uid = Math.max(_uid, maxNum(LOCS), maxNum(LT), maxNum(TRADES), maxNum(groups), maxNum(baselines));
     drawTrade = trade(st.drawTrade) ? st.drawTrade : (TRADES.length ? TRADES[0].id : null);
-    { const vw = st.view || {}; lcol = new Set(Array.isArray(vw.lcol) ? vw.lcol : []); locHid = new Set(Array.isArray(vw.hid) ? vw.hid : []); gClosed = vw.gc && typeof vw.gc === 'object' ? vw.gc : {}; }
+    { const vw = st.view || {}; lcol = new Set(Array.isArray(vw.lcol) ? vw.lcol : []); locHid = new Set(Array.isArray(vw.hid) ? vw.hid : []); gClosed = vw.gc && typeof vw.gc === 'object' ? vw.gc : {}; if (vw.zv >= 4 && vw.zv <= 260) gVisW = Math.round(vw.zv); gRowK = ROWH[vw.rh] ? vw.rh : 'n'; try { document.getElementById('rowSel').value = gRowK; } catch (e) { } }
     selId = null; selDep = null; undoStack = [];
     syncWeeks();
   }
@@ -2644,7 +2666,7 @@ function qlMatch(name, leaves) {
     else {
       if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
       groups = []; baselines = []; blShow = null; statusDay = null; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
-      selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {};
+      selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
     }
     projId = null; projName = name; renderSub(); render(); suspend = false; baseline = '';
     await saveNow(); renderProj();
