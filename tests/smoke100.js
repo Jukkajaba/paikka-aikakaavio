@@ -35,5 +35,14 @@ const { chromium } = require('playwright');
   await p.click('#impBtn'); await p.fill('#impTxt', "Nimike\tMäärä\tYksikkö\nTeräkset\t4000\tkg\nSeinä\t100\tm2"); await p.click('#impParse');
   ok(+await p.inputValue('[data-ip="0"]') === 10 && +await p.inputValue('[data-ip="1"]') === 10, 'same default for all');
   ok(/pv/.test(await p.locator('#impBody').innerText()), 'duration estimate');
+  // kesto muokattavaksi ja sijaintien käyttö valinnaiseksi
+  await p.evaluate(() => { document.getElementById('impBox').classList.remove('on'); });
+  await p.click('#impBtn'); await p.fill('#impTxt', "Suorite\tMäärä\tYks\tK1\tK2\nLaatta\t200\tm2\t120\t80"); await p.click('#impParse');
+  await p.fill('[data-id2="0"]', '40'); await p.dispatchEvent('[data-id2="0"]', 'change');
+  ok(Math.abs(+await p.inputValue('[data-ip="0"]') - 200 / (40 * 2)) < 0.01, 'duration edit updates productivity ' + await p.inputValue('[data-ip="0"]'));
+  const locsBefore = await p.evaluate(() => __aik().LOCS.length);
+  await p.check('input[name=impLocs][value=no]'); ok(await p.locator('[data-lm]').count() === 0, 'no location mapping when off');
+  await p.check('input[name=impMode][value=koko]'); await p.click('#impGo'); await p.waitForTimeout(200);
+  ok(await p.evaluate(() => { const A = __aik(), l = A.lines.slice(-1)[0]; return !!l.flat && Math.round(A.totalQty(l)) === 200 || l.qty === 200; }) && (await p.evaluate(() => __aik().LOCS.length)) === locsBefore, 'imported without locations');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();

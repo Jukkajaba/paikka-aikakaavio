@@ -1478,11 +1478,11 @@ function qlMatch(name, leaves) {
 
   // ---- määräluettelon tuonti (liittämällä) ----
   const impProd = i => IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd;
-  const IMP = { grid: null, g: null, roles: [], locMap: {}, mode: 'jaa', items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, B: null };
+  const IMP = { useLocs: true, grid: null, g: null, roles: [], locMap: {}, mode: 'jaa', items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, B: null };
   const impBox = document.createElement('div'); impBox.id = 'impBox';
   impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
-  function impReset() { try { IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
+  function impReset() { try { IMP.useLocs = true; IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
   const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)']];
   function impRebuild() {
     IMP.B = qlBuild(IMP.grid, IMP.g.head, IMP.roles, IMP.g.names);
@@ -1496,29 +1496,32 @@ function qlMatch(name, leaves) {
     let h = '<h3>1. Sarakkeet</h3><table><tr>' + g.names.map((n, j) => '<th>' + esc(n) + '<br><select data-ir="' + j + '">' + ROLES.map(r => opt(r[0], IMP.roles[j], r[1])).join('') + '</select></th>').join('') + '</tr>' +
       IMP.grid.slice(g.head >= 0 ? 1 : 0, (g.head >= 0 ? 1 : 0) + 3).map(r => '<tr>' + g.names.map((n, j) => '<td>' + esc(r[j] || '') + '</td>').join('') + '</tr>').join('') + '</table>';
     h += '<p class="ok">Sijaintimuoto: <b>' + (B.layout === 'cols' ? 'sijainnit sarakkeina' : B.layout === 'rows' ? 'sijainnit riveinä' : 'ei sijainteja') + '</b></p>';
-    const anyNoLoc = B.items.some(it => it.unloc > 0 || !Object.keys(it.byLoc).length);
+    const anyNoLoc = !IMP.useLocs || B.items.some(it => it.unloc > 0 || !Object.keys(it.byLoc).length);
     if (B.locNames.length) {
-      h += '<h3>2. Sijaintien vastaavuus</h3><table>' + B.locNames.map(n => '<tr><td>' + esc(n) + '</td><td><select data-lm="' + esc(n) + '">' + opt('new', IMP.locMap[n], '+ Luo uusi sijainti') + opt('skip', IMP.locMap[n], 'Ohita') + LOCS.map(x => opt(x.id, IMP.locMap[n], x.name)).join('') + '</select></td></tr>').join('') + '</table>';
+      h += '<h3>2. Sijainnit</h3><div class="row2"><label><input type="radio" name="impLocs" value="use"' + (IMP.useLocs ? ' checked' : '') + '> Käytä tiedoston sijainteja</label><label><input type="radio" name="impLocs" value="no"' + (IMP.useLocs ? '' : ' checked') + '> Älä käytä (vain kokonaismäärät)</label></div>';
+    }
+    if (B.locNames.length && IMP.useLocs) {
+      h += '<p class="ok" style="margin:2px 0">Valitse jokaiselle sijainnille vastine projektista, luo se uutena tai ohita se. Voit myös luoda sijainnit itse Sijainnit-paneelissa ensin.</p><table>' + B.locNames.map(n => '<tr><td>' + esc(n) + '</td><td><select data-lm="' + esc(n) + '">' + opt('new', IMP.locMap[n], '+ Luo uusi sijainti') + opt('skip', IMP.locMap[n], 'Ohita') + LOCS.map(x => opt(x.id, IMP.locMap[n], x.name)).join('') + '</select></td></tr>').join('') + '</table>';
     }
     if (anyNoLoc) {
       h += '<h3>' + (B.locNames.length ? '3' : '2') + '. Suoritteet ilman sijaintia</h3><div class="row2"><label><input type="radio" name="impMode" value="jaa"' + (IMP.mode === 'jaa' && LOCS.length ? ' checked' : '') + (LOCS.length ? '' : ' disabled') + '> Jaa projektin sijainteihin osuuksien mukaan' + (LOCS.length ? '' : ' (projektissa ei ole sijainteja)') + '</label><label><input type="radio" name="impMode" value="koko"' + (IMP.mode === 'koko' || !LOCS.length ? ' checked' : '') + '> Yksi tehtävä koko kohteelle</label></div>';
     }
         h += '<h3>Suoritteet</h3><div class="row2">Oletustuottavuus <input class="num" id="impDP" type="number" min="0.1" step="any" value="' + IMP.dProd + '"> yks/hlö/pv · oletustyöryhmä <input class="num" id="impDC" type="number" min="1" step="1" value="' + IMP.dCrew + '"> hlö <button type="button" id="impApplyD">Aseta kaikille</button></div>';
-    h += '<table><tr><th></th><th>Rakenne</th><th>Suorite</th><th>Yks.</th><th>Määrä</th><th>Tuottavuus</th><th>Hlö</th><th>~Kesto</th><th>Työlaji</th><th>Huomiot</th></tr>' + IMP.items.map((it, i) => {
+    h += '<table><tr><th></th><th>Rakenne</th><th>Suorite</th><th>Yks.</th><th>Määrä</th><th>Tuottavuus</th><th>Hlö</th><th>Kesto</th><th>Työlaji</th><th>Huomiot</th></tr>' + IMP.items.map((it, i) => {
       const p = impProd(i), c = IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew, tr = IMP.trade[i] || 'new';
-      return '<tr><td><input type="checkbox" data-ii="' + i + '"' + (IMP.inc[i] ? ' checked' : '') + '></td><td>' + esc(it.rak) + '</td><td>' + esc(it.name) + '</td><td>' + esc(it.unit) + '</td><td>' + Math.round(it.total * 100) / 100 + '</td><td><input class="num" type="number" min="0.1" step="any" data-ip="' + i + '" value="' + p + '"></td><td><input class="num" type="number" min="1" step="1" data-ic="' + i + '" value="' + c + '"></td><td>' + (it.total > 0 ? '~' + Math.max(1, Math.round(it.total / p / c)) + ' pv' : '') + '</td><td><select data-it="' + i + '">' + opt('new', tr, 'Uusi') + TRADES.map(t => opt(t.id, tr, t.name)).join('') + '</select></td><td class="w">' + esc(it.warns.join('; ')) + '</td></tr>';
+      return '<tr><td><input type="checkbox" data-ii="' + i + '"' + (IMP.inc[i] ? ' checked' : '') + '></td><td>' + esc(it.rak) + '</td><td>' + esc(it.name) + '</td><td>' + esc(it.unit) + '</td><td>' + Math.round(it.total * 100) / 100 + '</td><td><input class="num" type="number" min="0.1" step="any" data-ip="' + i + '" value="' + p + '"></td><td><input class="num" type="number" min="1" step="1" data-ic="' + i + '" value="' + c + '"></td><td>' + (it.total > 0 ? '<input class="num" type="number" min="0.1" step="any" style="width:64px" data-id2="' + i + '" value="' + Math.round(Math.max(0.1, it.total / p / c) * 10) / 10 + '"> pv' : '') + '</td><td><select data-it="' + i + '">' + opt('new', tr, 'Uusi') + TRADES.map(t => opt(t.id, tr, t.name)).join('') + '</select></td><td class="w">' + esc(it.warns.join('; ')) + '</td></tr>';
     }).join('') + '</table><div class="row2"><button type="button" id="impGo"><b>Tuo valitut</b></button><span id="impMsg" class="ok"></span></div>';
     body.innerHTML = h;
   }
   function impApply() {
     const B = IMP.B; if (!B) return; const leaves = {}; LOCS.forEach((x, i) => { leaves[x.id] = i; });
     pushUndo(snapshot()); ensureOrd();
-    const newNodes = []; Object.keys(IMP.locMap).forEach(n => { if (IMP.locMap[n] === 'new' && B.locNames.indexOf(n) >= 0) { const id = uid('L'); newNodes.push({ id: id, name: n, share: 1, par: null }); IMP.locMap[n] = id; } });
+    const newNodes = []; if (IMP.useLocs) Object.keys(IMP.locMap).forEach(n => { if (IMP.locMap[n] === 'new' && B.locNames.indexOf(n) >= 0) { const id = uid('L'); newNodes.push({ id: id, name: n, share: 1, par: null }); IMP.locMap[n] = id; } });
     if (newNodes.length) { LT = normTree(LT.concat(newNodes)); syncLocs(); LOCS.forEach((x, i) => { leaves[x.id] = i; }); }
     const gmap = {}; let nl = 0, ord = maxOrd();
     IMP.items.forEach((it, i) => {
       if (!IMP.inc[i]) return;
-      const mapped = {}; Object.keys(it.byLoc).forEach(n => { const id = IMP.locMap[n]; if (id && id !== 'skip' && leaves[id] != null) mapped[id] = (mapped[id] || 0) + it.byLoc[n]; });
+      const mapped = {}; if (IMP.useLocs) Object.keys(it.byLoc).forEach(n => { const id = IMP.locMap[n]; if (id && id !== 'skip' && leaves[id] != null) mapped[id] = (mapped[id] || 0) + it.byLoc[n]; });
       const ids = Object.keys(mapped), prod = impProd(i), crew = Math.max(1, Math.round(IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew));
       let t = IMP.trade[i] && IMP.trade[i] !== 'new' ? trade(IMP.trade[i]) : null;
       const total = ids.length ? ids.reduce((x, k) => x + mapped[k], 0) : it.total;
@@ -1543,7 +1546,7 @@ function qlMatch(name, leaves) {
     if (e.target === impBox || t.id === 'impClose') { impBox.classList.remove('on'); return; }
     if (t.id === 'impParse') {
       const grid = qlParse(impBox.querySelector('#impTxt').value); if (!grid.length) return;
-      IMP.grid = grid; IMP.g = qlGuess(grid); IMP.roles = IMP.g.roles.slice(); IMP.locMap = {}; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {};
+      IMP.useLocs = true; IMP.grid = grid; IMP.g = qlGuess(grid); IMP.roles = IMP.g.roles.slice(); IMP.locMap = {}; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {};
       impRebuild(); impDraw(); return;
     }
     if (t.id === 'impGo') { try { impApply(); } catch (err) { const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuonti epäonnistui: ' + err.message; } }
@@ -1554,6 +1557,8 @@ function qlMatch(name, leaves) {
     if (d.ir != null) { IMP.roles[+d.ir] = t.value; IMP.locMap = {}; IMP.inc = {}; impRebuild(); impDraw(); }
     else if (d.lm != null) IMP.locMap[d.lm] = t.value;
     else if (d.ii != null) IMP.inc[+d.ii] = t.checked;
+    else if (d.id2 != null) { const it = IMP.items[+d.id2], i = +d.id2, c = IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew, dur = Math.max(0.1, +t.value || 1); if (it && it.total > 0) { IMP.prod[i] = it.total / (dur * c); impDraw(); } }
+    else if (t.name === 'impLocs') { IMP.useLocs = t.value === 'use'; impDraw(); }
     else if (d.ip != null) IMP.prod[+d.ip] = Math.max(0.1, +t.value || 1);
     else if (d.ic != null) IMP.crew[+d.ic] = Math.max(1, Math.round(+t.value || 1));
     else if (d.it != null) IMP.trade[+d.it] = t.value;
