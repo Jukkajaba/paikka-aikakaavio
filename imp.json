@@ -257,6 +257,13 @@
    "zv": 26,
    "rh": "n"
   },
-  "imp": null
+  "imp": null,
+  "res": [
+   {
+    "id": "hlo",
+    "name": "Työntekijät",
+    "unit": "hlö"
+   }
+  ]
  }
 }

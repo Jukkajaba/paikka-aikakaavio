@@ -14,11 +14,15 @@ const stub=()=>{
   const p = await ctx.newPage(), errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(600);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
+  await p.locator('#chart [data-role="body"]').first().click({ force: true }); await p.waitForTimeout(250);
+  await p.locator('#panel details[data-sec="trade"] summary').click(); await p.waitForTimeout(200);
+  await p.fill('#res-new', 'Kaivinkone'); await p.click('[data-act="resadd"]'); await p.waitForTimeout(300);
   await p.click('#impBtn'); await p.fill('#impTxt', "Littera\tSuorite\tMäärä\tYksikkö\tK1\tK2\n1\tRak\t\t\t\t\n1.1\tLaatta\t200\tm2\t120\t80"); await p.click('#impParse');
   await p.fill('[data-ip="0"]', '25'); await p.dispatchEvent('[data-ip="0"]', 'change'); await p.click('#impGo'); await p.waitForTimeout(2500);
   await p.reload(); await p.waitForSelector('#chart path'); await p.waitForTimeout(1000);
   await p.click('#impBtn');
   ok((await p.inputValue('#impTxt')).indexOf('Laatta') >= 0, 'text restored after reload');
   ok(+await p.inputValue('[data-ip="0"]') === 25, 'row settings restored ' + await p.inputValue('[data-ip="0"]'));
+  ok(await p.locator('#resSel').isVisible() && (await p.locator('#resSel option').allInnerTexts()).join().indexOf('Kaivinkone') >= 0, 'resources restored after reload');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();

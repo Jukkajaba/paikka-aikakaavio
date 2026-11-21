@@ -260,7 +260,8 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <label class="tgt">Rivit <select id="rowSel"><option value="c">Tiivis</option><option value="n">Normaali</option><option value="w">Väljä</option></select></label>
       <button id="helpBtn" type="button" class="chip" aria-pressed="false" title="Näytä tai piilota ohjetekstit">Ohje</button>
       <button id="depToggle" type="button" class="chip" aria-pressed="true">Riippuvuudet</button>
-      <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Näytä tai piilota resurssihistogrammi (hlö/pv). Hyvin isoissa aikatauluissa se on oletuksena piilossa.">Resurssit</button>
+      <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Näytä tai piilota resurssihistogrammi. Hyvin isoissa aikatauluissa se on oletuksena piilossa.">Resurssit</button>
+      <select id="resSel" aria-label="Näytettävä resurssi" hidden></select>
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
       <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määrät</button>
@@ -536,9 +537,15 @@ function violations(lines) {
   }
   return out.sort((p, q) => p.at - q.at);
 }
-function histogram(lines) {
+// resurssityypit: pääresurssi määrää keston (määrä ÷ (tuottavuus × resurssien lkm)); oletus = työntekijät
+const DEF_RES = () => [{ id: 'hlo', name: 'Työntekijät', unit: 'hlö' }];
+let RES = DEF_RES();
+const resById = id => RES.find(r => r.id === id) || RES[0];
+const resIdOf = t => (t && t.res && RES.some(r => r.id === t.res)) ? t.res : RES[0].id;
+const resUnit = t => resById(resIdOf(t)).unit || 'kpl';
+function histogram(lines, rid) {
   const h = Array.from({ length: N_DAYS }, () => []);
-  for (const l of lines) for (const t of tasks(l)) for (let d = Math.floor(t.s + 1e-9); d < Math.ceil(t.e - 1e-9) && d < N_DAYS; d++) h[d].push({ id: l.id, trade: l.trade, crew: t.crew });
+  for (const l of lines) if (rid == null || resIdOf(trade(l.trade)) === rid) for (const t of tasks(l)) for (let d = Math.floor(t.s + 1e-9); d < Math.ceil(t.e - 1e-9) && d < N_DAYS; d++) h[d].push({ id: l.id, trade: l.trade, crew: t.crew });
   return h;
 }
 // sijaintien muokkaus: viivojen alueet päivitetään indekseillä
@@ -786,7 +793,7 @@ function qlMatch(name, leaves) {
   const summary = document.getElementById('summary'), side = document.getElementById('stage');
   const undoBtn = document.getElementById('undo');
   let needRoom = true, newForm = false;
-  let impSaved = null;
+  let impSaved = null, hRes = 'hlo';
   let mdlTpl = '', lines = [], deps = [], FC = null, fcProd = true, baselines = [], blShow = null, statusDay = null, selGrp = null, nextId = 1, nextDepId = 1, selDep = null, showDeps = true, selId = null, drawTrade = 'levytys', target = 16, tasksOpen = false;
   let db = null, dl = null, dbState = 'pending', projId = null, projName = 'Esimerkkihanke', projList = [], baseline = '', saving = false, pendingSave = false, saveTimer = null, suspend = false, statusText = '', confirmDel = null;
   let undoStack = [], drag = null, preview = null, G = null;
@@ -805,7 +812,7 @@ function qlMatch(name, leaves) {
     ];
   }
   const byId = id => lines.find(l => String(l.id) === String(id));
-  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl });
+  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES });
   function syncWeeks() {
     const w = document.getElementById('weeks'), t = document.getElementById('target');
     if (w) w.value = N_WEEKS; if (t) { t.max = N_WEEKS; t.value = target; }
@@ -813,6 +820,7 @@ function qlMatch(name, leaves) {
   }
   function restore(s) {
     const o = JSON.parse(s); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; statusDay = o.statusDay != null ? o.statusDay : null; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
+    if (Array.isArray(o.res) && o.res.length) RES = o.res; if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     if (!trade(drawTrade)) drawTrade = TRADES.length ? TRADES[0].id : null;
     if (selId !== null && !byId(selId)) selId = null;
   }
@@ -937,7 +945,7 @@ function qlMatch(name, leaves) {
     fltSet(hide);
   });
   lvlSel.addEventListener('change', () => { const v = lvlSel.value; if (v === 'c') return; lcol.clear(); Object.keys(gClosed).forEach(k => { if (/^L\d+$/.test(k) || k.indexOf('N') >= 0) delete gClosed[k]; }); const k = +v; if (v === 'x') lines.forEach(l => { if (!l.flat) gClosed['L' + l.id] = true; }); else if (k > 0) ltLevels().at(k).forEach(id => lcol.add(id)); saveView(); render(); if (vis.locs) renderLocs(); });
-  function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); _tc = new Map(); try { renderInner(); } finally { _tc = null; } PH('end'); refreshLvl(); const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
+  function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { syncResSel(); } catch (err) { } _tc = new Map(); try { renderInner(); } finally { _tc = null; } PH('end'); refreshLvl(); const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
   function renderInner() {
     if (needRoom) { needRoom = false; gEnsureRoom(); }
     PH('prep'); ensureOrd();
@@ -951,7 +959,8 @@ function qlMatch(name, leaves) {
     let labMax = 0; if (VR) VR.rows.forEach(r => { labMax = Math.max(labMax, r.name.length); }); else LOCS.forEach(x => { labMax = Math.max(labMax, x.name.length); }); labMax = Math.min(labMax, 30);
     const LEFT = narrow ? 56 : clamp(Math.round(labMax * 6.4 + 22), 112, 210), RIGHT = 14, visD = Math.min(N_DAYS, Math.max(5, gVisW * 5)), dayW = (W - LEFT - RIGHT) / visD;
     gOff = clamp(gOff, 0, Math.max(0, N_DAYS - visD));
-    const hist = histogram(lines), histN = hist.reduce((q, x) => q + x.length, 0);
+    if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
+    const hist = histogram(lines, hRes), histN = hist.reduce((q, x) => q + x.length, 0), hr = resById(hRes);
     resOn = resMode === 'on' || (resMode === 'auto' && histN <= 15000); // hyvin isoissa aikatauluissa resurssit ovat oletuksena piilossa
     const rowH = clamp(Math.floor(330 / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round(46 * ROWF[gRowK])), TOP = 30, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
     G = { LEFT: LEFT, dayW: dayW, rowH: rowH, TOP: TOP, bodyH: bodyH, L: L, rm: RM, rows: VR ? VR.rows : null, W: W, visD: visD, RIGHT: RIGHT };
@@ -1079,15 +1088,15 @@ function qlMatch(name, leaves) {
       const cx = X(v.at), cy = Ytop(v.loc) + rowH / 2;
       p.push('<path d="M' + cx + ' ' + (cy - 8) + 'L' + (cx + 8) + ' ' + cy + 'L' + cx + ' ' + (cy + 8) + 'L' + (cx - 8) + ' ' + cy + 'Z" fill="var(--warn)" stroke="var(--panel)" stroke-width="1.5" pointer-events="none"><title>Työjärjestys: ' + esc(trade(byId(v.b).trade).name) + ' alkaa ennen kuin ' + esc(trade(byId(v.a).trade).name) + ' on valmis (' + esc(LOCS[v.loc].name) + ')</title></path>');
     });
-    const peak = hist.reduce((m, a) => Math.max(m, a.reduce((s, x) => s + x.crew, 0)), 0);
+    const peak = hist.reduce((m, a) => Math.max(m, a.reduce((s, x) => s + x.crew, 0)), 0), peakP = hRes === RES[0].id || RES.length < 2 ? peak : histogram(lines, RES[0].id).reduce((m, a) => Math.max(m, a.reduce((s, x) => s + x.crew, 0)), 0);
     if (resOn) {
-    const yMax = Math.ceil(Math.max(peak, 10) / 5) * 5, base = histTop + HH, sc = HH / yMax;
-    for (let g = 0; g <= yMax; g += 10) {
+    const yMax = Math.ceil(Math.max(peak, hRes === RES[0].id ? 10 : 2) / 5) * 5, base = histTop + HH, sc = HH / yMax, gstep = yMax <= 5 ? 1 : yMax <= 10 ? 5 : 10;
+    for (let g = 0; g <= yMax; g += gstep) {
       const gy = base - g * sc;
       p.push('<line x1="' + LEFT + '" x2="' + (W - RIGHT) + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--grid2)" stroke-width="' + (g === 0 ? 1 : .6) + '"/>');
       lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="' + (gy + 4) + '" text-anchor="end">' + g + '</text>');
     }
-    lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="' + (histTop - 4) + '" text-anchor="end">hlö</text>');
+    lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="' + (histTop - 4) + '" text-anchor="end">' + esc(hr.unit) + '</text>');
     if (locHid.size) lab.push('<text class="ax" x="' + (LEFT + 4) + '" y="' + (histTop - 4) + '">Resurssit: koko projekti</text>');
     let peakDay = -1;
     let runKey = null, runStart = 0;
@@ -1107,7 +1116,7 @@ function qlMatch(name, leaves) {
     });
     if (peakDay >= 0) {
       const px = clamp(X(peakDay), LEFT + 30, W - RIGHT - 30);
-      p.push('<text class="lbl" x="' + px + '" y="' + (base - peak * sc - 4) + '" text-anchor="middle" style="fill:var(--ink)">huippu ' + peak + ' hlö</text>');
+      p.push('<text class="lbl" x="' + px + '" y="' + (base - peak * sc - 4) + '" text-anchor="middle" style="fill:var(--ink)">huippu ' + peak + ' ' + esc(hr.unit) + '</text>');
     }
     }
     svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -1121,7 +1130,7 @@ function qlMatch(name, leaves) {
     else {
       const endD = Math.max.apply(null, lines.map(lineEnd)), endW = weekOf(endD - 1), diff = target - endW;
       const tgtTxt = diff > 0 ? diff + ' vk ennen tavoitetta' : diff === 0 ? 'osuu tavoitteeseen' : '<span class="bad">' + (-diff) + ' vk yli tavoitteen</span>';
-      summary.innerHTML = '<span>Valmis <b>vk ' + endW + '</b> (' + tgtTxt + ')</span><span>Huippuväki <b>' + peak + ' hlö</b></span><span>' + (bad ? '<span class="bad">' + bad + ' työjärjestyshuomiota</span>' : 'Ei työjärjestyshuomioita') + '</span>';
+      summary.innerHTML = '<span>Valmis <b>vk ' + endW + '</b> (' + tgtTxt + ')</span><span>Huippuväki <b>' + peakP + ' ' + esc(RES[0].unit) + '</b></span><span>' + (bad ? '<span class="bad">' + bad + ' työjärjestyshuomiota</span>' : 'Ei työjärjestyshuomioita') + '</span>';
     }
     PH('summary'); if (drag) { renderPanel(); PH('panel'); renderGantt(); PH('gantt'); } // vedon aikana vain välttämätön; muut paneelit päivittyvät vedon päätyttyä
     else { renderPanel(); renderList(); renderNotes(vio, dvio); renderLocs(); renderBl(); renderSt(); renderFc(); renderGantt(); }
@@ -1310,7 +1319,7 @@ function qlMatch(name, leaves) {
     }
     hp.push('<rect x="0" y="0" width="' + (LEFT - 4) + '" height="' + HEAD + '" fill="var(--panel)"/>');
     
-    ['Alku', 'Loppu', 'pv', 'hlö'].concat(stOn() ? ['%'] : []).concat(curBl() ? ['Poik.'] : []).concat(fcOn() ? ['Enn.'] : []).forEach((t, i) => { if (colX[i] != null) hp.push('<text class="ax" x="' + colX[i] + '" y="24" text-anchor="end">' + t + '</text>'); });
+    ['Alku', 'Loppu', 'pv', 'määrä'].concat(stOn() ? ['%'] : []).concat(curBl() ? ['Poik.'] : []).concat(fcOn() ? ['Enn.'] : []).forEach((t, i) => { if (colX[i] != null) hp.push('<text class="ax" x="' + colX[i] + '" y="24" text-anchor="end">' + t + '</text>'); });
     hp.push('<text class="ax" x="' + (LEFT + 3) + '" y="11">vk</text>');
     hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
     gHead.setAttribute('width', W); gHead.setAttribute('height', HEAD); gHead.setAttribute('viewBox', '0 0 ' + W + ' ' + HEAD); gHead.innerHTML = hp.join('');
@@ -1874,7 +1883,10 @@ function qlMatch(name, leaves) {
     const sw = PALETTE.map(c => '<button type="button" style="background:var(' + c + ')" aria-label="Väri" aria-pressed="' + (t.col === c) + '" data-act="tcol" data-col="' + c + '" data-id="' + t.id + '"></button>').join('');
     return '<details data-sec="trade"' + (tradeOpen ? ' open' : '') + '><summary>Työlajin asetukset</summary>' +
       '<div class="row"><label for="tr-rank" title="Työjärjestys: pienempi numero tulee ensin">Järjestys (1 = ensin)</label><input id="tr-rank" class="num" type="number" min="1" max="20" step="1" value="' + t.rank + '" data-field="tr-rank" data-id="' + t.id + '"></div>' +
-      '<div class="row"><label for="tr-max">Enimmäisväki</label><input id="tr-max" class="num" type="number" min="1" max="99" step="1" value="' + t.maxCrew + '" data-field="tr-max" data-id="' + t.id + '"></div>' +
+      '<div class="row"><label for="tr-res" title="Pääresurssi määrää keston: määrä ÷ (tuottavuus × resurssien lukumäärä)">Resurssi</label><select id="tr-res" data-field="tr-res" data-id="' + t.id + '">' + RES.map(r => '<option value="' + esc(r.id) + '"' + (r.id === resIdOf(t) ? ' selected' : '') + '>' + esc(r.name) + ' (' + esc(r.unit) + ')</option>').join('') + '</select></div>' +
+      '<div class="row"><label for="res-avail" title="Montako tätä resurssia on käytössä. Tyhjä = ei rajaa. Ylityksestä tulee huomio.">Käytössä (kpl)</label><input id="res-avail" class="num" type="number" min="1" step="1" value="' + (resById(resIdOf(t)).avail || '') + '" data-field="tr-avail" data-id="' + t.id + '"></div>' +
+      '<div class="row"><label for="res-new">Uusi resurssi</label><span><input id="res-new" class="txt" style="width:90px" type="text" maxlength="24" placeholder="Kaivinkone"> <input id="res-unit" class="txt" style="width:44px" type="text" maxlength="6" placeholder="kpl" value="kpl"> <button type="button" data-act="resadd" data-id="' + t.id + '">Lisää</button></span></div>' +
+      '<div class="row"><label for="tr-max">Enimmäismäärä (' + esc(resUnit(t)) + ')</label><input id="tr-max" class="num" type="number" min="1" max="99" step="1" value="' + t.maxCrew + '" data-field="tr-max" data-id="' + t.id + '"></div>' +
       '<div class="swatches" role="group" aria-label="Väri">' + sw + '</div></details>';
   }
   function renderPanel() {
@@ -1908,7 +1920,7 @@ function qlMatch(name, leaves) {
       const dn = t.name + ' · ' + LOCS[k.loc].name;
       if (slk && k.locId === slk) selTxt = '<p class="meta" style="background:var(--band);padding:4px 6px;border-radius:4px"><b>Valittu: ' + esc(k.name || dn) + '</b><br>' + fmt(k.s) + ' – ' + fmtE(k.e) + ' (vk ' + weekOf(k.s) + '–' + weekOf(k.e - 1) + ') · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</p>';
       th += '<div class="task' + (slk && k.locId === slk ? ' sel' : '') + '" style="' + (slk && k.locId === slk ? 'background:var(--band);outline:1px solid var(--ink);border-radius:4px' : '') + '"><input class="txt" type="text" maxlength="40" placeholder="' + esc(dn) + '" value="' + esc(k.name) + '" aria-label="Tehtävän nimi" data-field="tname" data-id="' + l.id + '" data-loc="' + k.locId + '">' +
-        '<div class="tmeta">' + esc(LOCS[k.loc].name) + ' · ' + fmt(k.s) + '–' + fmtE(k.e) + ' · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</div>' +
+        '<div class="tmeta">' + esc(LOCS[k.loc].name) + ' · ' + fmt(k.s) + '–' + fmtE(k.e) + ' · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' ' + esc(resUnit(t)) + '</div>' +
         '<div class="trow"><span class="lab">Määrä</span><input class="num" type="number" min="0.01" step="any" style="width:70px" value="' + r2(k.qty) + '" data-field="tq-v" data-id="' + l.id + '" data-loc="' + k.locId + '" aria-label="Sijainnin määrä"> ' + esc(t.unit) + ((l.ov && l.ov[k.locId] && l.ov[k.locId].q != null) ? ' <button type="button" data-act="tqreset" data-id="' + l.id + '" data-loc="' + k.locId + '" title="Palauta osuuksien mukainen määrä">Palauta</button>' : '') + '</div>' +
         '<div class="trow"><span class="lab">Kesto</span>' + stepper('tdur', l.id, '', k.locId, r1(k.d), MIN_D) +
         (i > 0 ? '<span class="lab">Viive</span>' + stepper('tsh', l.id, '', k.locId, r1(k.shift), -30) : '') +
@@ -1928,10 +1940,10 @@ function qlMatch(name, leaves) {
         '<p class="ok hlp" style="margin:0 0 6px">Ilman sijaintia tehtävä näkyy vain Ganttissa. Valitsemalla sijainnin (alku ja loppu) tehtävä tulee myös paikka-aikakaavioon. Kesto, työryhmä, määrä ja tuottavuus vaikuttavat toisiinsa: lukitse työryhmä, jos haluat keston laskettavan määrästä ja tuottavuudesta.</p>' +
         '<div class="row"><label for="f-tname">Nimi</label><input id="f-tname" class="txt" style="max-width:170px" type="text" maxlength="40" value="' + esc(t.name) + '" data-field="tr-name" data-id="' + t.id + '"></div>' + grpSelect(l) + locSelect(l) +
         '<div class="row"><label>Kesto (pv)</label>' + stepper('dur', l.id, '', null, r1(perLoc(l)), MIN_D) + '</div>' +
-        '<div class="row"><label>Työryhmä</label><span class="qrow">' + lockBtn('clock', l.id, l.lockC != null, 'Poista työryhmän lukitus', 'Lukitse työryhmä', 'Lukittu: työryhmä pysyy samana, ja kesto lasketaan määrästä ja tuottavuudesta', 'Lukitse työryhmä') + stepper('crew', l.id, c + ' hlö') + '</span></div>' +
-        (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' hlö. Pidennä aikaa.</div>' : '') +
+        '<div class="row"><label>' + (resIdOf(t) === RES[0].id ? 'Työryhmä' : esc(resById(resIdOf(t)).name)) + '</label><span class="qrow">' + lockBtn('clock', l.id, l.lockC != null, 'Poista työryhmän lukitus', 'Lukitse työryhmä', 'Lukittu: työryhmä pysyy samana, ja kesto lasketaan määrästä ja tuottavuudesta', 'Lukitse työryhmä') + stepper('crew', l.id, c + ' ' + resUnit(t)) + '</span></div>' +
+        (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' ' + esc(resUnit(t)) + '. Pidennä aikaa.</div>' : '') +
         '<div class="row"><label for="f-qty">Määrä</label><span><input id="f-qty" class="num" type="number" min="1" step="any" value="' + r2(effQty(l)) + '" data-field="qty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
-        '<div class="row"><label for="f-prod">Tuottavuus</label><span><input id="f-prod" class="num" type="number" min="0.1" step="any" value="' + l.prod + '" data-field="prod" data-id="' + l.id + '"> ' + uIn + '/hlö/pv</span></div>' +
+        '<div class="row"><label for="f-prod">Tuottavuus</label><span><input id="f-prod" class="num" type="number" min="0.1" step="any" value="' + l.prod + '" data-field="prod" data-id="' + l.id + '"> ' + uIn + '/' + esc(resUnit(t)) + '/pv</span></div>' +
         th +
         '<div class="btns"><button type="button" data-act="shift-" data-id="' + l.id + '">◀ viikko</button><button type="button" data-act="shift+" data-id="' + l.id + '">viikko ▶</button><button type="button" data-act="del" data-id="' + l.id + '">Poista</button></div>';
       return;
@@ -1947,12 +1959,12 @@ function qlMatch(name, leaves) {
       '<p class="ok" style="margin:0 0 6px">' + (l.tctl ? 'Kokonaiskeston muutos jakautuu alatehtäville.' : 'Kokonaiskesto muuttuu vain, kun alatehtävien kestoja muutetaan.') + '</p>' +
       '<div class="row"><label>' + (l.total != null ? 'Aika sijainnissa (keskim.)' : 'Aika sijainnissa') + '</label>' + stepper('dur', l.id, '', null, r1(perLoc(l)), MIN_D) + '</div>' +
       '<div class="row"><label title="Seuraava sijainti alkaa tämän verran edellisen lopun jälkeen. Negatiivinen arvo tarkoittaa päällekkäisyyttä.">Viive sijaintien välillä</label>' + stepper('gap', l.id, '', null, r1(l.gap), -30) + '</div>' +
-      '<div class="row"><label>Työryhmä (suurin)</label><span class="qrow">' + lockBtn('clock', l.id, l.lockC != null, 'Poista työryhmän lukitus', 'Lukitse työryhmä', 'Lukittu: työryhmä pysyy samana, ja kestot lasketaan määrästä ja tuottavuudesta', 'Lukitse työryhmä') + stepper('crew', l.id, c + ' hlö') + '</span></div>' +
-      (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' hlö. Pidennä aikaa tai lisää taukoa.</div>' : '') +
+      '<div class="row"><label>' + (resIdOf(t) === RES[0].id ? 'Työryhmä (suurin)' : esc(resById(resIdOf(t)).name) + ' (suurin)') + '</label><span class="qrow">' + lockBtn('clock', l.id, l.lockC != null, 'Poista työryhmän lukitus', 'Lukitse työryhmä', 'Lukittu: työryhmä pysyy samana, ja kestot lasketaan määrästä ja tuottavuudesta', 'Lukitse työryhmä') + stepper('crew', l.id, c + ' ' + resUnit(t)) + '</span></div>' +
+      (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' ' + esc(resUnit(t)) + '. Pidennä aikaa tai lisää taukoa.</div>' : '') +
       '<div class="row"><label for="f-tqty">Kokonaismäärä</label><span class="qrow"><button type="button" class="lockbtn" data-act="qlock" data-id="' + l.id + '" aria-pressed="' + (l.lockQ != null) + '" aria-label="' + (l.lockQ != null ? 'Poista kokonaismäärän lukitus' : 'Lukitse kokonaismäärä') + '" title="' + (l.lockQ != null ? 'Lukittu: pysyy samana, kun sijainnit muuttuvat' : 'Lukitse kokonaismäärä') + '">' + (l.lockQ != null ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>' : '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 4.8-1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>') + '</button><input id="f-tqty" class="num" type="number" min="0.01" step="any" value="' + r2(totalQty(l)) + '" data-field="tqty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
 
       '<div class="row"><label for="f-qty">Määrä / sijainti (koko)</label><span><input id="f-qty" class="num" type="number" min="1" step="any" value="' + r2(effQty(l)) + '"' + (l.lockQ != null ? ' disabled' : '') + ' data-field="qty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
-      '<div class="row"><label for="f-prod">Tuottavuus</label><span><input id="f-prod" class="num" type="number" min="0.1" step="any" value="' + l.prod + '" data-field="prod" data-id="' + l.id + '"> ' + uIn + '/hlö/pv</span></div>' +
+      '<div class="row"><label for="f-prod">Tuottavuus</label><span><input id="f-prod" class="num" type="number" min="0.1" step="any" value="' + l.prod + '" data-field="prod" data-id="' + l.id + '"> ' + uIn + '/' + esc(resUnit(t)) + '/pv</span></div>' +
       tradeSect(t) + th +
       '<p class="ok" style="margin:8px 0 0">Kokonaiskesto jakautuu sijainteihin osuuksien mukaan, ja työryhmä lasketaan siitä. Aika sijainnissa -painikkeet muuttavat kokonaiskestoa yhden päivän per sijainti. Työryhmän muutos ja päätepisteiden vetäminen vapauttavat kokonaiskeston, ja vetäminen palauttaa lisäksi tehtävien omat kestot ja viiveet (nimet säilyvät).</p>' +
       '<div class="btns"><button type="button" data-act="shift-" data-id="' + l.id + '">◀ viikko</button><button type="button" data-act="shift+" data-id="' + l.id + '">viikko ▶</button><button type="button" data-act="del" data-id="' + l.id + '">Poista</button></div>';
@@ -1960,14 +1972,15 @@ function qlMatch(name, leaves) {
   function renderList() {
     listCard.innerHTML = '<h2>Viivat</h2>' + (lines.length ? '<div class="list">' + lines.map(l => {
       const en = lineEnd(l);
-      return '<button type="button" class="item" data-act="select" data-id="' + l.id + '"' + (l.id === selId ? ' aria-current="true"' : '') + '><span class="dot" style="background:' + colorOf(l.trade) + '"></span><span class="grow">' + esc(trade(l.trade).name) + '</span><small>' + crewOf(l) + ' hlö · vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + '</small></button>';
+      return '<button type="button" class="item" data-act="select" data-id="' + l.id + '"' + (l.id === selId ? ' aria-current="true"' : '') + '><span class="dot" style="background:' + colorOf(l.trade) + '"></span><span class="grow">' + esc(trade(l.trade).name) + '</span><small>' + crewOf(l) + ' ' + esc(resUnit(trade(l.trade))) + ' · vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + '</small></button>';
     }).join('') + '</div>' : '<p class="empty">Ei viivoja.</p>');
   }
   function renderNotes(vio, dvio) {
     const over = lines.filter(l => crewOf(l) > trade(l.trade).maxCrew);
+    const rover = RES.filter(r => r.avail > 0).map(r => ({ r: r, pk: histogram(lines, r.id).reduce((m, a) => Math.max(m, a.reduce((s, x) => s + x.crew, 0)), 0) })).filter(x => x.pk > x.r.avail);
     const diamond = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1L13 7L7 13L1 7Z" fill="var(--warn)"/></svg>';
     let h = '<h2>Huomiot</h2>';
-    if (!vio.length && !over.length && !dvio.length) h += '<p class="ok">Ei työjärjestysongelmia eikä ylitäyttöä.</p>';
+    if (!vio.length && !over.length && !dvio.length && !rover.length) h += '<p class="ok">Ei työjärjestysongelmia eikä ylitäyttöä.</p>';
     else {
       h += '<div class="list">';
       vio.slice(0, 8).forEach(v => {
@@ -1977,7 +1990,8 @@ function qlMatch(name, leaves) {
         h += '<button type="button" class="note" data-act="select" data-id="' + v.b.l + '">' + diamond + '<span>Riippuvuus: ' + esc(descRef(v.b)) + ' alkaa ' + fmt(v.at) + ', ennen kuin ' + esc(descRef(v.a)) + ' on päättynyt (' + fmtE(v.until) + ').</span></button>';
       });
       if (vio.length > 8) h += '<p class="ok">Lisäksi ' + (vio.length - 8) + ' huomiota.</p>';
-      over.forEach(l => { h += '<button type="button" class="note" data-act="select" data-id="' + l.id + '">' + diamond + '<span>' + esc(trade(l.trade).name) + ': työryhmä ' + crewOf(l) + ' hlö ylittää rajan ' + trade(l.trade).maxCrew + ' hlö.</span></button>'; });
+      over.forEach(l => { h += '<button type="button" class="note" data-act="select" data-id="' + l.id + '">' + diamond + '<span>' + esc(trade(l.trade).name) + ': työryhmä ' + crewOf(l) + ' ' + esc(resUnit(trade(l.trade))) + ' ylittää rajan ' + trade(l.trade).maxCrew + ' ' + esc(resUnit(trade(l.trade))) + '.</span></button>'; });
+      rover.forEach(x => { h += '<div class="note">' + diamond + '<span>' + esc(x.r.name) + ': enimmillään ' + x.pk + ' ' + esc(x.r.unit) + ' samaan aikaan, käytössä ' + x.r.avail + '.</span></div>'; });
       h += '</div>';
     }
     h += '<p class="ok" style="margin:10px 0 0">Työjärjestys tarkistetaan työlajien järjestysnumeroilla: pienempi numero tehdään ensin, samat numerot saavat olla päällekkäin.</p>';
@@ -2426,6 +2440,11 @@ function qlMatch(name, leaves) {
       return;
     }
     if (a === 'tdelunused') { const used = new Set(lines.map(l => l.trade)), rm = TRADES.filter(t => !t.flat && !used.has(t.id)); if (!rm.length) return; pushUndo(snapshot()); TRADES = TRADES.filter(t => t.flat || used.has(t.id)); if (!trade(drawTrade)) drawTrade = pickTrade(); render(); return; }
+    if (a === 'resadd') {
+      const nm = ((document.getElementById('res-new') || {}).value || '').trim().slice(0, 24), un = (((document.getElementById('res-unit') || {}).value || 'kpl').trim() || 'kpl').slice(0, 6);
+      const t0 = trade(id); if (nm && t0) { pushUndo(snapshot()); let r = RES.find(x => x.name.toLowerCase() === nm.toLowerCase()); if (!r) { r = { id: uid('R'), name: nm, unit: un }; RES.push(r); } t0.res = r.id; hRes = r.id; render(); }
+      return;
+    }
     if (a === 'tcol' || a === 'tdel') {
       const t = trade(id); if (!t) return;
       if (a === 'tdel') { delTrade(id); return; }
@@ -2524,6 +2543,8 @@ function qlMatch(name, leaves) {
       else if (f === 'tr-qty' && v > 0) t.qty = v;
       else if (f === 'tr-prod' && v > 0) t.prod = v;
       else if (f === 'tr-rank' && v >= 1) t.rank = clamp(Math.round(v), 1, 20);
+      else if (f === 'tr-res') { if (RES.some(r => r.id === e.target.value)) { t.res = e.target.value; hRes = t.res; } }
+      else if (f === 'tr-avail') { const r = resById(resIdOf(t)); if (v >= 1) r.avail = Math.round(v); else delete r.avail; }
       else if (f === 'tr-max' && v >= 1) t.maxCrew = clamp(Math.round(v), 1, 99);
     }
     if (f.indexOf('mdl-') === 0) { // piirretään vasta kun tarkennus on siirtynyt seuraavaan kenttään, ettei Tab-näppäimellä kirjoittaminen katkea
@@ -2597,10 +2618,11 @@ function qlMatch(name, leaves) {
     pos[n] = p; el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
   }
   function placeAll() { PN.forEach(x => place(x[0])); }
+  function syncResSel() { const rs = document.getElementById('resSel'); if (!rs) return; rs.hidden = RES.length < 2; const h = RES.map(r => '<option value="' + esc(r.id) + '">' + esc(r.name) + '</option>').join(''); if (rs.dataset.h !== h) { rs.innerHTML = h; rs.dataset.h = h; } rs.value = hRes; }
   function renderToggles() {
     { const pb = document.getElementById('projBtn'); if (pb) pb.setAttribute('aria-pressed', String(!!vis.proj)); }
     const chip = x => '<button type="button" class="chip' + (x[0] === 'bl' ? ' pgap' : '') + '" data-ptog="' + x[0] + '" aria-pressed="' + !!vis[x[0]] + '">' + x[1] + '</button>';
-    { const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); }
+    { const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); syncResSel(); }
     ptog.innerHTML = '<span class="lab2">Paneelit</span>' + PN.filter(x => ['panel', 'list', 'notes', 'locs'].indexOf(x[0]) >= 0).map(chip).join('') + PN.filter(x => ['bl', 'st', 'fc'].indexOf(x[0]) >= 0).map(chip).join('');
   }
   function setVis(n, v) {
@@ -2612,6 +2634,7 @@ function qlMatch(name, leaves) {
     if (v) { const el = fpEl(n); if (el) el.style.zIndex = ++zTop; }
     place(n); renderToggles(); savePn();
   }
+  document.getElementById('resSel').addEventListener('change', e => { hRes = e.target.value; render(); });
   document.getElementById('resBtn').addEventListener('click', () => { resMode = resOn ? 'off' : 'on'; try { localStorage.setItem(RKEY, resMode); } catch (err) { } render(); renderToggles(); });
   document.getElementById('projBtn').addEventListener('click', () => setVis('proj', !vis.proj));
   ptog.addEventListener('click', e => { const b = e.target.closest('[data-ptog]'); if (b) setVis(b.dataset.ptog, !vis[b.dataset.ptog]); });
@@ -2632,7 +2655,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved });
+  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved, res: RES });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -2658,6 +2681,7 @@ function qlMatch(name, leaves) {
     drawTrade = trade(st.drawTrade) ? st.drawTrade : (TRADES.length ? TRADES[0].id : null);
     { const vw = st.view || {}; lcol = new Set(Array.isArray(vw.lcol) ? vw.lcol : []); locHid = new Set(Array.isArray(vw.hid) ? vw.hid : []); gClosed = vw.gc && typeof vw.gc === 'object' ? vw.gc : {}; if (vw.zv >= 4 && vw.zv <= 260) gVisW = Math.round(vw.zv); gRowK = ROWH[vw.rh] ? vw.rh : 'n'; try { document.getElementById('rowSel').value = gRowK; } catch (e) { } }
     selId = null; selDep = null; undoStack = [];
+    RES = Array.isArray(st.res) && st.res.length && st.res.every(r => r && r.id && r.name) ? st.res.map(r => ({ id: String(r.id), name: String(r.name).slice(0, 24), unit: String(r.unit || 'kpl').slice(0, 6), avail: r.avail > 0 ? +r.avail : undefined })) : DEF_RES(); if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     syncWeeks(); try { impLoad(st.imp); } catch (err) { }
   }
   function renderSub() {
@@ -2704,7 +2728,7 @@ function qlMatch(name, leaves) {
     if (st) applyState(st);
     else {
       if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
-      groups = []; baselines = []; blShow = null; statusDay = null; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
+      RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; statusDay = null; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
       selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
     }
     projId = null; projName = name; renderSub(); render(); suspend = false; baseline = '';
