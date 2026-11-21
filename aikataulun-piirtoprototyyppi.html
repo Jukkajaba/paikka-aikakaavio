@@ -485,7 +485,16 @@ function totalQty(l) {
   if (l.ov && Object.keys(l.ov).some(k => l.ov[k].q != null)) { const r = range(l); let S = 0; for (let k = 0; k < r.n; k++) { const loc = LOCS[r.a + r.dir * k], o = l.ov[loc.id]; S += o && o.q != null ? o.q : l.qty * shr(l, loc); } return S; }
   return l.qty * widthW(l);
 }
-function setTotalQty(l, Q) { if (l.lockQ != null) l.lockQ = Q; else l.qty = Q / widthW(l); }
+function setTotalQty(l, Q) {
+  if (l.lockQ != null) { l.lockQ = Q; return; }
+  const hasQ = l.ov && Object.keys(l.ov).some(k => l.ov[k].q != null);
+  if (!hasQ) { l.qty = Q / widthW(l); return; }
+  // sijaintikohtaiset määrät pysyvät; muut jakautuvat jäännökseen osuuksien mukaan (ei jäännöstä: kaikki skaalataan)
+  const r = range(l); let oSum = 0, fW = 0;
+  for (let k = 0; k < r.n; k++) { const loc = LOCS[r.a + r.dir * k], o = l.ov[loc.id]; if (o && o.q != null) oSum += o.q; else fW += shr(l, loc); }
+  if (fW > 0 && Q > oSum) l.qty = (Q - oSum) / fW;
+  else { const f = Q / Math.max(totalQty(l), 1e-9); l.qty *= f; Object.keys(l.ov).forEach(k => { if (l.ov[k].q != null) l.ov[k].q *= f; }); }
+}
 function toggleQtyLock(l) { if (l.lockQ != null) { l.qty = effQty(l); l.lockQ = null; } else l.lockQ = totalQty(l); }
 const r2 = x => Math.round(x * 100) / 100;
 // Asettaa viivan kokonaiskeston (ensimmäisen alun ja viimeisen lopun väli) ja laskee sijaintikohtaiset kestot.
@@ -1886,6 +1895,7 @@ function qlMatch(name, leaves) {
       if (slk && k.locId === slk) selTxt = '<p class="meta" style="background:var(--band);padding:4px 6px;border-radius:4px"><b>Valittu: ' + esc(k.name || dn) + '</b><br>' + fmt(k.s) + ' – ' + fmtE(k.e) + ' (vk ' + weekOf(k.s) + '–' + weekOf(k.e - 1) + ') · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</p>';
       th += '<div class="task' + (slk && k.locId === slk ? ' sel' : '') + '" style="' + (slk && k.locId === slk ? 'background:var(--band);outline:1px solid var(--ink);border-radius:4px' : '') + '"><input class="txt" type="text" maxlength="40" placeholder="' + esc(dn) + '" value="' + esc(k.name) + '" aria-label="Tehtävän nimi" data-field="tname" data-id="' + l.id + '" data-loc="' + k.locId + '">' +
         '<div class="tmeta">' + esc(LOCS[k.loc].name) + ' · ' + fmt(k.s) + '–' + fmtE(k.e) + ' · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</div>' +
+        '<div class="trow"><span class="lab">Määrä</span><input class="num" type="number" min="0.01" step="any" style="width:70px" value="' + r2(k.qty) + '" data-field="tq-v" data-id="' + l.id + '" data-loc="' + k.locId + '" aria-label="Sijainnin määrä"> ' + esc(t.unit) + ((l.ov && l.ov[k.locId] && l.ov[k.locId].q != null) ? ' <button type="button" data-act="tqreset" data-id="' + l.id + '" data-loc="' + k.locId + '" title="Palauta osuuksien mukainen määrä">Palauta</button>' : '') + '</div>' +
         '<div class="trow"><span class="lab">Kesto</span>' + stepper('tdur', l.id, '', k.locId, r1(k.d), MIN_D) +
         (i > 0 ? '<span class="lab">Viive</span>' + stepper('tsh', l.id, '', k.locId, r1(k.shift), -30) : '') +
         ((k.ovd || k.shift) ? '<button type="button" data-act="treset" data-id="' + l.id + '" data-loc="' + k.locId + '">Palauta</button>' : '') + '</div></div>';
@@ -2443,6 +2453,7 @@ function qlMatch(name, leaves) {
       releaseTotal(l); ovOf(l, ds.loc).shift = Math.max(-30, snap(k.shift, a === 'tsh+' ? 1 : -1)); fit(l);
     }
     else if (a === 'aclear') { const k0 = l.flat ? l : ovOf(l, ds.loc); delete k0.pct; delete k0.as; delete k0.ae; }
+    else if (a === 'tqreset') { const o = ovOf(l, ds.loc); delete o.q; fit(l); }
     else if (a === 'treset') { const o = ovOf(l, ds.loc); delete o.d; delete o.shift; }
     render();
   }
@@ -2476,6 +2487,7 @@ function qlMatch(name, leaves) {
     else if (f === 'tqty') { const l = byId(id); if (l && v > 0) setTotalQty(l, v); }
     else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, r1(v) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }
     else if (f === 'gap-v') { const l = byId(id); if (l && isFinite(v)) { l.gap = clamp(r1(v), -30, 60); fit(l); } }
+    else if (f === 'tq-v') { const l = byId(id); if (l && v > 0 && !l.flat) { if (l.lockQ != null) { l.qty = effQty(l); l.lockQ = null; } ovOf(l, e.target.dataset.loc).q = v; fit(l); } }
     else if (f === 'tdur-v') { const l = byId(id); if (l && v >= MIN_D) { releaseTotal(l); ovOf(l, e.target.dataset.loc).d = r1(v); fit(l); } }
     else if (f === 'tsh-v') { const l = byId(id); if (l && isFinite(v)) { releaseTotal(l); ovOf(l, e.target.dataset.loc).shift = clamp(r1(v), -30, 60); fit(l); } }
     else if (f === 'qty' || f === 'prod') { const l = byId(id); if (l && v > 0) l[f] = v; }
