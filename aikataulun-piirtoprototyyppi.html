@@ -1134,7 +1134,7 @@ function qlMatch(name, leaves) {
   let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gSyncing = false, fSyncing = false;
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); } } catch (err) { }
-  let gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
+  let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
   const saveView = () => { try { localStorage.setItem(VKEY, JSON.stringify({ view: view, group: gGroup, vis: gVisW })); } catch (err) { } try { scheduleSave(); } catch (err) { } };
 
   // baseline: jäädytetty kopio tehtävien ajoista. baselines[] = {id, name, date, t: {viivanId: [[sijaintiId, alku, loppu], ...]}}; blShow = näytettävän id
@@ -1525,7 +1525,7 @@ function qlMatch(name, leaves) {
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
     impBox.classList.remove('on'); impReset();
   }
-  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade });
+  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
@@ -1877,16 +1877,21 @@ function qlMatch(name, leaves) {
     }
     const t = trade(l.trade), c = crewOf(l), ts = tasks(l), en = lineEnd(l);
     const uIn = '<input class="txt" style="width:48px" type="text" maxlength="6" value="' + esc(t.unit) + '" data-field="tr-unit" data-id="' + t.id + '" aria-label="Yksikkö" title="Yksikkö (muuttuu koko työlajille)">';
+    const slk = selLoc && selLoc.l === l.id && !l.flat ? selLoc.loc : null;
+    if (slk !== panelSelLoc) { panelSelLoc = slk; if (slk) tasksOpen = true; }
+    let selTxt = '';
     let th = '<details' + (tasksOpen ? ' open' : '') + '><summary>Tehtävät (' + ts.length + ')</summary>';
     (l.flat ? [] : ts).forEach((k, i) => {
       const dn = t.name + ' · ' + LOCS[k.loc].name;
-      th += '<div class="task"><input class="txt" type="text" maxlength="40" placeholder="' + esc(dn) + '" value="' + esc(k.name) + '" aria-label="Tehtävän nimi" data-field="tname" data-id="' + l.id + '" data-loc="' + k.locId + '">' +
+      if (slk && k.locId === slk) selTxt = '<p class="meta" style="background:var(--band);padding:4px 6px;border-radius:4px"><b>Valittu: ' + esc(k.name || dn) + '</b><br>' + fmt(k.s) + ' – ' + fmtE(k.e) + ' (vk ' + weekOf(k.s) + '–' + weekOf(k.e - 1) + ') · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</p>';
+      th += '<div class="task' + (slk && k.locId === slk ? ' sel' : '') + '" style="' + (slk && k.locId === slk ? 'background:var(--band);outline:1px solid var(--ink);border-radius:4px' : '') + '"><input class="txt" type="text" maxlength="40" placeholder="' + esc(dn) + '" value="' + esc(k.name) + '" aria-label="Tehtävän nimi" data-field="tname" data-id="' + l.id + '" data-loc="' + k.locId + '">' +
         '<div class="tmeta">' + esc(LOCS[k.loc].name) + ' · ' + fmt(k.s) + '–' + fmtE(k.e) + ' · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</div>' +
         '<div class="trow"><span class="lab">Kesto</span>' + stepper('tdur', l.id, '', k.locId, r1(k.d), MIN_D) +
         (i > 0 ? '<span class="lab">Viive</span>' + stepper('tsh', l.id, '', k.locId, r1(k.shift), -30) : '') +
         ((k.ovd || k.shift) ? '<button type="button" data-act="treset" data-id="' + l.id + '" data-loc="' + k.locId + '">Palauta</button>' : '') + '</div></div>';
     });
     th += '</details>';
+    if (slk) queueMicrotask(() => { const e = panel.querySelector('.task.sel'); if (!e) return; const pr = panel.getBoundingClientRect(), er = e.getBoundingClientRect(); if (er.bottom > pr.bottom) panel.scrollTop += er.bottom - pr.bottom + 8; else if (er.top < pr.top) panel.scrollTop -= pr.top - er.top + 8; });
     const vd = validDeps(), myDeps = vd.filter(d => d.a.l === l.id || d.b.l === l.id), sd = vd.find(d => d.id === selDep);
     if (sd && myDeps.indexOf(sd) < 0) myDeps.push(sd);
     if (l.flat) th = '';
@@ -1909,7 +1914,7 @@ function qlMatch(name, leaves) {
     }
     panel.innerHTML =
       '<div class="ph"><span class="dot" style="background:' + colorOf(l.trade) + '"></span><h2>' + esc(t.name) + '</h2></div>' +
-      '<p class="meta">' + esc(LOCS[ts[0].loc].name) + ' → ' + esc(LOCS[ts[ts.length - 1].loc].name) + '<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + ')</p>' +
+      '<p class="meta">' + esc(LOCS[ts[0].loc].name) + ' → ' + esc(LOCS[ts[ts.length - 1].loc].name) + '<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + ')</p>' + selTxt +
       '<p class="ok hlp" style="margin:0 0 6px">Viivan ajoitus ja koko: kokonaiskesto, aika sijainnissa, viive sijaintien välillä, työryhmä ja määrä vaikuttavat toisiinsa. Lukko pitää arvon paikallaan, ja muut arvot lasketaan sen mukaan. Tehtävät-osiossa voi muuttaa yksittäisen sijainnin kestoa ja viivettä. Työlajin nimi, yksikkö ja tuottavuus koskevat koko työlajia.</p>' +
       '' + grpSelect(l) + locSelect(l) +
       '<div class="row"><label for="f-tname" title="Nimi muuttuu kaikilla tämän työlajin viivoilla">Työlajin nimi</label><input id="f-tname" class="txt" style="max-width:170px" type="text" maxlength="24" value="' + esc(t.name) + '" data-field="tr-name" data-id="' + t.id + '"></div>' +
