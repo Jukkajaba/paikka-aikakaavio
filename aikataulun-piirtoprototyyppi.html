@@ -786,6 +786,7 @@ function qlMatch(name, leaves) {
   const summary = document.getElementById('summary'), side = document.getElementById('stage');
   const undoBtn = document.getElementById('undo');
   let needRoom = true, newForm = false;
+  let impSaved = null;
   let mdlTpl = '', lines = [], deps = [], FC = null, fcProd = true, baselines = [], blShow = null, statusDay = null, selGrp = null, nextId = 1, nextDepId = 1, selDep = null, showDeps = true, selId = null, drawTrade = 'levytys', target = 16, tasksOpen = false;
   let db = null, dl = null, dbState = 'pending', projId = null, projName = 'Esimerkkihanke', projList = [], baseline = '', saving = false, pendingSave = false, saveTimer = null, suspend = false, statusText = '', confirmDel = null;
   let undoStack = [], drag = null, preview = null, G = null;
@@ -1483,7 +1484,17 @@ function qlMatch(name, leaves) {
   const impBox = document.createElement('div'); impBox.id = 'impBox';
   impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
-  function impReset() { try { IMP.lm = null; IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
+  function impReset() { try { impSaved = null; IMP.lm = null; IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
+  function impLoad(o) {
+    try {
+      if (!o || typeof o.txt !== 'string' || !o.txt) return;
+      impBox.querySelector('#impTxt').value = o.txt; IMP.grid = qlParse(o.txt); if (!IMP.grid.length) return;
+      IMP.g = qlGuess(IMP.grid); if (Array.isArray(o.roles) && o.roles.length === IMP.g.roles.length) IMP.roles = o.roles.slice(); else IMP.roles = IMP.g.roles.slice();
+      IMP.lm = o.lm || null; IMP.locMap = Object.assign({}, o.locMap); IMP.inc = Object.assign({}, o.inc); IMP.prod = Object.assign({}, o.prod); IMP.crew = Object.assign({}, o.crew); IMP.trade = Object.assign({}, o.trade);
+      IMP.dProd = o.dProd > 0 ? o.dProd : 10; IMP.dCrew = o.dCrew > 0 ? o.dCrew : 2;
+      impRebuild(); impDraw(); impSaved = o;
+    } catch (err) { }
+  }
   const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)']];
   function impRebuild() {
     IMP.B = qlBuild(IMP.grid, IMP.g.head, IMP.roles, IMP.g.names);
@@ -1530,6 +1541,7 @@ function qlMatch(name, leaves) {
       if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; groups.push(g); } gmap[it.rak] = g; l.grp = g.id; }
       lines.push(l); nl++;
     });
+    impSaved = { txt: impBox.querySelector('#impTxt').value, roles: IMP.roles.slice(), lm: IMP.lm, locMap: Object.assign({}, IMP.locMap), inc: Object.assign({}, IMP.inc), prod: Object.assign({}, IMP.prod), crew: Object.assign({}, IMP.crew), trade: Object.assign({}, IMP.trade), dProd: IMP.dProd, dCrew: IMP.dCrew };
     lines.forEach(fit); selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
     impBox.classList.remove('on');
@@ -2620,7 +2632,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK } });
+  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -2646,7 +2658,7 @@ function qlMatch(name, leaves) {
     drawTrade = trade(st.drawTrade) ? st.drawTrade : (TRADES.length ? TRADES[0].id : null);
     { const vw = st.view || {}; lcol = new Set(Array.isArray(vw.lcol) ? vw.lcol : []); locHid = new Set(Array.isArray(vw.hid) ? vw.hid : []); gClosed = vw.gc && typeof vw.gc === 'object' ? vw.gc : {}; if (vw.zv >= 4 && vw.zv <= 260) gVisW = Math.round(vw.zv); gRowK = ROWH[vw.rh] ? vw.rh : 'n'; try { document.getElementById('rowSel').value = gRowK; } catch (e) { } }
     selId = null; selDep = null; undoStack = [];
-    syncWeeks();
+    syncWeeks(); try { impLoad(st.imp); } catch (err) { }
   }
   function renderSub() {
     document.getElementById('subline').textContent = projName + ' · alku ma 4.1.2027, ei vapaapäiviä.';

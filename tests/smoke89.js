@@ -14,7 +14,7 @@ const bb=await p.locator('#chart').boundingBox();
 const draw=async(x0,y0,x1,y1)=>{await p.mouse.move(bb.x+x0,bb.y+y0);await p.mouse.down();await p.mouse.move(bb.x+x1,bb.y+y1,{steps:6});await p.mouse.up();await p.waitForTimeout(200);};
 await draw(600,300,800,150);
 console.log('uusi viiva paneelissa:',await p.evaluate(()=>document.querySelector('#panel h2')?.textContent),'| asetukset:',await p.locator('#panel details[data-sec="trade"]').count());
-await p.locator('#panel details[data-sec="trade"] summary').click();
+await p.locator('#panel details[data-sec="trade"] summary').click();await p.waitForTimeout(150);
 await p.fill('#tr-max','3');await p.dispatchEvent('#tr-max','change');await p.waitForTimeout(150);
 await p.locator('#panel details[data-sec="trade"] .swatches button').nth(2).click();await p.waitForTimeout(150);
 console.log('max/väri:',await p.inputValue('#tr-max'),await p.evaluate(()=>document.querySelectorAll('#panel .swatches button[aria-pressed="true"]').length));
