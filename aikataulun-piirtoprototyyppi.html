@@ -1467,7 +1467,7 @@ function qlMatch(name, leaves) {
       h += '<h3>2. Sijaintien vastaavuus</h3><table>' + B.locNames.map(n => '<tr><td>' + esc(n) + '</td><td><select data-lm="' + esc(n) + '">' + opt('new', IMP.locMap[n], '+ Luo uusi sijainti') + opt('skip', IMP.locMap[n], 'Ohita') + LOCS.map(x => opt(x.id, IMP.locMap[n], x.name)).join('') + '</select></td></tr>').join('') + '</table>';
     }
     if (anyNoLoc) {
-      h += '<h3>' + (B.locNames.length ? '3' : '2') + '. Suoritteet ilman sijaintia</h3><div class="row2"><label><input type="radio" name="impMode" value="jaa"' + (IMP.mode === 'jaa' ? ' checked' : '') + '> Jaa projektin sijainteihin osuuksien mukaan</label><label><input type="radio" name="impMode" value="koko"' + (IMP.mode === 'koko' ? ' checked' : '') + '> Yksi tehtävä koko kohteelle</label></div>';
+      h += '<h3>' + (B.locNames.length ? '3' : '2') + '. Suoritteet ilman sijaintia</h3><div class="row2"><label><input type="radio" name="impMode" value="jaa"' + (IMP.mode === 'jaa' && LOCS.length ? ' checked' : '') + (LOCS.length ? '' : ' disabled') + '> Jaa projektin sijainteihin osuuksien mukaan' + (LOCS.length ? '' : ' (projektissa ei ole sijainteja)') + '</label><label><input type="radio" name="impMode" value="koko"' + (IMP.mode === 'koko' || !LOCS.length ? ' checked' : '') + '> Yksi tehtävä koko kohteelle</label></div>';
     }
     h += '<h3>Suoritteet</h3><div class="row2">Oletustuottavuus <input class="num" id="impDP" type="number" min="0.1" step="any" value="' + IMP.dProd + '"> yks/hlö/pv · oletustyöryhmä <input class="num" id="impDC" type="number" min="1" step="1" value="' + IMP.dCrew + '"> hlö <button type="button" id="impApplyD">Aseta kaikille</button></div>';
     h += '<table><tr><th></th><th>Rakenne</th><th>Suorite</th><th>Yks.</th><th>Määrä</th><th>Tuottavuus</th><th>Hlö</th><th>Työlaji</th><th>Huomiot</th></tr>' + IMP.items.map((it, i) => {
@@ -1488,7 +1488,7 @@ function qlMatch(name, leaves) {
       const ids = Object.keys(mapped), prod = IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd, crew = Math.max(1, Math.round(IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew));
       let t = IMP.trade[i] && IMP.trade[i] !== 'new' ? trade(IMP.trade[i]) : null;
       const total = ids.length ? ids.reduce((x, k) => x + mapped[k], 0) : it.total;
-      const flat = !ids.length && IMP.mode === 'koko';
+      const flat = !ids.length && (IMP.mode === 'koko' || !LOCS.length);
       if (!t) { t = newTrade(); t.name = it.name.slice(0, flat ? 40 : 24); t.unit = it.unit || 'kpl'; t.prod = prod; t.qty = total || 1; t.maxCrew = Math.max(8, crew); if (flat) t.flat = true; }
       const l = { id: nextId++, trade: t.id, from: null, to: null, start: 0, dur: 5, gap: 0, qty: total || 1, prod: t.prod, ov: {}, ord: (ord += 10) };
       if (flat) { l.flat = true; l.lockC = crew; }
@@ -1511,7 +1511,7 @@ function qlMatch(name, leaves) {
       IMP.grid = grid; IMP.g = qlGuess(grid); IMP.roles = IMP.g.roles.slice(); IMP.locMap = {}; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {};
       impRebuild(); impDraw(); return;
     }
-    if (t.id === 'impGo') impApply();
+    if (t.id === 'impGo') { try { impApply(); } catch (err) { const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuonti epäonnistui: ' + err.message; } }
     if (t.id === 'impApplyD') { IMP.prod = {}; IMP.crew = {}; impDraw(); }
   });
   impBox.addEventListener('change', e => {

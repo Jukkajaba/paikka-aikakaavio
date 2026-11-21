@@ -23,5 +23,8 @@ const { chromium } = require('playwright');
   n = await run("Suorite\tMäärä\tYks\nLaatta\t500\tm2", 'jaa');
   ok(n === 1 && await p.evaluate(() => __aik().lines.slice(-1)[0].lockQ === 500), 'distributed');
   await p.click('#undo'); ok(await p.evaluate(() => !__aik().lines.some(l => l.lockQ === 500)), 'undo');
+  // tyhjä projekti + ei sijainteja: ei saa kaatua
+  await p.click('#projBtn'); await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(500);
+  n = await run("Suorite\tMäärä\tYks\nLaatta\t500\tm2"); ok(n === 1 && await p.evaluate(() => __aik().lines.slice(-1)[0].flat === true), 'blank project flat');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
