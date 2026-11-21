@@ -27,6 +27,9 @@ const { chromium } = require('playwright');
   // tyhjä projekti + ei sijainteja: ei saa kaatua
   await p.click('#projBtn'); await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(500);
   n = await run("Suorite\tMäärä\tYks\nLaatta\t500\tm2"); ok(n === 1 && await p.evaluate(() => __aik().lines.slice(-1)[0].flat === true), 'blank project flat');
+  // tuonnin jälkeen paneeli säilyttää sisältönsä, mutta uusi projekti tyhjentää sen
+  await p.click('#impBtn'); ok((await p.inputValue('#impTxt')) !== '' && (await p.locator('#impBody').innerHTML()) !== '', 'kept after import'); await p.evaluate(() => document.getElementById('impBox').classList.remove('on'));
+  await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(500);
   await p.click('#impBtn'); ok((await p.inputValue('#impTxt')) === '' && (await p.locator('#impBody').innerHTML()) === '', 'reset after new project');
   // yksikkökohtainen tuottavuus: kg:n oletus on suuri
   await p.evaluate(() => { document.getElementById('impBox').classList.remove('on'); });

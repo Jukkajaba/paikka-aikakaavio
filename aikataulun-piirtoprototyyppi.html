@@ -264,7 +264,6 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
       <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määräluettelo</button>
-      <button id="qtyBtn" type="button" title="Näytä aikataulun määräluettelo: suoritteet, määrät sijainneittain, tuottavuus ja kesto">Määrät</button>
       <button id="undo" type="button">Kumoa</button>
     </div>
   </div>
@@ -1538,45 +1537,9 @@ function qlMatch(name, leaves) {
     });
     lines.forEach(fit); selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
-    impBox.classList.remove('on'); impReset();
+    impBox.classList.remove('on');
   }
 
-  // ---- määräluettelon tarkastelu (nykyinen malli, päivittyy muokkausten mukana) ----
-  const qtyBox = document.createElement('div'); qtyBox.id = 'impBox'; qtyBox.className = ''; qtyBox.id = 'qtyBox';
-  qtyBox.style.cssText = 'position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto';
-  qtyBox.innerHTML = '<div class="imp" style="background:var(--bg,#fff);border:1px solid #888;border-radius:8px;max-width:1300px;width:100%;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35);overflow:auto"><h2 style="margin:0 0 6px;font-size:16px">Määräluettelo</h2><div class="row2" style="display:flex;gap:10px;align-items:center;margin:4px 0"><button type="button" id="qtyCopy">Kopioi taulukko</button><button type="button" id="qtyClose">Sulje</button><span id="qtyMsg" class="ok"></span></div><div id="qtyBody" style="overflow:auto"></div></div>';
-  document.body.appendChild(qtyBox);
-  let qtyTsv = '';
-  function qtyDraw() {
-    ensureOrd();
-    const rowsL = [];
-    const walk = cont => itemsOf(cont).forEach(it => { if (it.k === 'g') { rowsL.push({ g: it.o }); walk(it.o.id); } else rowsL.push({ l: it.o }); });
-    walk(null);
-    const used = new Set(); lines.forEach(l => { if (l.flat) return; const r = range(l); for (let k = 0; k < r.n; k++) used.add(LOCS[r.a + r.dir * k].id); });
-    const cols = LOCS.filter(x => used.has(x.id));
-    const num = x => (Math.round(x * 100) / 100).toLocaleString('fi-FI');
-    let h = '<table style="border-collapse:collapse;font-size:12px;width:100%"><tr>' + ['Rakenne / suorite', 'Yks.', 'Yhteensä'].concat(cols.map(c => c.name), ['Tuott.', 'Hlö', 'Kesto pv']).map((t, i) => '<th style="border:1px solid #bbb;padding:2px 5px;text-align:' + (i === 0 ? 'left' : 'right') + ';position:sticky;top:0;background:var(--panel,#eee)">' + esc(t) + '</th>').join('') + '</tr>';
-    const tsv = [['Rakenne / suorite', 'Yks.', 'Yhteensä'].concat(cols.map(c => c.name), ['Tuott.', 'Hlö', 'Kesto pv']).join('\t')];
-    const td = (v, left, b) => '<td style="border:1px solid #bbb;padding:2px 5px;text-align:' + (left ? 'left' : 'right') + (b ? ';font-weight:700' : '') + '">' + v + '</td>';
-    rowsL.forEach(r => {
-      if (r.g) { h += '<tr style="background:var(--band,#f0f0f0)"><td colspan="' + (cols.length + 6) + '" style="border:1px solid #bbb;padding:2px 5px;font-weight:700">' + esc(r.g.name) + '</td></tr>'; tsv.push(r.g.name); return; }
-      const l = r.l, t = trade(l.trade); if (!t) return;
-      const ts = l.flat ? [] : tasks(l), by = {}; ts.forEach(k => { by[k.locId] = k; });
-      const tot = l.flat ? l.qty : totalQty(l), d = Math.round(span(l) * 10) / 10;
-      h += '<tr data-ql="' + l.id + '" style="cursor:pointer">' + td('&nbsp;&nbsp;' + esc(t.name), true) + td(esc(t.unit)) + td(num(tot), false, true) +
-        cols.map(c => { const k = by[c.id], o = l.ov && l.ov[c.id], ov = o && o.q != null; return td(k ? (ov ? '<i title="Oma määrä">' + num(k.qty) + '</i>' : num(k.qty)) : '', false, ov); }).join('') + td(num(l.prod)) + td(String(crewOf(l))) + td(num(d)) + '</tr>';
-      tsv.push([t.name, t.unit, String(Math.round(tot * 100) / 100)].concat(cols.map(c => by[c.id] ? String(Math.round(by[c.id].qty * 100) / 100) : ''), [String(l.prod), String(crewOf(l)), String(d)]).join('\t'));
-    });
-    qtyTsv = tsv.join('\n');
-    qtyBox.querySelector('#qtyBody').innerHTML = rowsL.length ? h + '</table><p class="ok" style="margin:6px 0 0">Lihavoitu kursiivi = sijainnille asetettu oma määrä. Klikkaa riviä valitaksesi viivan.</p>' : '<p class="empty">Ei suoritteita.</p>';
-  }
-  document.getElementById('qtyBtn').addEventListener('click', () => { qtyDraw(); qtyBox.style.display = 'flex'; });
-  qtyBox.addEventListener('click', e => {
-    const t = e.target.closest ? e.target : e.target;
-    if (e.target === qtyBox || (t.closest && t.closest('#qtyClose'))) { qtyBox.style.display = 'none'; return; }
-    if (t.closest && t.closest('#qtyCopy')) { const m = qtyBox.querySelector('#qtyMsg'); try { navigator.clipboard.writeText(qtyTsv).then(() => { m.textContent = 'Kopioitu'; }, () => { m.textContent = 'Kopiointi ei onnistunut'; }); } catch (err) { m.textContent = 'Kopiointi ei onnistunut'; } return; }
-    const tr = t.closest && t.closest('tr[data-ql]'); if (tr) { selId = +tr.dataset.ql; selLoc = null; selGrp = null; qtyBox.style.display = 'none'; render(); }
-  });
   window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
