@@ -1449,6 +1449,7 @@ function qlMatch(name, leaves) {
   const impBox = document.createElement('div'); impBox.id = 'impBox';
   impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määräluettelo"><h2>Tuo määräluettelo</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
+  function impReset() { try { IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
   const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)']];
   function impRebuild() {
     IMP.B = qlBuild(IMP.grid, IMP.g.head, IMP.roles, IMP.g.names);
@@ -1499,7 +1500,7 @@ function qlMatch(name, leaves) {
     });
     lines.forEach(fit); selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
-    impBox.classList.remove('on');
+    impBox.classList.remove('on'); impReset();
   }
   window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
@@ -2633,12 +2634,12 @@ function qlMatch(name, leaves) {
     const pr = projList.find(x => x.id === id); if (!pr) return;
     const st = normState(pr.state); if (!st) { setStatus('Projektia ei voi avata'); return; }
     await flushSave();
-    suspend = true; applyState(st); projId = id; projName = pr.name || 'Projekti'; renderSub(); render(); baseline = stateJson(); suspend = false;
+    suspend = true; impReset(); applyState(st); projId = id; projName = pr.name || 'Projekti'; renderSub(); render(); baseline = stateJson(); suspend = false;
     setStatus('Avattu ' + hhmm(new Date())); renderProj();
   }
   async function newProject(name, kind, st) {
     await flushSave();
-    suspend = true;
+    suspend = true; impReset();
     if (st) applyState(st);
     else {
       if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;

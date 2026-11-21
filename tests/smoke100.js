@@ -26,5 +26,6 @@ const { chromium } = require('playwright');
   // tyhjä projekti + ei sijainteja: ei saa kaatua
   await p.click('#projBtn'); await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(500);
   n = await run("Suorite\tMäärä\tYks\nLaatta\t500\tm2"); ok(n === 1 && await p.evaluate(() => __aik().lines.slice(-1)[0].flat === true), 'blank project flat');
+  await p.click('#impBtn'); ok((await p.inputValue('#impTxt')) === '' && (await p.locator('#impBody').innerHTML()) === '', 'reset after new project');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
