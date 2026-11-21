@@ -19,5 +19,8 @@ const { chromium } = require('playwright');
   await p.selectOption('#resSel', await p.locator('#resSel option').first().getAttribute('value')); await p.waitForTimeout(200);
   ok(await p.locator('#chart text:has-text("hlö")').count() >= 1, 'back to persons');
   await p.click('#undo'); await p.waitForTimeout(250);
+  // sijaintiton tehtävä: Työlajin asetukset löytyvät myös sieltä
+  await p.click('#vGantt'); await p.waitForTimeout(200); await p.click('#gAddTask'); await p.waitForTimeout(300);
+  ok(await p.locator('#panel details[data-sec="trade"]').count() === 1, 'trade settings for flat task');
   ok(!errs.length, 'errors ' + errs.join('|')); console.log(fail ? 'FAIL' : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();

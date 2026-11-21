@@ -1944,7 +1944,7 @@ function qlMatch(name, leaves) {
         (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' ' + esc(resUnit(t)) + '. Pidennä aikaa.</div>' : '') +
         '<div class="row"><label for="f-qty">Määrä</label><span><input id="f-qty" class="num" type="number" min="1" step="any" value="' + r2(effQty(l)) + '" data-field="qty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
         '<div class="row"><label for="f-prod">Tuottavuus</label><span><input id="f-prod" class="num" type="number" min="0.1" step="any" value="' + l.prod + '" data-field="prod" data-id="' + l.id + '"> ' + uIn + '/' + esc(resUnit(t)) + '/pv</span></div>' +
-        th +
+        tradeSect(t) + th +
         '<div class="btns"><button type="button" data-act="shift-" data-id="' + l.id + '">◀ viikko</button><button type="button" data-act="shift+" data-id="' + l.id + '">viikko ▶</button><button type="button" data-act="del" data-id="' + l.id + '">Poista</button></div>';
       return;
     }
