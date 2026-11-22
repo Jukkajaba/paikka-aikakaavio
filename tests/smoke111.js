@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
   const bodies = () => p.locator('#chart path[data-role="body"]').count();
   const b0 = await bodies();
   await p.click('#impBtn'); await p.fill('#impTxt', txt); await p.click('#impParse');
-  ok(await p.isChecked('#impCG'), 'closed option default on');
+  ok(!(await p.isChecked('#impCG')), 'closed option default off'); await p.check('#impCG');
   await p.click('#impGo'); await p.waitForTimeout(300);
   await p.click('#vFlow').catch(() => {}); await p.waitForTimeout(300);
   ok(await gb() === 2, 'two summary lines ' + await gb());

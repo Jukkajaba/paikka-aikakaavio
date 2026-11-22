@@ -1544,7 +1544,7 @@ function qlMatch(name, leaves) {
   // ---- määräluettelon tuonti (liittämällä) ----
   const impLM = () => IMP.lm || (IMP.B && IMP.B.locNames.length ? 'use' : (LOCS.length ? 'jaa' : 'koko'));
   const impProd = i => IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd;
-  const IMP = { lm: null, grid: null, g: null, roles: [], locMap: {}, items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, cg: true, B: null };
+  const IMP = { lm: null, grid: null, g: null, roles: [], locMap: {}, items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, cg: false, B: null };
   const impBox = document.createElement('div'); impBox.id = 'impBox';
   impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
@@ -1555,7 +1555,7 @@ function qlMatch(name, leaves) {
       impBox.querySelector('#impTxt').value = o.txt; IMP.grid = qlParse(o.txt); if (!IMP.grid.length) return;
       IMP.g = qlGuess(IMP.grid); if (Array.isArray(o.roles) && o.roles.length === IMP.g.roles.length) IMP.roles = o.roles.slice(); else IMP.roles = IMP.g.roles.slice();
       IMP.lm = o.lm || null; IMP.locMap = Object.assign({}, o.locMap); IMP.inc = Object.assign({}, o.inc); IMP.prod = Object.assign({}, o.prod); IMP.crew = Object.assign({}, o.crew); IMP.trade = Object.assign({}, o.trade);
-      IMP.dProd = o.dProd > 0 ? o.dProd : 10; IMP.dCrew = o.dCrew > 0 ? o.dCrew : 2; IMP.cg = o.cg !== false;
+      IMP.dProd = o.dProd > 0 ? o.dProd : 10; IMP.dCrew = o.dCrew > 0 ? o.dCrew : 2; IMP.cg = o.cg === true;
       impRebuild(); impDraw(); impSaved = o;
     } catch (err) { }
   }
@@ -2935,7 +2935,7 @@ function qlMatch(name, leaves) {
     const a = b.dataset.pj, id = b.dataset.id;
     if (a === 'new') { newForm = !newForm; renderProj(); }
     else if (a === 'newcancel') { newForm = false; renderProj(); }
-    else if (a === 'newblank' || a === 'newdefaults') { const nm = (document.getElementById('pj-newname') || {}).value; newForm = false; await newProject((nm || '').trim() || 'Uusi projekti', a === 'newblank' ? 'blank' : 'empty'); }
+    else if (a === 'newblank' || a === 'newdefaults') { const nm = (document.getElementById('pj-newname') || {}).value; newForm = false; await newProject((nm || '').trim() || 'Uusi projekti', a === 'newblank' ? 'blank' : 'empty'); showDeps = false; selDep = null; try { syncDep(); savePn(); } catch (err) { } render(); setVis('proj', false); }
     else if (a === 'example') await newProject('Esimerkkihanke', 'example');
     else if (a === 'open') await openProject(id);
     else if (a === 'del') { confirmDel = id; renderProj(); }

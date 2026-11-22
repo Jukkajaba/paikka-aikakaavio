@@ -4,5 +4,5 @@ await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await
 await p.click('button:has-text("Projekti")');await p.waitForTimeout(200);
 await p.click('[data-pj="new"]');await p.fill('#pj-newname','Testi A');await p.click('[data-pj="newblank"]');await p.waitForTimeout(400);
 console.log('chips',await p.locator('#chips button').allTextContents(),'subline',await p.textContent('#subline'));
-await p.click('[data-pj="new"]');await p.click('[data-pj="newdefaults"]');await p.waitForTimeout(400);
+await p.click('#projBtn');await p.waitForTimeout(150);await p.click('[data-pj="new"]');await p.click('[data-pj="newdefaults"]');await p.waitForTimeout(400);
 console.log('chips',(await p.locator('#chips button').allTextContents()).length,errs);await b.close();})();
