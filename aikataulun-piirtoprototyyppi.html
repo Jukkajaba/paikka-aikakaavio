@@ -383,6 +383,7 @@ function ltApply(lines, mem, repl) {
     let lo = Infinity, hi = -1;
     m.ids.forEach(id => { (repl && repl[id] !== undefined ? repl[id] : [id]).forEach(q => { const i = idx.get(q); if (i != null) { lo = Math.min(lo, i); hi = Math.max(hi, i); } }); });
     if (hi < 0) return;
+    if (l.skip) { l.skip = l.skip.filter(q => idx.has(q)); if (!l.skip.length) delete l.skip; }
     if (m.dir >= 0) { l.from = LOCS[lo].id; l.to = LOCS[hi].id; } else { l.from = LOCS[hi].id; l.to = LOCS[lo].id; }
     keep.push(l);
   });
@@ -466,7 +467,7 @@ function tasksCalc(l) {
   const r = range(l), out = [], lc = l.lockC != null ? l.lockC : null, dist = (l.total != null && lc == null) ? distribute(l, r) : null, q = effQty(l); let prevEnd = 0, prevS = 0;
   for (let k = 0; k < r.n; k++) {
     const idx = rat(r, k), loc = locAt(idx), o = (l.ov && l.ov[loc.id]) || {}, qk = o.q != null ? o.q : q * shr(l, loc);
-    const d = o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(qk / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc)))));
+    const d = Math.min(N_DAYS, o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(qk / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc))))));
     const sh = k === 0 ? 0 : (o.shift || 0);
     const s = k === 0 ? l.start : r1(Math.max(prevS, prevEnd + l.gap + sh)); // negatiivinen viive = päällekkäisyys, mutta ei ennen edellisen alkua
     const crew = (lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(qk / l.prod / d - 1e-9));
@@ -481,7 +482,7 @@ const crewOf = l => tasks(l).reduce((m, t) => Math.max(m, t.crew), 1);
 function fit(l) {
   let g = 0;
   if (l.total != null) l.total = Math.min(l.total, N_DAYS);
-  else if (l.lockC == null) while (span(l) > N_DAYS && l.dur > 1 && g++ < 300) l.dur--;
+  else if (l.lockC == null) { if (!isFinite(l.dur)) l.dur = 5; l.dur = Math.min(l.dur, N_DAYS); while (span(l) > N_DAYS && l.dur > 1 && g++ < 5000) l.dur = Math.max(1, l.dur - Math.max(1, Math.ceil((span(l) - N_DAYS) / Math.max(1, shareW(l))))); }
   l.start = Math.max(0, Math.min(l.start, N_DAYS - span(l)));
 }
 function cleanOv(ov) { const o = {}; for (const k in (ov || {})) { const v = ov[k], c = {}; if (v.name) c.name = v.name; if (v.pct != null) c.pct = v.pct; if (v.as != null) c.as = v.as; if (v.ae != null) c.ae = v.ae; if (v.q != null) c.q = v.q; if (Object.keys(c).length) o[k] = c; } return o; }
@@ -744,7 +745,7 @@ function qlParse(text) {
   const d = t.indexOf('\t') >= 0 ? '\t' : (t.indexOf(';') >= 0 ? ';' : ',');
   return rows.map(r => r.split(d).map(c => c.trim().replace(/^"(.*)"$/, '$1')));
 }
-function qlNum(s) { if (s == null) return null; const x = String(s).replace(/[\s ]/g, '').replace(/,/g, '.'); return /^-?\d+(\.\d+)?$/.test(x) ? parseFloat(x) : null; }
+function qlNum(s) { if (s == null) return null; const x = String(s).replace(/[\s ]/g, '').replace(/,/g, '.'); return /^-?\d+(\.\d+)?$/.test(x) ? Math.max(-1e7, Math.min(1e7, parseFloat(x))) : null; }
 // Roolit: skip, code, name, qty, unit, loc (sijainti sarakkeena, solussa määrä), locname (sijainti rivillä)
 function qlGuess(grid) {
   const n = grid.reduce((m, r) => Math.max(m, r.length), 0), roles = [], H = [
@@ -1651,7 +1652,7 @@ function qlMatch(name, leaves) {
     if (d.xadd != null) { const tr = trade(d.xadd); if (!tr || !t.value || !RES.some(r => r.id === t.value)) return; pushUndo(snapshot()); tr.extra = (tr.extra || []).concat([{ res: t.value, n: 1 }]); render(); return; }
     if (d.xn != null) { const tr = trade(d.xn); if (!tr) return; const main = resIdOf(tr), ex = (tr.extra || []).filter(x => x.res !== main), x = ex[+d.xi], v = +t.value; if (!x || !(v > 0)) return; pushUndo(snapshot()); x.n = Math.round(v * 100) / 100; tr.extra = ex; render(); }
   });
-  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId });
+  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, stateObj: () => stateObj() });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
@@ -2538,7 +2539,7 @@ function qlMatch(name, leaves) {
     if (mode === 'append') { ltOp(() => { LT = LT.concat(nodes); }); return; }
     pushUndo(snapshot());
     LT = normTree(nodes); syncLocs();
-    lines.forEach(l => { if (!l.flat && LOCS.length) { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.ov = {}; l.total = null; } });
+    lines.forEach(l => { if (!l.flat && LOCS.length) { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.ov = {}; l.total = null; delete l.skip; } });
     pruneDeps(); selId = null; lines.forEach(fit); render();
   }
   function ltEdit(a, i) {
@@ -2632,7 +2633,7 @@ function qlMatch(name, leaves) {
   });
   side.addEventListener('change', e => {
     const f = e.target.dataset.field; if (!f) return;
-    const id = e.target.dataset.id, v = parseFloat(e.target.value), txt = String(e.target.value).trim();
+    const id = e.target.dataset.id, v = Math.max(-1e7, Math.min(1e7, parseFloat(e.target.value))), txt = String(e.target.value).trim();
     pushUndo(snapshot());
     if (f === 'deprigid') { const dd = deps.find(x => String(x.id) === String(id)); if (dd) dd.rigid = e.target.checked; }
     else if (f === 'mdl-m' || f === 'mdl-i' || f === 'mdl-u') {
@@ -2663,7 +2664,7 @@ function qlMatch(name, leaves) {
     else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, r1(v) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }
     else if (f === 'gap-v') { const l = byId(id); if (l && isFinite(v)) { l.gap = clamp(r1(v), -30, 60); fit(l); } }
     else if (f === 'tq-v') { const l = byId(id); if (l && v > 0 && !l.flat) { if (l.lockQ != null) { l.qty = effQty(l); l.lockQ = null; } ovOf(l, e.target.dataset.loc).q = v; fit(l); } }
-    else if (f === 'tdur-v') { const l = byId(id); if (l && v >= MIN_D) { releaseTotal(l); ovOf(l, e.target.dataset.loc).d = r1(v); fit(l); } }
+    else if (f === 'tdur-v') { const l = byId(id); if (l && v >= MIN_D) { releaseTotal(l); ovOf(l, e.target.dataset.loc).d = Math.min(N_DAYS, r1(v)); fit(l); } }
     else if (f === 'tsh-v') { const l = byId(id); if (l && isFinite(v)) { releaseTotal(l); ovOf(l, e.target.dataset.loc).shift = clamp(r1(v), -30, 60); fit(l); } }
     else if (f === 'qty' || f === 'prod') { const l = byId(id); if (l && v > 0) l[f] = v; }
     else if (f === 'apct' || f === 'aas' || f === 'aae') {

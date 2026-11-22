@@ -1,4 +1,5 @@
-res/
 *.png
 backup-*.html
+fz/
 node_modules/
+res/
