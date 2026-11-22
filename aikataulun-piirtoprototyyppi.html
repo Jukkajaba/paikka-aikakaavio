@@ -1249,7 +1249,7 @@ function qlMatch(name, leaves) {
     if (!gAncC || gAncC.lt !== LT || gAncC.n !== LT.length) { const m = new Map(), byId = new Map(LT.map(n => [n.id, n])); gAncC = { lt: LT, n: LT.length, m: m, byId: byId }; }
     let c = gAncC.m.get(locId); if (c) return c;
     c = []; const by = gAncC.byId; let q = by.get(locId); const leaf = q; q = q && q.par ? by.get(q.par) : null; while (q) { c.unshift(q); q = q.par ? by.get(q.par) : null; }
-    c = { A: c, leaf: leaf ? leaf.name : null }; gAncC.m.set(locId, c); return c;
+    c = { A: c, get leaf() { return leaf ? leaf.name : null; } }; gAncC.m.set(locId, c); return c;
   }
   function pushLineRows(rows, l, lvl, pg) {
     let ts = tasks(l); const t = trade(l.trade), key = 'L' + l.id, closed = !!gClosed[key], mx = t.maxCrew;
@@ -2486,8 +2486,8 @@ function qlMatch(name, leaves) {
   }
   function ltEdit(a, i) {
     const n = LT[i], e = ltEnd(i);
-    if (a === 'locchild') { const c = { id: uid('l'), name: 'Sijainti', share: 1, par: n.id }, wasLeaf = e === i + 1; LT.splice(e, 0, c); pcol.delete(n.id); const r = {}; if (wasLeaf) r[n.id] = [c.id]; return r; }
-    if (a === 'locsib') { LT.splice(e, 0, { id: uid('l'), name: 'Sijainti', share: 1, par: n.par }); return {}; }
+    if (a === 'locchild') { const c = { id: uid('l'), name: 'Sijainti', share: 1, par: n.id }, wasLeaf = e === i + 1; const last = LT[e - 1]; LT.splice(e, 0, c); pcol.delete(n.id); const r = {}; if (wasLeaf) r[n.id] = [c.id]; else r[last.id] = [last.id, c.id]; return r; }
+    if (a === 'locsib') { const last = LT[e - 1], c = { id: uid('l'), name: 'Sijainti', share: 1, par: n.par }; LT.splice(e, 0, c); const r = {}; r[last.id] = [last.id, c.id]; return r; }
     if (a === 'locsplit') { if (e !== i + 1) return false; const half = Math.round(n.share / 2 * 1000) / 1000, nl = { id: uid('l'), name: n.name + ' B', share: half, par: n.par }; n.name = n.name + ' A'; n.share = half; LT.splice(i + 1, 0, nl); const r = {}; r[n.id] = [n.id, nl.id]; return r; }
     if (a === 'locdel') { const rm = new Set(LT.slice(i, e).map(x => x.id)); if (!LT.some((x, q) => (q < i || q >= e) && !LT.some(y => y.par === x.id))) return false; LT.splice(i, e - i); return {}; }
     if (a === 'locup' || a === 'locdown') {
