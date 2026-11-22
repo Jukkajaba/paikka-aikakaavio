@@ -733,7 +733,7 @@ function wouldCycle(deps, a, b, lns) {
 // Laskenta tehdään edelleen työpäivinä (päiväindeksi 0..N_DAYS). Kalenteri muuntaa työpäivän kalenteripäiväksi (piirto, päivämäärät)
 // ja takaisin. Oletuskalenteri (ma–pe, ei pyhiä) tuottaa täsmälleen saman kuin ennen kalenteria.
 const DOW = ['ma', 'ti', 'ke', 'to', 'pe', 'la', 'su'], DAY_MS = 86400000;
-const CAL_DEF = () => ({ start: '2027-01-04', wk: [1, 1, 1, 1, 1, 0, 0], hol: false, hpd: 8, ex: [] });
+const CAL_DEF = () => ({ start: '2027-01-04', wk: [1, 1, 1, 1, 1, 0, 0], hol: false, hpd: 8, ex: [], sw: false });
 let CAL = CAL_DEF(), calVer = 1, CC = null, CCver = -1;
 function isoMs(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m) return null; const t = Date.UTC(+m[1], +m[2] - 1, +m[3]), d = new Date(t); return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && +m[1] >= 1990 && +m[1] <= 2100 ? t : null; }
 const msIso = ms => new Date(ms).toISOString().slice(0, 10);
@@ -749,7 +749,7 @@ function fiHolidays(y) { // Suomen pyhät ja rakennusalan käytännön vapaat (j
   return _holC[y] = H;
 }
 function calNorm(c) { // tarkistaa ja täydentää kalenterin: virheellinen osa korvataan oletuksella
-  const d = CAL_DEF(), o = { start: isoMs(c && c.start) != null ? c.start : d.start, wk: d.wk.slice(), hol: !!(c && c.hol), hpd: c && c.hpd >= 1 && c.hpd <= 24 ? Math.round(c.hpd * 4) / 4 : d.hpd, ex: [] };
+  const d = CAL_DEF(), o = { start: isoMs(c && c.start) != null ? c.start : d.start, wk: d.wk.slice(), hol: !!(c && c.hol), sw: !!(c && c.sw), hpd: c && c.hpd >= 1 && c.hpd <= 24 ? Math.round(c.hpd * 4) / 4 : d.hpd, ex: [] };
   if (c && Array.isArray(c.wk) && c.wk.length === 7) { const w = c.wk.map(x => x ? 1 : 0); if (w.some(x => x)) o.wk = w; }
   if (c && Array.isArray(c.ex)) c.ex.slice(0, 200).forEach(x => { const a = x && isoMs(x.from), b = x && isoMs(x.to != null ? x.to : x.from); if (a != null && b != null && a <= b) o.ex.push({ from: msIso(a), to: msIso(b), work: !!x.work, name: String(x.name || '').slice(0, 40) }); });
   return o;
@@ -776,7 +776,7 @@ function c2w(c) { // kalenteripäivä (liukuluku) → työpäiväindeksi; vapaa 
   const d = Math.floor(c); return C.cum[d] + (C.isW[d] ? c - d : 0);
 }
 function calWeekC(w) { const dow = (new Date(cc().s0).getUTCDay() + 6) % 7; return w <= 0 ? 0 : (7 - dow) + 7 * (w - 1); } // viikon w alku kalenteripäivinä (viikko 0 = alkupäivän viikko)
-function calShadeRuns(c0, c1) { const C = cc(), a = Math.max(0, Math.floor(c0)), b = Math.min(C.isW.length, Math.ceil(c1)), out = []; let s = -1; for (let c = a; c < b; c++) { if (!C.isW[c]) { if (s < 0) s = c; } else if (s >= 0) { out.push([s, c]); s = -1; } } if (s >= 0) out.push([s, b]); return out; }
+function calShadeRuns(c0, c1) { const C = cc(), a = Math.max(0, Math.floor(c0)), b = Math.min(C.isW.length, Math.ceil(c1)), out = []; let s = -1; const dow0 = (new Date(C.s0).getUTCDay() + 6) % 7; for (let c = a; c < b; c++) { if (!C.isW[c] && (CAL.sw || CAL.wk[(dow0 + c) % 7])) { if (s < 0) s = c; } else if (s >= 0) { out.push([s, c]); s = -1; } } if (s >= 0) out.push([s, b]); return out; }
 function shadeSvg(xc, c0, c1, y, h, dayW) { if (dayW < 1.1) return ''; return calShadeRuns(c0, c1).map(r => '<rect x="' + xc(r[0]).toFixed(1) + '" y="' + y + '" width="' + ((r[1] - r[0]) * dayW).toFixed(1) + '" height="' + h + '" fill="var(--ink)" opacity=".07" pointer-events="none"/>').join('');  }
 function dateOfDay(k) { return cc().s0 + Math.round(wdOff(Math.max(0, Math.floor(k + 1e-9)))) * DAY_MS; }
 function fmtMs(ms) { const t = new Date(ms); return DOW[(t.getUTCDay() + 6) % 7] + ' ' + t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
@@ -2908,7 +2908,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '142';
+  const APP_BUILD = '143';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3046,10 +3046,11 @@ function qlMatch(name, leaves) {
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-cstart">Alkupäivä</label><input id="pj-cstart" class="txt" style="max-width:140px" type="date" value="' + esc(CAL.start) + '" data-cal="start"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label>Työpäivät</label><span>' + DOW.map((n, i) => '<label style="margin-right:6px"><input type="checkbox" data-cal="wk" data-i="' + i + '"' + (CAL.wk[i] ? ' checked' : '') + '> ' + n + '</label>').join('') + '</span></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="hol"' + (CAL.hol ? ' checked' : '') + '> Suomen pyhät vapaina</label></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="sw"' + (CAL.sw ? ' checked' : '') + '> Viikonloput harmaina</label></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-hpd">Työtunnit / pv</label><input id="pj-hpd" class="num" type="number" min="1" max="24" step="0.5" value="' + CAL.hpd + '" data-cal="hpd"></div>' +
       CAL.ex.map((x, i) => '<div class="row" style="border-top:0;padding-top:0"><span>' + esc(x.from) + (x.to !== x.from ? ' – ' + esc(x.to) : '') + ' · ' + (x.work ? 'työpäivä' : 'vapaa') + (x.name ? ' · ' + esc(x.name) : '') + '</span><button type="button" data-cal="exdel" data-i="' + i + '" aria-label="Poista poikkeus">×</button></div>').join('') +
       '<div class="row" style="border-top:0;padding-top:0"><input id="pj-exf" type="date" class="txt" style="max-width:120px"><input id="pj-ext" type="date" class="txt" style="max-width:120px"><select id="pj-exw"><option value="0">vapaa</option><option value="1">työ</option></select><input id="pj-exn" class="txt" style="max-width:80px" maxlength="24" placeholder="nimi"><button type="button" data-cal="exadd">Lisää poikkeus</button></div>' +
-      '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Vapaat päivät näkyvät harmaina, eikä työ etene niinä.</p>' +
+      '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Pyhät ja poikkeukset näkyvät harmaina (viikonloput valinnalla), eikä työ etene vapaina päivinä.</p>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-weeks">Kesto (vk)</label><input id="pj-weeks" class="num" type="number" min="4" max="260" value="' + N_WEEKS + '" data-pjweeks="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-target">Tavoite (vk)</label><input id="pj-target" class="num" type="number" min="1" max="' + N_WEEKS + '" value="' + target + '" data-pjtarget="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-tpl" title="Mallilinkkien osoitepohja">Mallin osoitepohja</label><input id="pj-tpl" class="txt" style="max-width:170px" type="text" maxlength="500" value="' + esc(mdlTpl) + '" data-pjtpl="1" placeholder="https://…{model}…{ids}"></div>' +
@@ -3101,6 +3102,7 @@ function qlMatch(name, leaves) {
       if (k === 'start') { if (!/^\d{4}-\d\d-\d\d$/.test(e.target.value)) { e.target.value = CAL.start; return; } c.start = e.target.value; }
       else if (k === 'wk') { c.wk[+e.target.dataset.i] = e.target.checked ? 1 : 0; if (!c.wk.some(x => x)) { e.target.checked = true; return; } }
       else if (k === 'hol') c.hol = e.target.checked;
+      else if (k === 'sw') c.sw = e.target.checked;
       else if (k === 'hpd') c.hpd = clamp(parseFloat(e.target.value) || 8, 1, 24);
       else return;
       pushUndo(snapshot()); setCal(c); render(); renderSub(); renderProj(); scheduleSave(); return;
