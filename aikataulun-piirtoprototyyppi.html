@@ -49,6 +49,10 @@ body {
   background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.45;
   padding-block: 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
+body.fit { padding-block: 8px; padding-left: 8px; padding-right: 8px; }
+body.fit .wrap { max-width: none; }
+body.fit .hint { display: none; }
+body.fit #ganttScroll { max-height: none; }
 .wrap { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 button, input, select { font: inherit; color: inherit; }
 button { background: var(--panel); border: 1px solid var(--grid2); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
@@ -289,6 +293,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <span class="tgt" title="Zoomaa aikaa (myös Ctrl + rullaus)"><button id="zOut" type="button" aria-label="Zoomaa ulos">−</button> <button id="zIn" type="button" aria-label="Zoomaa sisään">+</button> <button id="zFit" type="button" title="Näytä koko projekti">Koko</button></span>
       <label class="tgt">Rivit <select id="rowSel"><option value="c">Tiivis</option><option value="n">Normaali</option><option value="w">Väljä</option></select></label>
       <button id="helpBtn" type="button" class="chip" aria-pressed="false" title="Näytä tai piilota ohjetekstit">Ohje</button>
+      <button id="fitBtn" type="button" class="chip" aria-pressed="false" title="Sovita näkymä koko näytön kokoiseksi: leveä asettelu ja kaavion korkeus ikkunan mukaan">Sovita näyttöön</button>
       <button id="depToggle" type="button" class="chip" aria-pressed="true">Riippuvuudet</button>
       <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Resurssit-paneeli: resurssityypit, työlajien resurssit ja resurssikuvaaja">Resurssit</button>
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
@@ -1094,7 +1099,7 @@ function qlMatch(name, leaves) {
     if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     const hist = histogram(lines, hRes), histN = hist.reduce((q, x) => q + x.length, 0), hr = resById(hRes);
     resOn = resMode === 'on' || (resMode === 'auto' && histN <= 15000); // hyvin isoissa aikatauluissa resurssit ovat oletuksena piilossa
-    const rowH = clamp(Math.floor(330 / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round(46 * ROWF[gRowK])), hy = CAL.ax === 'wd' ? 12 : 0, TOP = 30 + hy, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
+    const avail = gFit ? Math.max(330, window.innerHeight - (wrap.getBoundingClientRect().top + window.scrollY) - 30 - 12 - 52 - (resOn ? 88 : 0)) : 330, rowH = clamp(Math.floor(avail / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round((gFit ? 90 : 46) * ROWF[gRowK])), hy = CAL.ax === 'wd' ? 12 : 0, TOP = 30 + hy, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
     G = { LEFT: LEFT, dayW: dayW, rowH: rowH, TOP: TOP, bodyH: bodyH, L: L, rm: RM, rows: VR ? VR.rows : null, W: W, visD: visD, RIGHT: RIGHT };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
     { const need = visD < calLen(); fH.hidden = !need; if (need) { const cw = fH.clientWidth || W; fHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(fH.scrollLeft - sl) > 1) { fSyncing = true; fH.scrollLeft = sl; } } }
@@ -1297,11 +1302,11 @@ function qlMatch(name, leaves) {
   const FLOW_HINT = hintEl.textContent;
   const GANTT_HINT = 'Gantt: Valitse rivi klikkaamalla. Kaksoisklikkaa rivin nimeä muokataksesi sitä: Enter tallentaa ja siirtyy seuraavalle riville. + Tehtävä ja + Ylätehtävä lisäävät uuden rivin valitun rivin alapuolelle. Ylätehtävä kokoaa tehtäviä yhteen, ja ▸/▾ avaa tai sulkee ryhmän. Siirrä riviä vetämällä sen nimestä, ja pudota se ylätehtävän päälle liittääksesi sen ryhmään. Vedä palkkia siirtääksesi sitä ja palkin oikeaa reunaa muuttaaksesi kestoa. Ylätehtävän oikean reunan veto muuttaa alatehtävien kestoja, kun Tehtävä-paneelissa on päällä Kokonaiskesto ohjaa. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle. Samalla tavalla nuolen vetäminen sivusuunnassa muuttaa viivettä, ja nuolen päätypallon voi vetää toiselle riville. Delete poistaa valitun riippuvuuden. Riippuvuudet näkyvät, kun Riippuvuudet-painike on päällä. Tavoite, Tilanne ja Ennuste näkyvät vain, kun niiden paneeli on auki.';
   const VKEY = 'aik-nakyma-v1';
-  let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
+  let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
-  try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); } } catch (err) { }
+  try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
   let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
-  const saveView = () => { try { localStorage.setItem(VKEY, JSON.stringify({ view: view, group: gGroup, vis: gVisW })); } catch (err) { } try { scheduleSave(); } catch (err) { } };
+  const saveView = () => { try { localStorage.setItem(VKEY, JSON.stringify({ view: view, group: gGroup, vis: gVisW, fit: gFit })); } catch (err) { } try { scheduleSave(); } catch (err) { } };
 
   // baseline: jäädytetty kopio tehtävien ajoista. baselines[] = {id, name, date, t: {viivanId: [[sijaintiId, alku, loppu], ...]}}; blShow = näytettävän id
   const curBl = () => (vis.bl && baselines.find(b => b.id === blShow)) || null; // näkyy vain, kun Baseline-paneeli on auki
@@ -1532,6 +1537,7 @@ function qlMatch(name, leaves) {
     if (CAL.ax !== 'wd') hp.push('<text class="ax" x="' + (LEFT + 3) + '" y="11">' + axUnit() + '</text>');
     hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
     gHead.setAttribute('width', W); gHead.setAttribute('height', HEAD); gHead.setAttribute('viewBox', '0 0 ' + W + ' ' + HEAD); gHead.innerHTML = hp.join('');
+    gScroll.style.maxHeight = gFit ? Math.max(260, Math.round(window.innerHeight - (gScroll.getBoundingClientRect().top + window.scrollY) - 52)) + 'px' : '';
     gSpacer.style.height = Math.max(gRows.length, 2) * rowH + 'px';
     drawGanttBody();
   }
@@ -2065,6 +2071,7 @@ function qlMatch(name, leaves) {
   vGantt.addEventListener('click', () => setView('gantt'));
   gSel.addEventListener('change', () => { gGroup = gSel.value === 'loc' ? 'loc' : 'trade'; saveView(); gScroll.scrollTop = 0; renderGantt(); refreshLvl(); });
   applyView();
+  { const fb = document.getElementById('fitBtn'), setFit = () => { document.body.classList.toggle('fit', gFit); fb.setAttribute('aria-pressed', String(gFit)); }; setFit(); fb.addEventListener('click', () => { gFit = !gFit; setFit(); saveView(); needRoom = true; render(); }); }
 
   function lockBtn(act, id, on, lblOn, lblOff, titleOn, titleOff) {
     const svg = on ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>' : '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 4.8-1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
@@ -3044,7 +3051,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '149';
+  const APP_BUILD = '150';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
