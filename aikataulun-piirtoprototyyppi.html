@@ -851,12 +851,24 @@ function qlMatch(name, leaves) {
   const depCol = (d, slack) => (d.lag || 0) > 1e-9 || (!d.rigid && slack > 1e-9) ? 'var(--dep)' : 'var(--dep2)';
   function depGeom(d) {
     const la = byId(d.a.l), lb = byId(d.b.l); if (!la || !lb || la.flat || lb.flat) return null;
-    const ta = tasks(la), tb = tasks(lb), dal = refLoc(lines, d.a, 'a'), dbl = refLoc(lines, d.b, 'b'), ia = ta.findIndex(t => t.locId === dal), ib = tb.findIndex(t => t.locId === dbl);
+    const ra = repOf(la), rb = repOf(lb); if (ra.grp && ra.grp === rb.grp) return null; // saman suljetun ylätehtävän sisäinen riippuvuus ei näy
+    const ta = ra.ts, tb = rb.ts, dal = refLoc(lines, d.a, 'a'), dbl = refLoc(lines, d.b, 'b'), ia = ta.findIndex(t => t.locId === dal), ib = tb.findIndex(t => t.locId === dbl);
     if (ia < 0 || ib < 0) return null;
-    const sa = segsOf(la)[ia], sb = segsOf(lb)[ib]; if (!sa || !sb) return null;
+    const sa = ra.segs[ia], sb = rb.segs[ib]; if (!sa || !sb) return null;
     return { ax: sa.x1, ay: sa.y1, bx: sb.x0, by: sb.y0, viol: tb[ib].s < ta[ia].e, slack: tb[ib].s - (ta[ia].e + (d.lag || 0)) };
   }
-  const vlines = () => G && G.rm ? lines.filter(l => !l.flat && tasks(l).some(t => G.rm[t.loc] >= 0)) : lines.filter(l => !l.flat);
+  // suljettu ylätehtävä (Ganttin ▸/▾) näkyy paikka-aikakaaviossa yhtenä yhteenvetoviivana
+  const grpClosedOf = l => { const g = !l.flat && l.grp ? groups.find(q => q.id === l.grp) : null; return g && gClosed['K' + g.id] ? g : null; };
+  function grpSummary(g) {
+    const ck = _tc ? 'G' + g.id : null; if (ck && _tc.has(ck)) return _tc.get(ck);
+    const m = new Map(); let asc = true, first = true;
+    lines.forEach(l => { if (l.flat || l.grp !== g.id) return; if (first) { asc = range(l).dir >= 0; first = false; } tasks(l).forEach(t => { const o = m.get(t.locId); if (!o) m.set(t.locId, { loc: t.loc, locId: t.locId, s: t.s, e: t.e, name: '' }); else { o.s = Math.min(o.s, t.s); o.e = Math.max(o.e, t.e); } }); });
+    const ts = [...m.values()].sort((a, b) => asc ? a.loc - b.loc : b.loc - a.loc), r = { g: g, ts: ts, asc: asc };
+    if (ck) _tc.set(ck, r); return r;
+  }
+  const repOf = l => { const g = grpClosedOf(l); if (g) { const s = grpSummary(g); return { ts: s.ts, segs: segsOfTs(s.ts, s.asc), grp: g }; } return { ts: tasks(l), segs: segsOf(l), grp: null }; };
+  const gvl = () => groups.filter(g => gClosed['K' + g.id]).map(grpSummary).filter(s => s.ts.length && (!G || !G.rm || s.ts.some(t => G.rm[t.loc] >= 0)) && lines.some(l => !l.flat && l.grp === s.g.id));
+  const vlines = () => (G && G.rm ? lines.filter(l => !l.flat && tasks(l).some(t => G.rm[t.loc] >= 0)) : lines.filter(l => !l.flat)).filter(l => !grpClosedOf(l));
   function nearestTask(P, maxD) {
     let best = null;
     vlines().forEach(l => {
@@ -1034,6 +1046,12 @@ function qlMatch(name, leaves) {
         }
       });
     });
+    gvl().forEach(s => {
+      const d = pathOf(null, s.ts), selG = selGrp === s.g.id && selId == null, n = lines.filter(l => !l.flat && l.grp === s.g.id).length;
+      if (selG) p.push('<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/>');
+      p.push('<path d="' + d + '" fill="none" stroke="#8d99a6" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>');
+      p.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" data-role="gbody" data-grp="' + esc(s.g.id) + '" style="cursor:pointer"><title>' + esc(s.g.name + ' (ylätehtävä, ' + n + ' tehtävää)\nKaksoisklikkaa avataksesi tehtävät') + '</title></path>');
+    });
     if (showDeps) {
       validDeps().forEach(d => {
         const g = depGeom(d); if (!g) return;
@@ -1081,6 +1099,11 @@ function qlMatch(name, leaves) {
       const t = trade(l.trade), c = crewOf(l), over = c > t.maxCrew, sg = segsOf(l, true), lp = labelPoint(sg, l.lblT != null ? l.lblT : 0.5), len = Math.hypot(lp.dx, lp.dy) || 1;
       const nx = lp.dy / len, ny = -lp.dx / len, ang = Math.atan2(lp.dy, lp.dx) * 180 / Math.PI, tx = lp.x + nx * 9, ty = lp.y + ny * 9;
       p.push('<text class="lbl" x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" text-anchor="middle" transform="rotate(' + ang.toFixed(1) + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')" style="fill:' + colorOf(l.trade) + ';cursor:grab" data-role="lbl" data-id="' + l.id + '">' + esc(t.name) + (over ? ' ▲' : '') + '</text>');
+    });
+    gvl().forEach(s => {
+      const sg = segsOfTs(s.ts, s.asc, true); if (!sg.length) return;
+      const lp = labelPoint(sg, 0.5), len = Math.hypot(lp.dx, lp.dy) || 1, nx = lp.dy / len, ny = -lp.dx / len, ang = Math.atan2(lp.dy, lp.dx) * 180 / Math.PI, tx = lp.x + nx * 10, ty = lp.y + ny * 10;
+      p.push('<text class="lbl" x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" text-anchor="middle" transform="rotate(' + ang.toFixed(1) + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')" style="fill:#8d99a6;font-weight:700;cursor:pointer" data-role="gbody" data-grp="' + esc(s.g.id) + '">' + esc(s.g.name) + ' ▸</text>');
     });
     if (showDeps) {
       validDeps().forEach(d => {
@@ -1505,7 +1528,7 @@ function qlMatch(name, leaves) {
   // ---- määräluettelon tuonti (liittämällä) ----
   const impLM = () => IMP.lm || (IMP.B && IMP.B.locNames.length ? 'use' : (LOCS.length ? 'jaa' : 'koko'));
   const impProd = i => IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd;
-  const IMP = { lm: null, grid: null, g: null, roles: [], locMap: {}, items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, B: null };
+  const IMP = { lm: null, grid: null, g: null, roles: [], locMap: {}, items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, cg: true, B: null };
   const impBox = document.createElement('div'); impBox.id = 'impBox';
   impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
@@ -1516,7 +1539,7 @@ function qlMatch(name, leaves) {
       impBox.querySelector('#impTxt').value = o.txt; IMP.grid = qlParse(o.txt); if (!IMP.grid.length) return;
       IMP.g = qlGuess(IMP.grid); if (Array.isArray(o.roles) && o.roles.length === IMP.g.roles.length) IMP.roles = o.roles.slice(); else IMP.roles = IMP.g.roles.slice();
       IMP.lm = o.lm || null; IMP.locMap = Object.assign({}, o.locMap); IMP.inc = Object.assign({}, o.inc); IMP.prod = Object.assign({}, o.prod); IMP.crew = Object.assign({}, o.crew); IMP.trade = Object.assign({}, o.trade);
-      IMP.dProd = o.dProd > 0 ? o.dProd : 10; IMP.dCrew = o.dCrew > 0 ? o.dCrew : 2;
+      IMP.dProd = o.dProd > 0 ? o.dProd : 10; IMP.dCrew = o.dCrew > 0 ? o.dCrew : 2; IMP.cg = o.cg !== false;
       impRebuild(); impDraw(); impSaved = o;
     } catch (err) { }
   }
@@ -1538,7 +1561,7 @@ function qlMatch(name, leaves) {
     if (lm === 'use' && B.locNames.length) {
       h += '<p class="ok" style="margin:2px 0">Valitse jokaiselle sijainnille vastine projektista, luo se uutena tai ohita se. Voit myös luoda sijainnit itse Sijainnit-paneelissa ensin. Rivit ilman sijaintia jaetaan projektin sijainteihin.</p><table>' + B.locNames.map(n => '<tr><td>' + esc(n) + '</td><td><select data-lm="' + esc(n) + '">' + opt('new', IMP.locMap[n], '+ Luo uusi sijainti') + opt('skip', IMP.locMap[n], 'Ohita') + LOCS.map(x => opt(x.id, IMP.locMap[n], x.name)).join('') + '</select></td></tr>').join('') + '</table>';
     }
-        h += '<h3>Suoritteet</h3><div class="row2">Oletustuottavuus <input class="num" id="impDP" type="number" min="0.1" step="any" value="' + IMP.dProd + '"> yks/hlö/pv · oletustyöryhmä <input class="num" id="impDC" type="number" min="1" step="1" value="' + IMP.dCrew + '"> hlö <button type="button" id="impApplyD">Aseta kaikille</button></div>';
+        h += '<h3>Suoritteet</h3><div class="row2">Oletustuottavuus <input class="num" id="impDP" type="number" min="0.1" step="any" value="' + IMP.dProd + '"> yks/hlö/pv · oletustyöryhmä <input class="num" id="impDC" type="number" min="1" step="1" value="' + IMP.dCrew + '"> hlö <button type="button" id="impApplyD">Aseta kaikille</button></div><div class="row2"><label title="Paikka-aikakaaviossa näkyy ylätehtävästä vain yksi viiva, kunnes avaat sen (kaksoisklikkaus tai Ganttin ▸)"><input type="checkbox" id="impCG"' + (IMP.cg ? ' checked' : '') + '> Näytä ylätehtävät suljettuina</label></div>';
     h += '<table><tr><th></th><th>Rakenne</th><th>Suorite</th><th>Yks.</th><th>Määrä</th><th>Tuottavuus</th><th>Hlö</th><th>Kesto</th><th>Työlaji</th><th>Huomiot</th></tr>' + IMP.items.map((it, i) => {
       const p = impProd(i), c = IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew, tr = IMP.trade[i] || 'new';
       return '<tr><td><input type="checkbox" data-ii="' + i + '"' + (IMP.inc[i] ? ' checked' : '') + '></td><td>' + esc(it.rak) + '</td><td>' + esc(it.name) + '</td><td>' + esc(it.unit) + '</td><td>' + Math.round(it.total * 100) / 100 + '</td><td><input class="num" type="number" min="0.1" step="any" data-ip="' + i + '" value="' + p + '"></td><td><input class="num" type="number" min="1" step="1" data-ic="' + i + '" value="' + c + '"></td><td>' + (it.total > 0 ? '<input class="num" type="number" min="0.1" step="any" style="width:64px" data-id2="' + i + '" value="' + Math.round(Math.max(0.1, it.total / p / c) * 10) / 10 + '"> pv' : '') + '</td><td><select data-it="' + i + '">' + opt('new', tr, 'Uusi') + TRADES.map(t => opt(t.id, tr, t.name)).join('') + '</select></td><td class="w">' + esc(it.warns.join('; ')) + '</td></tr>';
@@ -1563,10 +1586,10 @@ function qlMatch(name, leaves) {
       if (flat) { l.flat = true; l.lockC = crew; }
       else if (ids.length) { const ix = ids.map(k => leaves[k]), a = Math.min.apply(null, ix), b = Math.max.apply(null, ix); l.from = LOCS[a].id; l.to = LOCS[b].id; ids.forEach(k => { l.ov[k] = { q: mapped[k] }; }); { const sk = []; for (let q = a; q <= b; q++) if (!mapped[LOCS[q].id]) sk.push(LOCS[q].id); if (sk.length) l.skip = sk; } l.qty = total / ids.length; l.lockC = crew; }
       else { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.lockQ = total; l.lockC = crew; }
-      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; groups.push(g); } gmap[it.rak] = g; l.grp = g.id; }
+      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; groups.push(g); } gmap[it.rak] = g; l.grp = g.id; if (IMP.cg) gClosed['K' + g.id] = true; }
       lines.push(l); nl++;
     });
-    impSaved = { txt: impBox.querySelector('#impTxt').value, roles: IMP.roles.slice(), lm: IMP.lm, locMap: Object.assign({}, IMP.locMap), inc: Object.assign({}, IMP.inc), prod: Object.assign({}, IMP.prod), crew: Object.assign({}, IMP.crew), trade: Object.assign({}, IMP.trade), dProd: IMP.dProd, dCrew: IMP.dCrew };
+    impSaved = { txt: impBox.querySelector('#impTxt').value, roles: IMP.roles.slice(), lm: IMP.lm, locMap: Object.assign({}, IMP.locMap), inc: Object.assign({}, IMP.inc), prod: Object.assign({}, IMP.prod), crew: Object.assign({}, IMP.crew), trade: Object.assign({}, IMP.trade), dProd: IMP.dProd, dCrew: IMP.dCrew, cg: IMP.cg };
     lines.forEach(fit); selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
     impBox.classList.remove('on');
@@ -1636,6 +1659,7 @@ function qlMatch(name, leaves) {
     else if (d.ic != null) { IMP.crew[+d.ic] = Math.max(1, Math.round(+t.value || 1)); impDraw(); }
     else if (d.it != null) IMP.trade[+d.it] = t.value;
     else if (t.id === 'impDP') { IMP.dProd = Math.max(0.1, +t.value || 10); impDraw(); }
+    else if (t.id === 'impCG') IMP.cg = t.checked;
     else if (t.id === 'impDC') { IMP.dCrew = Math.max(1, Math.round(+t.value || 2)); impDraw(); }
   });
   // + ollessa valittuna sijaintirivi: lisää samalle viivalle seuraava sijainti (sama työlaji ja väri)
@@ -2291,11 +2315,12 @@ function qlMatch(name, leaves) {
   }
 
   // viivan tehtäväsegmentit (suoria vinoviivoja) ja niiden avulla nimilapun paikka
-  function segsOf(l, merged) {
-    const asc = range(l).dir >= 0, X = d => G.LEFT + (d - gOff) * G.dayW, Yt = i => G.TOP + (G.L - 1 - (G.rm ? G.rm[i] : i)) * G.rowH, Yb = i => G.TOP + (G.L - (G.rm ? G.rm[i] : i)) * G.rowH;
+  function segsOf(l, merged) { return segsOfTs(tasks(l), range(l).dir >= 0, merged); }
+  function segsOfTs(ts, asc, merged) {
+    const X = d => G.LEFT + (d - gOff) * G.dayW, Yt = i => G.TOP + (G.L - 1 - (G.rm ? G.rm[i] : i)) * G.rowH, Yb = i => G.TOP + (G.L - (G.rm ? G.rm[i] : i)) * G.rowH;
     const sg = t => ({ x0: X(t.s), y0: asc ? Yb(t.loc) : Yt(t.loc), x1: X(t.e), y1: asc ? Yt(t.loc) : Yb(t.loc) });
-    if (merged) return mergeRows(tasks(l), G.rm).map(sg);
-    return tasks(l).map(t => G.rm && G.rm[t.loc] < 0 ? null : sg(t)); // rajattujen sijaintien kohdalla null, indeksit täsmäävät tehtäviin
+    if (merged) return mergeRows(ts, G.rm).map(sg);
+    return ts.map(t => G.rm && G.rm[t.loc] < 0 ? null : sg(t)); // rajattujen sijaintien kohdalla null, indeksit täsmäävät tehtäviin
   }
   function labelPoint(sg, t) {
     let total = 0; sg.forEach(q => { q.len = Math.hypot(q.x1 - q.x0, q.y1 - q.y0); total += q.len; });
@@ -2321,6 +2346,7 @@ function qlMatch(name, leaves) {
   const dayAt = (x, mode) => clamp(Math[mode]((x - G.LEFT) / G.dayW + gOff), 0, N_DAYS);
   const locAt = y => { const r = clamp(G.L - 1 - Math.floor((y - G.TOP) / G.rowH), 0, G.L - 1); return LOCS[G.rows ? G.rows[r].a : r].id; };
 
+  let gLast = null; // kaksoisklikkaus havaitaan itse, koska render korvaa SVG:n klikkausten välissä
   svg.addEventListener('pointerdown', e => {
     if ((e.button !== 0 && e.button !== 1) || !G) return;
     const P = pt(e), el = e.target.closest ? e.target.closest('[data-role]') : null, role = el ? el.dataset.role : null;
@@ -2348,6 +2374,7 @@ function qlMatch(name, leaves) {
     }
     if (role === 'dep' || role === 'depend') { if (!ctrl) return; }
     selDep = null;
+    if (role === 'gbody') { const gid = el.dataset.grp, now = Date.now(); e.preventDefault(); if (gLast && gLast.id === gid && now - gLast.t < 450) { gLast = null; delete gClosed['K' + gid]; saveView(); render(); return; } gLast = { id: gid, t: now }; selGrp = gid; selId = null; selLoc = null; render(); return; }
     if (role === 'body' && e.shiftKey && !ctrl) {
       const l0 = byId(el.dataset.id), tb0 = l0 && el.dataset.loc != null ? tasks(l0).find(t => String(t.locId) === el.dataset.loc) : null, nt0 = l0 ? (tb0 ? { l: l0.id, loc: tb0.locId } : nearestTask(P, 24)) : null;
       if (l0 && nt0 && String(nt0.l) === String(l0.id)) {
