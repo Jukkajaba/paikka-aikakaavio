@@ -582,7 +582,8 @@ function violations(lines) {
     const byRank = {}; arr.forEach(x => { (byRank[x.rank] = byRank[x.rank] || []).push(x); });
     const ranks = Object.keys(byRank).map(Number).sort((a, b) => a - b); if (ranks.length < 2) continue;
     ranks.forEach(r => byRank[r].sort((a, b) => a.s - b.s));
-    for (let ri = 0; ri < ranks.length - 1; ri++) for (const x of byRank[ranks[ri]]) for (let rj = ri + 1; rj < ranks.length; rj++) { const ys = byRank[ranks[rj]]; for (let q = 0; q < ys.length && ys[q].s < x.e; q++) out.push({ loc: x.loc, a: x.id, b: ys[q].id, at: ys[q].s, until: x.e }); }
+    const sufMin = new Array(ranks.length + 1).fill(Infinity); for (let ri = ranks.length - 1; ri >= 0; ri--) sufMin[ri] = Math.min(sufMin[ri + 1], byRank[ranks[ri]][0].s); // myöhempien järjestysten aikaisin alku: jos se ei ole ennen x:n loppua, rikkomuksia ei ole
+    for (let ri = 0; ri < ranks.length - 1; ri++) for (const x of byRank[ranks[ri]]) { if (sufMin[ri + 1] >= x.e) continue; for (let rj = ri + 1; rj < ranks.length; rj++) { const ys = byRank[ranks[rj]]; for (let q = 0; q < ys.length && ys[q].s < x.e; q++) out.push({ loc: x.loc, a: x.id, b: ys[q].id, at: ys[q].s, until: x.e }); } }
   }
   return out.sort((p, q) => p.at - q.at);
 }
@@ -1083,6 +1084,7 @@ function qlMatch(name, leaves) {
   document.getElementById('grpBtn').addEventListener('click', () => { const allC = groups.length && groups.every(g => gClosed['K' + g.id]); groups.forEach(g => { if (allC) delete gClosed['K' + g.id]; else gClosed['K' + g.id] = true; }); saveView(); render(); });
   lvlSel.addEventListener('change', () => { const v = lvlSel.value; if (v === 'c') return; lcol.clear(); Object.keys(gClosed).forEach(k => { if (/^L\d+$/.test(k) || k.indexOf('N') >= 0) delete gClosed[k]; }); const k = +v; if (v === 'x') lines.forEach(l => { if (!l.flat) gClosed['L' + l.id] = true; }); else if (k > 0) ltLevels().at(k).forEach(id => lcol.add(id)); saveView(); render(); if (vis.locs) renderLocs(); });
   function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { renderResPanel(); } catch (err) { } _tc = new Map(); const _t0 = performance.now(); try { renderInner(); } finally { _tc = null; window.__rms = Math.round(performance.now() - _t0); } try { panel.querySelectorAll('[data-partial]').forEach(x => { x.indeterminate = true; }); } catch (err) { } PH('end'); refreshLvl(); try { renderWelcome(); } catch (err) { } const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
+  let lcache = new Map();
   function renderInner() {
     if (needRoom) { needRoom = false; gEnsureRoom(); }
     PH('prep'); ensureOrd();
@@ -1145,19 +1147,28 @@ function qlMatch(name, leaves) {
       return { sx: X(a.s), sy: asc ? Ybot(a.loc) : Ytop(a.loc), ex: XE(b.e), ey: asc ? Ytop(b.loc) : Ybot(b.loc), asc: asc };
     }
     if (curBl()) vlines().forEach(l => { const a = blLine(l.id); if (a && a.length) p.push('<path d="' + pathOf(l, a) + '" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round" stroke-linejoin="round" opacity=".4" pointer-events="none"/>'); });
+    // viivakohtainen välimuisti: muuttumaton viiva käyttää edellisen piirron SVG-palaa (raahauksessa laskentaa vain raahatulle viivalle)
+    const gkey = [W, LEFT, RIGHT, TOP, rowH, gOff, visD, dayW, L, hy, calVer, N_DAYS, VR ? VR.rows.map(r => r.name + r.n).join('|') : '', LOCS.map(x => x.id + ':' + x.name + ':' + x.share).join('|')].join(';'), ncache = new Map();
     vlines().forEach(l => {
+      const tt = trade(l.trade), lk = gkey + '#' + JSON.stringify(l) + '#' + (l.id === selId) + colorOf(l.trade) + (tt ? tt.name + tt.maxCrew : ''), hit = lcache.get(l.id);
+      if (hit && hit.k === lk) { p.push(hit.h); ncache.set(l.id, hit); return; }
+      const q = [];
+      {
       const d = pathOf(l), col = colorOf(l.trade), sel = l.id === selId, e = ends(l), c = crewOf(l), t = trade(l.trade);
       const over = c > t.maxCrew;
-      if (sel) p.push('<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/>');
-      p.push('<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"' + (over ? ' stroke-dasharray="1 6"' : '') + '/>');
-      p.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" data-role="body" data-id="' + l.id + '"><title>' + esc(t.name + '\n' + tasks(l).map(k => LOCS[k.loc].name + (k.name ? ': ' + k.name : '') + '  ' + dateOnly(fmt(k.s)) + ' – ' + dateOnly(fmtE(k.e))).join('\n')) + '</title></path>');
+      if (sel) q.push('<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/>');
+      q.push('<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"' + (over ? ' stroke-dasharray="1 6"' : '') + '/>');
+      q.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" data-role="body" data-id="' + l.id + '"></path>'); // vihjeteksti (title) lisätään vasta kun hiiri on viivan päällä: pitkät tekstit eivät kasvata SVG:tä
       tasks(l).forEach(k => {
         if (!VR && k.name && (XE(k.e) - X(k.s)) > 44) {
           const nm = k.name.length > 18 ? k.name.slice(0, 17) + '…' : k.name;
-          p.push('<text class="tl" x="' + ((X(k.s) + XE(k.e)) / 2 + 6) + '" y="' + (Ytop(k.loc) + rowH / 2 - 5) + '" pointer-events="none">' + esc(nm) + '</text>');
+          q.push('<text class="tl" x="' + ((X(k.s) + XE(k.e)) / 2 + 6) + '" y="' + (Ytop(k.loc) + rowH / 2 - 5) + '" pointer-events="none">' + esc(nm) + '</text>');
         }
       });
+    }
+      const h = q.join(''); p.push(h); ncache.set(l.id, { k: lk, h: h });
     });
+    lcache = ncache;
     gvl().forEach(s => {
       const sq = grpSeg(s); if (!sq) return;
       const d = 'M' + sq.x0.toFixed(1) + ' ' + sq.y0.toFixed(1) + 'L' + sq.x1.toFixed(1) + ' ' + sq.y1.toFixed(1), selG = selGrp === s.g.id && selId == null, n = lines.filter(l => !l.flat && l.grp === s.g.id).length;
@@ -2720,6 +2731,12 @@ function qlMatch(name, leaves) {
   }
   svg.addEventListener('pointerup', () => finish(true));
   svg.addEventListener('pointercancel', () => finish(false));
+  svg.addEventListener('pointerover', e => {
+    const el = e.target; if (!el || !el.dataset || el.dataset.role !== 'body' || el.firstChild || el.tagName !== 'path') return;
+    const l = byId(el.dataset.id), tt = l && trade(l.trade); if (!l || !tt) return;
+    const ti = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    ti.textContent = tt.name + '\n' + tasks(l).map(k => LOCS[k.loc].name + (k.name ? ': ' + k.name : '') + '  ' + dateOnly(fmt(k.s)) + ' – ' + dateOnly(fmtE(k.e))).join('\n'); el.appendChild(ti);
+  });
   svg.addEventListener('pointermove', e => {
     if (drag) return;
     const el = e.target.closest ? e.target.closest('[data-role="body"]') : null, id = el ? el.dataset.id : null;
@@ -3051,7 +3068,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '150';
+  const APP_BUILD = '151';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
