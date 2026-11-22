@@ -29,7 +29,7 @@ const INV = () => {
 (async () => {
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1400, height: 950 } }), errs = [], trace = [];
   p.on('pageerror', e => errs.push(e.message)); p.on('dialog', d => d.accept().catch(() => { }));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
   await p.evaluate(() => { window.confirm = () => true; window.alert = () => { }; window.prompt = () => ''; });
   const NUMV = ['0', '-3', '1', '2', '7', '25', '100', '1e9', '', '0.1', '3.5', '999999'];
   const TXT = ['Lohko', 'a'.repeat(40), '', 'Ö ä å', '<b>x</b>', '1.2'];

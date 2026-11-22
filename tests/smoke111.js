@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1400, height: 950 } }), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   const txt = "Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2\tKerros 3\n1\tRunko\t\t\t\t\t\n1.1\tElementit\t300\tm2\t100\t100\t100\n1.2\tKuilumuurit\t90\tm2\t30\t30\t30\n1.3\tOntelolaatat\t600\tm2\t200\t200\t200\n2\tJulkisivu\t\t\t\t\t\n2.1\tTiili\t300\tm2\t100\t100\t100";
   const gb = () => p.locator('#chart path[data-role="gbody"]').count();

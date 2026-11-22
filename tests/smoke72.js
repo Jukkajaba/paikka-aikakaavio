@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 const st=async()=>p.evaluate(()=>({h:Math.round(document.getElementById('chart').getBoundingClientRect().height),pressed:document.getElementById('resBtn').getAttribute('aria-pressed'),peak:/Huippuväki/.test(document.getElementById('summary').innerText)}));
 console.log('oletus',await st());
 await p.click('#resBtn');console.log('piilossa',await st());

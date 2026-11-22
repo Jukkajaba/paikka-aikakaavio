@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const pg = await b.newPage(); const errs = [];
   pg.on('pageerror', e => errs.push(e.message));
-  await pg.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html');
+  await pg.addInitScript(() => { window.__drawOn0 = true; }); await pg.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html');
   const vis = () => pg.evaluate(() => ({ hint: !document.getElementById('hint').hidden && getComputedStyle(document.getElementById('hint')).display !== 'none', pressed: document.getElementById('helpBtn').getAttribute('aria-pressed') }));
   console.log('alku', await vis());
   await pg.click('#helpBtn'); console.log('paalla', await vis());

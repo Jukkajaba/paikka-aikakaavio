@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const html=process.argv[2]||'aikataulun-piirtoprototyyppi.html';
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/'+html);await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/'+html);await p.waitForSelector('#chart path');
 await p.click('[data-ptog="locs"]');await p.click('#locCard summary');
 await p.fill('[data-ld="tl"]','1');await p.fill('[data-ld="rp"]','1');await p.fill('[data-ld="kr"]','25');await p.fill('[data-ld="as"]','0');
 await p.click('[data-act="locgen"][data-mode="replace"]');await p.waitForTimeout(200);

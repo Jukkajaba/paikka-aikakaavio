@@ -11,7 +11,7 @@ const stub=()=>{
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1400,height:900}});await ctx.addInitScript(stub);
 const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
 const url='file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html';
-await p.goto(url);await p.waitForSelector('#chart path');await p.waitForTimeout(500);
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto(url);await p.waitForSelector('#chart path');await p.waitForTimeout(500);
 await p.click('[data-ptog="locs"]');
 if(!(await p.locator('#ld-text').isVisible())){await p.evaluate(()=>{document.querySelectorAll('#locCard details').forEach(d=>d.open=true)});}
 await p.locator('#ld-text').fill('Talo A\n  Kerros 1\n    Asunto 1\n    Asunto 2\n  Kerros 2\n    Asunto 1\nTalo B\n  Kerros 1\n    Asunto 1\n    Asunto 2');

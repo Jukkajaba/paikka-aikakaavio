@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
 const pe=sel=>p.evaluate(s=>{const e=document.querySelector(s);return e?getComputedStyle(e).pointerEvents:null},sel);
 console.log('no ctrl pick/ball',await pe('#gantt [data-gr="gdeppick"]'),await pe('#gantt [data-gr="gdepend"]'));

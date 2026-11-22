@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message+(e.stack||'').split('\n')[1]));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('[data-ptog=bl]');await p.waitForTimeout(100);
 await p.fill('#bl-name','Sopimus');await p.click('[data-bl="save"]');await p.waitForTimeout(150);
 console.log('panel',(await p.textContent('#blCard')).slice(0,200).replace(/\s+/g,' '));

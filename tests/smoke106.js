@@ -12,7 +12,7 @@ const stub=()=>{
 (async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ viewport: { width: 1400, height: 900 } }); await ctx.addInitScript(stub);
   const p = await ctx.newPage(), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(600);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(600);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   await p.click('#resBtn'); await p.fill('#rp-new', 'Kaivinkone'); await p.click('[data-ract="add"]'); await p.waitForTimeout(300); await p.click('#resBtn');
   await p.click('#impBtn'); await p.fill('#impTxt', "Littera\tSuorite\tMäärä\tYksikkö\tK1\tK2\n1\tRak\t\t\t\t\n1.1\tLaatta\t200\tm2\t120\t80"); await p.click('#impParse');

@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
 const info=()=>p.evaluate(()=>({weeks:document.getElementById('pj-weeks').value,hidden:document.getElementById('ganttH').hidden,sl:document.getElementById('ganttH').scrollLeft,hw:document.getElementById('ganttHi').style.width,axis:[...document.querySelectorAll('#ganttHead text.ax')].map(t=>t.textContent).slice(-8).join(' ')}));
 console.log(await info());

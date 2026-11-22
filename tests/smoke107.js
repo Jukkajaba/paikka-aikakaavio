@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1500, height: 950 } }), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   await p.locator('#chart [data-role="body"]').first().click({ force: true }); await p.waitForTimeout(250);
   await p.click('#resBtn'); await p.waitForTimeout(250);

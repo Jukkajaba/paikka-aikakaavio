@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('#vGantt');await p.click('[data-ptog=st]');await p.waitForTimeout(300);
 const dark=()=>p.$$eval('#gantt rect[fill="#000"]',e=>e.length);
 const pcts=()=>p.$$eval('#stCard [data-field=apct]',e=>e.map(x=>x.value).join(','));

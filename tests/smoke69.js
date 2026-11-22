@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1300,height:900}})).newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.evaluate(()=>{window.__u=[];window.open=u=>{window.__u.push(u);return null;};});
 await p.click('#projBtn');await p.fill('#pj-tpl','https://viewer.example.com/open?m={model}&ids={ids}&t={task}');await p.press('#pj-tpl','Tab');
 const body=p.locator('#chart [data-role="body"]').first();

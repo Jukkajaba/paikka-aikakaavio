@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 const n=()=>p.$$eval('[data-role=dep]',e=>e.length);
 console.log('seed deps',await n());
 // find two segment points via a line: use nearestTask logic indirectly: pick body hits of line 1 (runko) and line 6 (pinta) mid-row 3

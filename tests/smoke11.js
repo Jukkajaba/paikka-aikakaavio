@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('#projBtn');await p.fill('#pj-weeks','156');await p.dispatchEvent('#pj-weeks','change');
 console.log('weeks',await p.inputValue('#pj-weeks'),'target max',await p.getAttribute('#pj-target','max'));
 await p.fill('#pj-weeks','5');await p.dispatchEvent('#pj-weeks','change');

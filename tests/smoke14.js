@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');await p.locator('#gantt [data-gi="0"]').first().click({position:{x:300,y:10},force:true});await p.click('[data-act="tctl"]');await p.waitForTimeout(150);
 const rowTxt=async i=>p.evaluate(i=>[...document.querySelectorAll('#gantt text.gc')].slice(i*4,i*4+4).map(t=>t.textContent).join(' '),i);
 const drag=async(sel,dx)=>{const bb=await p.locator(sel).boundingBox();const x=bb.x+bb.width/2,y=bb.y+bb.height/2;await p.mouse.move(x,y);await p.mouse.down();await p.mouse.move(x+dx/2,y);await p.mouse.move(x+dx,y);await p.mouse.up();};

@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('#vGantt');await p.waitForSelector('#gantt [data-gr]');
 const g=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gg')].map(t=>t.textContent.slice(0,t.textContent.length/2)).join(','));
 await p.selectOption('#lvlSel','x');

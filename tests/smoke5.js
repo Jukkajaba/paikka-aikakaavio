@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 await p.click('[data-ptog=list]');await p.click('[data-ptog=locs]');await p.click('#listCard .item >> nth=0');
 await p.click('[data-act=qlock]');
 console.log('locked',await p.getAttribute('[data-act=qlock]','aria-pressed'),await p.inputValue('#f-tqty'),await p.isDisabled('#f-qty'));

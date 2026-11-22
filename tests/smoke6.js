@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 const lbl=await p.$('[data-role=lbl][data-id="3"]');const bb=await lbl.boundingBox();
 console.log('before',bb.x|0,bb.y|0);
 await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await p.mouse.down();

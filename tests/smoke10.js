@@ -11,7 +11,7 @@ const stub=()=>{
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1200,height:900}});await ctx.addInitScript(stub);
 const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
 const url='file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html';
-await p.goto(url);await p.waitForSelector('#chart path');await p.waitForTimeout(300);
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto(url);await p.waitForSelector('#chart path');await p.waitForTimeout(300);
 console.log('writes on load',await p.evaluate(()=>window.__writes||0));
 
 await p.click('[data-ptog=list]');await p.click('#listCard .item >> nth=0');for(let i=0;i<3;i++) await p.keyboard.press('ArrowRight');

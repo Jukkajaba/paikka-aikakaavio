@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');await p.waitForSelector('#chart path');
 const rows=()=>p.evaluate(()=>[...document.querySelectorAll('#locCard .locrow')].length);
 const axis=()=>p.evaluate(()=>[...document.querySelectorAll('#chart text.ax')].map(t=>t.textContent).filter(t=>/Kerros|Asunto|Sijainti|Talo|Rappu/.test(t)).slice(0,6).join('|'));
 await p.click('[data-ptog="locs"]');console.log('alku rivit',await rows());

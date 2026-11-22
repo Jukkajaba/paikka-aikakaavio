@@ -2,7 +2,7 @@ const {chromium}=require('playwright');
 (async()=>{
 const b=await chromium.launch();const p=await b.newPage({viewport:{width:1200,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('console',m=>m.type()==='error'&&errs.push(m.text()));
-await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');
+await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://'+process.cwd()+'/aikataulun-piirtoprototyyppi.html');
 await p.waitForSelector('#chart path');
 const cnt=()=>p.$$eval('#listCard .item',e=>e.length);
 console.log('lines',await cnt());

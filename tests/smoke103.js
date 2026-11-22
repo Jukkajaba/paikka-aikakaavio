@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1400, height: 900 } }), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForTimeout(400);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForTimeout(400);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   await p.click('#vGantt'); await p.waitForTimeout(200);
   const sel = async y => { await p.locator('#ganttScroll').click({ position: { x: 120, y: y }, force: true }); await p.waitForTimeout(200); return p.evaluate(() => ({ m: (document.querySelector('#panel .meta b') || {}).textContent || '', n: document.querySelectorAll('#panel .task.sel').length, open: !!document.querySelector('#panel details[open]') })); };

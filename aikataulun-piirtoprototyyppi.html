@@ -138,7 +138,7 @@ body.help span.hlp { display: inline; }
   .fp-bar { cursor: default; }
 }
 .card { background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; padding: 14px; min-width: 0; }
-#chartWrap { padding: 8px 6px; }
+#chartWrap { padding: 8px 6px; position: relative; }
 #chart { display: block; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
 .fp-body h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .ph { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -203,6 +203,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #ganttWrap { padding: 8px 6px; position: relative; }
 .gadd { position: absolute; left: 12px; top: 10px; z-index: 5; display: flex; align-items: center; gap: 6px; }
 .gplus { padding: 0; line-height: 1; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+.gplus[aria-pressed=true] { background: var(--ink); color: #fff; border-color: var(--ink); }
 .gplus.big { width: 28px; height: 28px; font-size: 20px; }
 .gplus.small { width: 20px; height: 20px; font-size: 14px; }
 #ganttWrap[hidden], .chips[hidden] { display: none; }
@@ -289,7 +290,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
 
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
-    <section class="card" id="chartWrap"><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
+    <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
     <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddGrp" type="button" class="gplus small" title="Luo ylätehtävä valitun rivin alapuolelle" aria-label="Lisää ylätehtävä">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
@@ -2448,13 +2449,15 @@ function qlMatch(name, leaves) {
   const dayAt = (x, mode) => clamp(Math[mode](c2w((x - G.LEFT) / G.dayW + gOff)), 0, N_DAYS);
   const locAt = y => { const r = clamp(G.L - 1 - Math.floor((y - G.TOP) / G.rowH), 0, G.L - 1); return LOCS[G.rows ? G.rows[r].a : r].id; };
 
+  let drawOn = !!window.__drawOn0; // piirtotila: päällä vedolla luodaan tehtävä, muuten veto siirtää aikajanaa
+  { const cd = document.getElementById('cDraw'); const sync = () => { cd.setAttribute('aria-pressed', String(drawOn)); }; sync(); cd.addEventListener('click', () => { drawOn = !drawOn; sync(); toast(drawOn ? 'Piirtotila päällä: vedä kaavioon uusi tehtävä' : 'Piirtotila pois: veto siirtää aikajanaa'); }); window.__setDraw = v => { drawOn = !!v; sync(); }; }
   let gLast = null; // kaksoisklikkaus havaitaan itse, koska render korvaa SVG:n klikkausten välissä
   svg.addEventListener('pointerdown', e => {
     if ((e.button !== 0 && e.button !== 1) || !G) return;
     const P = pt(e), el = e.target.closest ? e.target.closest('[data-role]') : null, role = el ? el.dataset.role : null;
     const ctrl = e.ctrlKey || e.metaKey;
     if (role === 'lrow') return;
-    if (e.button === 1 || (!role && P.x >= G.LEFT && (P.y < G.TOP || P.y > G.TOP + G.bodyH))) {
+    if (e.button === 1 || ((!role || role === 'bg') && P.x >= G.LEFT && (P.y < G.TOP || P.y > G.TOP + G.bodyH || !drawOn))) {
       drag = { type: 'fpan', x0: e.clientX, off0: gOff, snap: snapshot() }; svg.setPointerCapture(e.pointerId); e.preventDefault(); return;
     }
     if (role === 'dep' && ctrl) {
@@ -2515,7 +2518,7 @@ function qlMatch(name, leaves) {
       fit(l); renderSoon(); return;
     }
     if (drag.type === 'deplag') { const d = deps.find(x => x.id === drag.id); if (d) { const nl = clamp(r1(drag.lag0 + wDx(G, svg, drag.x0, e.clientX)), -60, 60); if (nl !== drag.last) { drag.last = nl; d.rigid = true; d.lag = nl; renderSoon(); } } return; }
-    if (drag.type === 'fpan') { gSetOff(drag.off0 - (e.clientX - drag.x0) / G.dayW); return; }
+    if (drag.type === 'fpan') { if (Math.abs(e.clientX - drag.x0) > 3) drag.moved = true; gSetOff(drag.off0 - (e.clientX - drag.x0) / G.dayW); return; }
     if (drag.type === 'dep' || drag.type === 'depend') { drag.cur = P; renderSoon(); return; }
     if (drag.type === 'draw') {
       if (Math.hypot(P.x - drag.p0.x, P.y - drag.p0.y) > 8) {
@@ -2582,6 +2585,7 @@ function qlMatch(name, leaves) {
     if (commit && /^(body|hs|he|gmove|gend|fsmove)$/.test(drag.type)) absorbSlack(drag.id);
     if (commit && drag.type === 'ggmove') { drag.kids.forEach(absorbSlack); absorbSlackG(drag.id); }
     if (commit && drag.type === 'glmove') drag.kids.forEach(absorbSlack);
+    if (drag.type === 'fpan' && commit && !drag.moved) { selId = null; selLoc = null; selGrp = null; selDep = null; }
     if (!commit && drag.type !== 'draw') restore(drag.snap);
     else if (snapshot() !== drag.snap) pushUndo(drag.snap);
     if (drag.type === 'draw') { TRADES = TRADES.filter(x => !x.tmp || lines.some(q => q.trade === x.id)); if (!trade(drawTrade)) drawTrade = null; }
@@ -2920,7 +2924,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '145';
+  const APP_BUILD = '146';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

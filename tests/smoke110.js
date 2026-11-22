@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1400, height: 950 } }), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   // tuo määrät (lockC asetettu) ja muokkaa kokonaiskestoa
   await p.click('#impBtn'); await p.fill('#impTxt', "Suorite\tMäärä\tYks\tKerros 1\tKerros 2\nX\t400\tm2\t200\t200"); await p.click('#impParse'); await p.click('#impGo'); await p.waitForTimeout(300);

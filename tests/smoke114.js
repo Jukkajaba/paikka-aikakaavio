@@ -12,7 +12,7 @@ const stub=()=>{
 (async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ viewport: { width: 1400, height: 900 } }); await ctx.addInitScript(stub);
   const p = await ctx.newPage(), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(600);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(600);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   // uudemman version projekti: avautuu, mutta sitä ei tallenneta takaisin
   await p.evaluate(() => { const st = JSON.parse(JSON.stringify(__aik().stateObj())); st.v = 999; st.tulevaKentta = { a: 1 }; const o = JSON.parse(localStorage.getItem('stubdb') || '{}'); o['projects/pnew'] = { name: 'Tuleva', state: st, updated: new Date(Date.now() + 1000).toISOString() }; localStorage.setItem('stubdb', JSON.stringify(o)); });
