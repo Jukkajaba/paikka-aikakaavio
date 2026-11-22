@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
   await p.click('#projBtn'); await p.waitForTimeout(200);
   ok(await p.locator('[data-cal=start]').count() === 1, 'kalenteri-UI');
   ok((await sub()).indexOf('4.1.') > 0, 'oletusalku ' + await sub());
-  ok(await shade() === 0, 'viikonloput eivät oletuksena harmaina'); await p.check('[data-cal=sw]'); await p.waitForTimeout(150); ok(await shade() > 0, 'viikonloput harmaina valinnalla'); await p.uncheck('[data-cal=sw]');
+  ok(await shade() === 0, 'viikonloput eivät näy oletuksena'); { const L = await p.evaluate(() => [calLen(), N_DAYS]); ok(L[0] === L[1], 'ma-pe-aikajana ' + L); } await p.check('[data-cal=sw]'); await p.waitForTimeout(150); ok(await shade() > 0, 'viikonloput näkyvät valinnalla'); { const L = await p.evaluate(() => [calLen(), N_DAYS]); ok(L[0] > L[1], 'la-su-aikajana ' + L); } await p.uncheck('[data-cal=sw]');
   // pyhät päälle: loppiainen 6.1.2027 (ke) ei ole työpäivä
   const d0 = await p.evaluate(() => ({ s: __aik().stateObj().cal }));
   ok(d0.s.hol === false && d0.s.hpd === 8, 'oletus-cal');

@@ -763,20 +763,26 @@ function calWorks(ms, exr) {
 }
 function cc() { // johdetut taulukot: työpäivä → kalenteripäivä (w2c), kertymä (cum), onko työpäivä (isW)
   if (CC && CCver === calVer && CC.nd === N_DAYS) return CC;
-  const s0 = isoMs(CAL.start), exr = CAL.ex.map(x => [isoMs(x.from), isoMs(x.to), x.work]), w2c = [], cum = [0], isW = [];
-  for (let c = 0, k = 0; k <= N_DAYS && c < 40000; c++) { const w = calWorks(s0 + c * DAY_MS, exr); isW.push(w ? 1 : 0); cum.push(cum[c] + (w ? 1 : 0)); if (w) { w2c.push(c); k++; } }
-  CC = { s0: s0, w2c: w2c, cum: cum, isW: isW, CD: w2c[N_DAYS] != null ? w2c[N_DAYS] : N_DAYS * 7 / 5, nd: N_DAYS }; CCver = calVer; return CC;
+  const s0 = isoMs(CAL.start), exr = CAL.ex.map(x => [isoMs(x.from), isoMs(x.to), x.work]), w2c = [], cum = [0], isW = [], vcum = [0], vis = [], dow0 = (new Date(s0).getUTCDay() + 6) % 7;
+  for (let c = 0, k = 0; k <= N_DAYS && c < 40000; c++) { const w = calWorks(s0 + c * DAY_MS, exr), hid = !w && !CAL.sw && !CAL.wk[(dow0 + c) % 7]; isW.push(w ? 1 : 0); cum.push(cum[c] + (w ? 1 : 0)); vcum.push(vcum[c] + (hid ? 0 : 1)); if (!hid) vis.push(c); if (w) { w2c.push(c); k++; } }
+  const vpw = CAL.sw ? 7 : Math.max(1, CAL.wk.reduce((a, b) => a + b, 0));
+  CC = { vcum: vcum, vis: vis, vpw: vpw, s0: s0, w2c: w2c, cum: cum, isW: isW, CD: w2c[N_DAYS] != null ? w2c[N_DAYS] : N_DAYS * 7 / 5, nd: N_DAYS }; CCver = calVer; return CC;
 }
-const calLen = () => cc().CD; // aikajanan pituus kalenteripäivinä
+// Aikajanan koordinaatti u = näkyvät päivät: piilotetut viikoittaiset vapaapäivät (la–su, kun niitä ei näytetä) ovat 0 leveät
+const calVpw = () => cc().vpw; // näkyviä päiviä viikossa
+function c2u(c) { const C = cc(), n = C.isW.length; if (c <= 0) return c * C.vpw / 7; if (c >= n) return C.vcum[n] + (c - n) * C.vpw / 7; const d = Math.floor(c), hid = C.vcum[d + 1] === C.vcum[d]; return C.vcum[d] + (hid ? 0 : c - d); }
+function u2c(u) { const C = cc(), m = C.vis.length; if (u <= 0) return u * 7 / C.vpw; if (u >= m) return C.isW.length + (u - m) * 7 / C.vpw; const k = Math.floor(u); return C.vis[k] + (u - k); }
+const calLen = () => c2u(cc().CD); // aikajanan pituus näkyvinä päivinä
 function wdOff(k) { const A = cc().w2c; return k < 0 ? A[0] + k * 1.4 : k > N_DAYS ? A[N_DAYS] + (k - N_DAYS) * 1.4 : A[k]; } // työpäivän k alku kalenteripäivinä
-function w2cS(w) { const k = Math.floor(w + 1e-9); return wdOff(k) + Math.max(0, Math.min(1, w - k)); } // alkuhetki (kalenteripäivänä)
-function w2cE(e) { if (e <= 0) return wdOff(0) + e * 1.4; const k = Math.ceil(e - 1e-9) - 1; return wdOff(k) + Math.max(0, Math.min(1, e - k)); } // loppuhetki: päättyy työpäivän loppuun, ei seuraavan alkuun
-function c2w(c) { // kalenteripäivä (liukuluku) → työpäiväindeksi; vapaa päivä painuu seuraavan työpäivän alkuun
-  const C = cc(); if (c <= 0) return c * 5 / 7 + C.cum[0]; if (c >= C.CD) return N_DAYS + (c - C.CD) * 5 / 7;
+function w2cS(w) { const k = Math.floor(w + 1e-9); return c2u(wdOff(k) + Math.max(0, Math.min(1, w - k))); } // alkuhetki (kalenteripäivänä)
+function w2cE(e) { if (e <= 0) return c2u(wdOff(0) + e * 1.4); const k = Math.ceil(e - 1e-9) - 1; return c2u(wdOff(k) + Math.max(0, Math.min(1, e - k))); } // loppuhetki: päättyy työpäivän loppuun, ei seuraavan alkuun
+function c2w(u) { // aikajanan koordinaatti (liukuluku) → työpäiväindeksi; vapaa päivä painuu seuraavan työpäivän alkuun
+  const C = cc(), c = u2c(u); if (c <= 0) return c * 5 / 7 + C.cum[0]; if (c >= C.CD) return N_DAYS + (c - C.CD) * 5 / 7;
   const d = Math.floor(c); return C.cum[d] + (C.isW[d] ? c - d : 0);
 }
-function calWeekC(w) { const dow = (new Date(cc().s0).getUTCDay() + 6) % 7; return w <= 0 ? 0 : (7 - dow) + 7 * (w - 1); } // viikon w alku kalenteripäivinä (viikko 0 = alkupäivän viikko)
-function calShadeRuns(c0, c1) { const C = cc(), a = Math.max(0, Math.floor(c0)), b = Math.min(C.isW.length, Math.ceil(c1)), out = []; let s = -1; const dow0 = (new Date(C.s0).getUTCDay() + 6) % 7; for (let c = a; c < b; c++) { if (!C.isW[c] && (CAL.sw || CAL.wk[(dow0 + c) % 7])) { if (s < 0) s = c; } else if (s >= 0) { out.push([s, c]); s = -1; } } if (s >= 0) out.push([s, b]); return out; }
+function calWeekCal(w) { const dow = (new Date(cc().s0).getUTCDay() + 6) % 7; return w <= 0 ? 0 : (7 - dow) + 7 * (w - 1); }
+function calWeekC(w) { return c2u(calWeekCal(w)); } // viikon w alku kalenteripäivinä (viikko 0 = alkupäivän viikko)
+function calShadeRuns(u0, u1) { const C = cc(), out = [], a = Math.max(0, Math.floor(u2c(u0)) - 1), b = Math.min(C.isW.length, Math.ceil(u2c(u1)) + 1); for (let c = a; c < b; c++) { if (C.isW[c] || C.vcum[c + 1] === C.vcum[c]) continue; const s = C.vcum[c], l = out[out.length - 1]; if (l && l[1] === s) l[1] = s + 1; else out.push([s, s + 1]); } return out; }
 function shadeSvg(xc, c0, c1, y, h, dayW) { if (dayW < 1.1) return ''; return calShadeRuns(c0, c1).map(r => '<rect x="' + xc(r[0]).toFixed(1) + '" y="' + y + '" width="' + ((r[1] - r[0]) * dayW).toFixed(1) + '" height="' + h + '" fill="var(--ink)" opacity=".07" pointer-events="none"/>').join('');  }
 function dateOfDay(k) { return cc().s0 + Math.round(wdOff(Math.max(0, Math.floor(k + 1e-9)))) * DAY_MS; }
 function fmtMs(ms) { const t = new Date(ms); return DOW[(t.getUTCDay() + 6) % 7] + ' ' + t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
@@ -796,7 +802,7 @@ function actOf(l, k) { // k = tasks()-rivi
 }
 function pctOfTasks(items) { let d = 0, w = 0; items.forEach(q => { d += q.k.d; w += q.k.d * actOf(q.l, q.k).pct; }); return d ? w / d : 0; }
 const dateOnly = t => t.replace(/^(ma|ti|ke|to|pe) /, '');
-const weekOf = d => { const c = wdOff(Math.max(0, Math.floor(d + 1e-9))), w1 = calWeekC(1); return c < w1 ? 1 : 2 + Math.floor((c - w1) / 7); };
+const weekOf = d => { const c = wdOff(Math.max(0, Math.floor(d + 1e-9))), w1 = calWeekCal(1); return c < w1 ? 1 : 2 + Math.floor((c - w1) / 7); };
 // ---- määräluettelon tuonti: puhdas logiikka ----
 // Taulukko (liitetty Excelistä) -> sarakeroolit -> suoritteet (rakenne = ylätehtävä, suorite = viiva).
 function qlParse(text) {
@@ -1060,7 +1066,7 @@ function qlMatch(name, leaves) {
     { const lid = new Set(LOCS.map(x => x.id)); locHid.forEach(id => { if (!lid.has(id)) locHid.delete(id); }); }
     const VR = (lcol.size || locHid.size) ? viewRows(lcol, locHid) : null, L = VR ? VR.rows.length : L0, RM = VR ? VR.map : null;
     let labMax = 0; if (VR) VR.rows.forEach(r => { labMax = Math.max(labMax, r.name.length); }); else LOCS.forEach(x => { labMax = Math.max(labMax, x.name.length); }); labMax = Math.min(labMax, 30);
-    const LEFT = narrow ? 56 : clamp(Math.round(labMax * 6.4 + 22), 112, 210), RIGHT = 14, visD = Math.min(calLen(), Math.max(7, gVisW * 7)), dayW = (W - LEFT - RIGHT) / visD;
+    const LEFT = narrow ? 56 : clamp(Math.round(labMax * 6.4 + 22), 112, 210), RIGHT = 14, visD = Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw())), dayW = (W - LEFT - RIGHT) / visD;
     gOff = clamp(gOff, 0, Math.max(0, calLen() - visD));
     if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     const hist = histogram(lines, hRes), histN = hist.reduce((q, x) => q + x.length, 0), hr = resById(hRes);
@@ -1074,11 +1080,11 @@ function qlMatch(name, leaves) {
     PH('buildsvg'); const vio = violations(lines); PH('violations'); PH('hist');
     const p = [], lab = [];
     p.push('<defs><clipPath id="fclip"><rect x="' + LEFT + '" y="0" width="' + (W - LEFT - RIGHT) + '" height="' + H + '"/></clipPath></defs><g clip-path="url(#fclip)">');
-    const weekPx = dayW * 7, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
+    const weekPx = dayW * calVpw(), step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
     lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="18" text-anchor="end">vk</text>');
     p.push(shadeSvg(XC, gOff, gOff + visD, TOP, histTop + HH - TOP, dayW));
-    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / 7) + 1; w++) {
-      const wc = calWeekC(w); if (wc < gOff - 7) continue; if (wc > gOff + visD + 7) break;
+    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / calVpw()) + 2; w++) {
+      const wc = calWeekC(w); if (wc < gOff - calVpw()) continue; if (wc > gOff + visD + calVpw()) break;
       const x = XC(wc), major = w % step === 0;
       p.push('<line x1="' + x + '" x2="' + x + '" y1="' + (major ? 22 : TOP) + '" y2="' + (histTop + HH) + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .6) + '"/>');
       if (major && wc < cl) p.push('<text class="ax" x="' + (x + 3) + '" y="18">' + (w + 1) + '</text>');
@@ -1421,16 +1427,16 @@ function qlMatch(name, leaves) {
     gRows = buildGanttRows();
     const W = Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = 34, rowH = ROWH[gRowK], RIGHT = 14;
     const NAME = narrow ? 150 : 215, cw = narrow ? [] : [58, 58, 34, 34].concat(stOn() ? [34] : []).concat(curBl() ? [40] : []).concat(fcOn() ? [40] : []), colX = []; let cx = 12 + NAME; cw.forEach(w => { cx += w; colX.push(cx); });
-    const LEFT = cx + 10, visD = Math.min(calLen(), Math.max(7, gVisW * 7)), dayW = (W - LEFT - RIGHT) / visD;
+    const LEFT = cx + 10, visD = Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw())), dayW = (W - LEFT - RIGHT) / visD;
     gOff = clamp(gOff, 0, Math.max(0, calLen() - visD));
     gGeo = { W: W, LEFT: LEFT, RIGHT: RIGHT, dayW: dayW, rowH: rowH, NAME: NAME, colX: colX, narrow: narrow, visD: visD, blK: curBl() ? (stOn() ? 5 : 4) : -1, fcK: fcOn() ? 4 + (stOn() ? 1 : 0) + (curBl() ? 1 : 0) : -1 };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
     { const need = visD < calLen(); gH.hidden = !need; if (need) { const cw = gH.clientWidth || W; gHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(gH.scrollLeft - sl) > 1) { gSyncing = true; gH.scrollLeft = sl; } } }
     gIdx = {};
     gRows.forEach((r, i) => { if (r.nh) return; if (r.gk) gIdx['K|' + r.grp] = i; else if (r.g) gIdx[gGroup === 'trade' ? 'g|' + r.line : 'p|' + (r.locId == null ? 'none' : r.locId)] = i; else gIdx[r.line + '|' + r.locId] = i; });
-    const XC = c => LEFT + (c - gOff) * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), hp = [], weekPx = dayW * 7, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
-    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / 7) + 1; w++) {
-      const wc = calWeekC(w); if (wc < gOff - 7) continue; if (wc > gOff + visD + 7) break;
+    const XC = c => LEFT + (c - gOff) * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), hp = [], weekPx = dayW * calVpw(), step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
+    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / calVpw()) + 2; w++) {
+      const wc = calWeekC(w); if (wc < gOff - calVpw()) continue; if (wc > gOff + visD + calVpw()) break;
       const major = w % step === 0, x = XC(wc);
       hp.push('<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (major ? 14 : 26) + '" y2="' + HEAD + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '"/>');
       if (major && wc < cl) hp.push('<text class="ax" x="' + (x + 3).toFixed(1) + '" y="24">' + (w + 1) + '</text>');
@@ -1449,7 +1455,7 @@ function qlMatch(name, leaves) {
     const n = gRows.length, rowH = g.rowH, W = g.W, vh = gScroll.clientHeight || 560, st = gScroll.scrollTop;
     const first = Math.max(0, Math.floor(st / rowH) - 3), last = Math.min(n, Math.ceil((st + vh) / rowH) + 3), h = Math.max(2, last - first) * rowH, oy = first * rowH;
     gOy = oy;
-    const XC = c => g.LEFT + (c - gOff) * g.dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), p = [], cov = [], weekPx = g.dayW * 7, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
+    const XC = c => g.LEFT + (c - gOff) * g.dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), p = [], cov = [], weekPx = g.dayW * calVpw(), step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
     gSvg.style.top = oy + 'px'; gSvg.setAttribute('width', W); gSvg.setAttribute('height', h); gSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + h);
     if (!n) { gSvg.innerHTML = '<text class="gc" x="12" y="30">Ei viivoja. Piirrä viivat Paikka-aika-näkymässä.</text>'; return; }
     for (let i = first; i < last; i++) {
@@ -1458,8 +1464,8 @@ function qlMatch(name, leaves) {
       if (gRowSel(r) || (r.gk && r.grp === selGrp && selId == null)) p.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + rowH + '" fill="var(--ink)" opacity=".09"/>');
     }
     p.push(shadeSvg(XC, gOff, gOff + g.visD, 0, h, g.dayW));
-    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / 7) + 1; w++) {
-      const wc = calWeekC(w); if (wc < gOff - 7) continue; if (wc > gOff + g.visD + 7) break;
+    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / calVpw()) + 2; w++) {
+      const wc = calWeekC(w); if (wc < gOff - calVpw()) continue; if (wc > gOff + g.visD + calVpw()) break;
       const major = w % step === 0, x = XC(wc).toFixed(1);
       p.push('<line x1="' + x + '" x2="' + x + '" y1="0" y2="' + h + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .55) + '"/>');
     }
@@ -1558,7 +1564,7 @@ function qlMatch(name, leaves) {
     gRowClick(+el.dataset.gi, bx); gTap(+el.dataset.gi, bx);
   });
   // aikanäkymän vieritys: vaakavierityspalkki, hiiren pyörä (vaaka / Shift) ja tyhjän alueen veto
-  function gSetOff(v) { const m = Math.max(0, calLen() - Math.min(calLen(), Math.max(7, gVisW * 7))); const nv = clamp(v, 0, m); if (Math.abs(nv - gOff) < 1e-9) return; gOff = nv; if (view === 'gantt') renderGantt(); else render(); }
+  function gSetOff(v) { const m = Math.max(0, calLen() - Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw()))); const nv = clamp(v, 0, m); if (Math.abs(nv - gOff) < 1e-9) return; gOff = nv; if (view === 'gantt') renderGantt(); else render(); }
   gH.addEventListener('scroll', () => { if (gSyncing) { gSyncing = false; return; } if (!gGeo) return; gSetOff(gH.scrollLeft * gGeo.visD / (gH.clientWidth || 1)); });
   gWrap.addEventListener('wheel', e => {
     if (!gGeo || gGeo.visD >= calLen()) return;
@@ -1575,7 +1581,7 @@ function qlMatch(name, leaves) {
   function zoomVis(nw, frac) { // frac = kohdan suhteellinen sijainti näkymässä (0..1), pidetään paikallaan
     const geo = view === 'gantt' ? gGeo : G; if (!geo) return;
     const oldV = geo.visD, anchor = gOff + oldV * (frac == null ? .5 : frac);
-    gVisW = clamp(Math.round(nw), 4, Math.max(4, Math.min(260, N_WEEKS))); const nv = Math.min(calLen(), Math.max(7, gVisW * 7));
+    gVisW = clamp(Math.round(nw), 4, Math.max(4, Math.min(260, N_WEEKS))); const nv = Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw()));
     gOff = clamp(anchor - nv * (frac == null ? .5 : frac), 0, Math.max(0, calLen() - nv));
     saveView(); if (view === 'gantt') renderGantt(); else render();
   }
@@ -2908,7 +2914,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '143';
+  const APP_BUILD = '144';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3046,11 +3052,11 @@ function qlMatch(name, leaves) {
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-cstart">Alkupäivä</label><input id="pj-cstart" class="txt" style="max-width:140px" type="date" value="' + esc(CAL.start) + '" data-cal="start"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label>Työpäivät</label><span>' + DOW.map((n, i) => '<label style="margin-right:6px"><input type="checkbox" data-cal="wk" data-i="' + i + '"' + (CAL.wk[i] ? ' checked' : '') + '> ' + n + '</label>').join('') + '</span></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="hol"' + (CAL.hol ? ' checked' : '') + '> Suomen pyhät vapaina</label></div>' +
-      '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="sw"' + (CAL.sw ? ' checked' : '') + '> Viikonloput harmaina</label></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="sw"' + (CAL.sw ? ' checked' : '') + '> Näytä la–su aikajanalla</label></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-hpd">Työtunnit / pv</label><input id="pj-hpd" class="num" type="number" min="1" max="24" step="0.5" value="' + CAL.hpd + '" data-cal="hpd"></div>' +
       CAL.ex.map((x, i) => '<div class="row" style="border-top:0;padding-top:0"><span>' + esc(x.from) + (x.to !== x.from ? ' – ' + esc(x.to) : '') + ' · ' + (x.work ? 'työpäivä' : 'vapaa') + (x.name ? ' · ' + esc(x.name) : '') + '</span><button type="button" data-cal="exdel" data-i="' + i + '" aria-label="Poista poikkeus">×</button></div>').join('') +
       '<div class="row" style="border-top:0;padding-top:0"><input id="pj-exf" type="date" class="txt" style="max-width:120px"><input id="pj-ext" type="date" class="txt" style="max-width:120px"><select id="pj-exw"><option value="0">vapaa</option><option value="1">työ</option></select><input id="pj-exn" class="txt" style="max-width:80px" maxlength="24" placeholder="nimi"><button type="button" data-cal="exadd">Lisää poikkeus</button></div>' +
-      '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Pyhät ja poikkeukset näkyvät harmaina (viikonloput valinnalla), eikä työ etene vapaina päivinä.</p>' +
+      '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Aikajana näyttää oletuksena vain työviikon päivät. Pyhät ja poikkeukset näkyvät harmaina, eikä työ etene vapaina päivinä.</p>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-weeks">Kesto (vk)</label><input id="pj-weeks" class="num" type="number" min="4" max="260" value="' + N_WEEKS + '" data-pjweeks="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-target">Tavoite (vk)</label><input id="pj-target" class="num" type="number" min="1" max="' + N_WEEKS + '" value="' + target + '" data-pjtarget="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-tpl" title="Mallilinkkien osoitepohja">Mallin osoitepohja</label><input id="pj-tpl" class="txt" style="max-width:170px" type="text" maxlength="500" value="' + esc(mdlTpl) + '" data-pjtpl="1" placeholder="https://…{model}…{ids}"></div>' +
