@@ -28,6 +28,11 @@ const { chromium } = require('playwright');
   await p.click('#vGantt'); await p.waitForTimeout(300);
   await p.click('#vFlow'); await p.waitForTimeout(300);
   ok(await gb() === 1, 'state kept after view switch');
+  // suljettu viiva on yksi suora jana, ja Ylätehtävät-painike sulkee/avaa kaikki
+  await p.click('#grpBtn'); await p.waitForTimeout(250); ok(await gb() === 2, 'button closes all ' + await gb());
+  ok(await p.evaluate(() => [...document.querySelectorAll('#chart path[data-role="gbody"]')].every(e => (e.getAttribute('d').match(/L/g) || []).length === 1)), 'straight single segment');
+  await p.click('#grpBtn'); await p.waitForTimeout(250); ok(await gb() === 0, 'button opens all ' + await gb());
+  await p.click('#grpBtn'); await p.waitForTimeout(250); await p.locator('#chart path[data-role="gbody"]').first().click({ force: true }); const bx2 = await p.locator('#chart path[data-role="gbody"]').first().boundingBox(); await p.mouse.click(bx2.x + bx2.width / 2, bx2.y + bx2.height / 2); await p.mouse.click(bx2.x + bx2.width / 2, bx2.y + bx2.height / 2); await p.waitForTimeout(250);
   // riippuvuus avoimen ryhmän ja suljetun ryhmän välillä: ei virheitä, nuoli piirtyy ylätehtävän viivalle
   await p.click('#depBtn').catch(() => {});
   const pts = await p.evaluate(() => [...document.querySelectorAll('#chart path[data-role="body"]')].slice(-2).map(e => { const L = e.getTotalLength(), q = e.getPointAtLength(L * 0.5), m = e.getScreenCTM(); return { x: q.x * m.a + m.e, y: q.y * m.d + m.f }; }));

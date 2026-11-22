@@ -252,6 +252,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="toolbar">
     <div class="actions">
       <span class="seg" role="group" aria-label="Näkymä"><button id="vFlow" type="button" class="chip" aria-pressed="true">Paikka-aika</button><button id="vGantt" type="button" class="chip" aria-pressed="false">Gantt</button></span>
+      <button id="grpBtn" type="button" class="chip" aria-pressed="false" title="Sulje tai avaa kaikki ylätehtävät (esim. Runko yhtenä viivana)">Ylätehtävät</button>
       <label class="tgt" id="fCtl" title="Näytä sijainnit tiivistettynä: ylin taso = 1">Taso <select id="lvlSel"></select></label>
       <span class="fltwrap" id="fltWrap"><button id="fltBtn" type="button" class="chip" aria-haspopup="true" aria-expanded="false" aria-controls="fltPop">Näytä: Kaikki ▾</button><div id="fltPop" class="fltpop" role="dialog" aria-label="Rajaa näkyvät sijainnit" hidden><input id="fltQ" class="txt" type="search" placeholder="Hae sijaintia…" aria-label="Hae sijaintia" autocomplete="off"><div class="fltact"><button id="fltOnly" type="button">Vain hakutulokset</button><button id="fltAll" type="button">Näytä kaikki</button></div><div id="fltList" class="fltlist"></div></div></span>
       <span id="gCtl" hidden><label class="tgt">Ryhmittely <select id="gGroup"><option value="trade">Työlajin mukaan</option><option value="loc">Sijainnin mukaan</option></select></label></span>
@@ -863,10 +864,10 @@ function qlMatch(name, leaves) {
     const ck = _tc ? 'G' + g.id : null; if (ck && _tc.has(ck)) return _tc.get(ck);
     const m = new Map(); let asc = true, first = true;
     lines.forEach(l => { if (l.flat || l.grp !== g.id) return; if (first) { asc = range(l).dir >= 0; first = false; } tasks(l).forEach(t => { const o = m.get(t.locId); if (!o) m.set(t.locId, { loc: t.loc, locId: t.locId, s: t.s, e: t.e, name: '' }); else { o.s = Math.min(o.s, t.s); o.e = Math.max(o.e, t.e); } }); });
-    const ts = [...m.values()].sort((a, b) => asc ? a.loc - b.loc : b.loc - a.loc), r = { g: g, ts: ts, asc: asc };
+    const ts = [...m.values()].sort((a, b) => asc ? a.loc - b.loc : b.loc - a.loc), r = { g: g, ts: ts, asc: asc, s: ts.reduce((q, x) => Math.min(q, x.s), Infinity), e: ts.reduce((q, x) => Math.max(q, x.e), 0) };
     if (ck) _tc.set(ck, r); return r;
   }
-  const repOf = l => { const g = grpClosedOf(l); if (g) { const s = grpSummary(g); return { ts: s.ts, segs: segsOfTs(s.ts, s.asc), grp: g }; } return { ts: tasks(l), segs: segsOf(l), grp: null }; };
+  const repOf = l => { const g = grpClosedOf(l); if (g) { const s = grpSummary(g), sg = grpSeg(s); return { ts: s.ts.map(x => ({ loc: x.loc, locId: x.locId, s: s.s, e: s.e })), segs: s.ts.map(() => sg), grp: g }; } return { ts: tasks(l), segs: segsOf(l), grp: null }; };
   const gvl = () => groups.filter(g => gClosed['K' + g.id]).map(grpSummary).filter(s => s.ts.length && (!G || !G.rm || s.ts.some(t => G.rm[t.loc] >= 0)) && lines.some(l => !l.flat && l.grp === s.g.id));
   const vlines = () => (G && G.rm ? lines.filter(l => !l.flat && tasks(l).some(t => G.rm[t.loc] >= 0)) : lines.filter(l => !l.flat)).filter(l => !grpClosedOf(l));
   function nearestTask(P, maxD) {
@@ -911,6 +912,7 @@ function qlMatch(name, leaves) {
     let cur = allClosed ? 'x' : lcol.size ? 'c' : String(lv.max); for (let k = 1; k < lv.max; k++) if (lcol.size && eq(lcol, lv.at(k))) cur = String(k);
     const html = (gx ? '<option value="x">1. taso</option>' : '') + Array.from({ length: lv.max }, (x, i) => '<option value="' + (i + 1) + '">' + (i + 1 + (gx ? 1 : 0)) + '. taso</option>').join('') + (cur === 'c' ? '<option value="c">Mukautettu</option>' : '');
     if (lvlSel.dataset.h !== html) { lvlSel.innerHTML = html; lvlSel.dataset.h = html; }
+    { const gb = document.getElementById('grpBtn'); if (gb) { gb.disabled = !groups.length; gb.setAttribute('aria-pressed', String(groups.length > 0 && groups.every(g => gClosed['K' + g.id]))); } }
     lvlSel.value = cur; document.getElementById('fCtl').hidden = false; lvlSel.disabled = lv.max <= 1 && !gx; renderFlt();
   }
   // rajaus: näytettävät sijainnit (locHid = piilotetut lehtisijainnit)
@@ -972,6 +974,7 @@ function qlMatch(name, leaves) {
     if (allOn) x.leaves.forEach(id => hide.add(id)); else x.leaves.forEach(id => hide.delete(id));
     fltSet(hide);
   });
+  document.getElementById('grpBtn').addEventListener('click', () => { const allC = groups.length && groups.every(g => gClosed['K' + g.id]); groups.forEach(g => { if (allC) delete gClosed['K' + g.id]; else gClosed['K' + g.id] = true; }); saveView(); render(); });
   lvlSel.addEventListener('change', () => { const v = lvlSel.value; if (v === 'c') return; lcol.clear(); Object.keys(gClosed).forEach(k => { if (/^L\d+$/.test(k) || k.indexOf('N') >= 0) delete gClosed[k]; }); const k = +v; if (v === 'x') lines.forEach(l => { if (!l.flat) gClosed['L' + l.id] = true; }); else if (k > 0) ltLevels().at(k).forEach(id => lcol.add(id)); saveView(); render(); if (vis.locs) renderLocs(); });
   function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { renderResPanel(); } catch (err) { } _tc = new Map(); try { renderInner(); } finally { _tc = null; } try { panel.querySelectorAll('[data-partial]').forEach(x => { x.indeterminate = true; }); } catch (err) { } PH('end'); refreshLvl(); const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
   function renderInner() {
@@ -1047,7 +1050,8 @@ function qlMatch(name, leaves) {
       });
     });
     gvl().forEach(s => {
-      const d = pathOf(null, s.ts), selG = selGrp === s.g.id && selId == null, n = lines.filter(l => !l.flat && l.grp === s.g.id).length;
+      const sq = grpSeg(s); if (!sq) return;
+      const d = 'M' + sq.x0.toFixed(1) + ' ' + sq.y0.toFixed(1) + 'L' + sq.x1.toFixed(1) + ' ' + sq.y1.toFixed(1), selG = selGrp === s.g.id && selId == null, n = lines.filter(l => !l.flat && l.grp === s.g.id).length;
       if (selG) p.push('<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/>');
       p.push('<path d="' + d + '" fill="none" stroke="#8d99a6" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>');
       p.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" data-role="gbody" data-grp="' + esc(s.g.id) + '" style="cursor:pointer"><title>' + esc(s.g.name + ' (ylätehtävä, ' + n + ' tehtävää)\nKaksoisklikkaa avataksesi tehtävät') + '</title></path>');
@@ -1101,7 +1105,7 @@ function qlMatch(name, leaves) {
       p.push('<text class="lbl" x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" text-anchor="middle" transform="rotate(' + ang.toFixed(1) + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')" style="fill:' + colorOf(l.trade) + ';cursor:grab" data-role="lbl" data-id="' + l.id + '">' + esc(t.name) + (over ? ' ▲' : '') + '</text>');
     });
     gvl().forEach(s => {
-      const sg = segsOfTs(s.ts, s.asc, true); if (!sg.length) return;
+      const sq = grpSeg(s); if (!sq) return; const sg = [sq];
       const lp = labelPoint(sg, 0.5), len = Math.hypot(lp.dx, lp.dy) || 1, nx = lp.dy / len, ny = -lp.dx / len, ang = Math.atan2(lp.dy, lp.dx) * 180 / Math.PI, tx = lp.x + nx * 10, ty = lp.y + ny * 10;
       p.push('<text class="lbl" x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" text-anchor="middle" transform="rotate(' + ang.toFixed(1) + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')" style="fill:#8d99a6;font-weight:700;cursor:pointer" data-role="gbody" data-grp="' + esc(s.g.id) + '">' + esc(s.g.name) + ' ▸</text>');
     });
@@ -2315,6 +2319,13 @@ function qlMatch(name, leaves) {
   }
 
   // viivan tehtäväsegmentit (suoria vinoviivoja) ja niiden avulla nimilapun paikka
+  // suljettu ylätehtävä: yksi suora viiva ensimmäisen sijainnin alusta viimeisen sijainnin loppuun
+  function grpSeg(s) {
+    const ts = G && G.rm ? s.ts.filter(t => G.rm[t.loc] >= 0) : s.ts; if (!ts.length) return null;
+    const a = ts[0], b = ts[ts.length - 1], X = d => G.LEFT + (d - gOff) * G.dayW, rw = i => G.rm ? G.rm[i] : i;
+    const Yt = i => G.TOP + (G.L - 1 - rw(i)) * G.rowH, Yb = i => G.TOP + (G.L - rw(i)) * G.rowH;
+    return { x0: X(s.s), y0: s.asc ? Yb(a.loc) : Yt(a.loc), x1: X(s.e), y1: s.asc ? Yt(b.loc) : Yb(b.loc) };
+  }
   function segsOf(l, merged) { return segsOfTs(tasks(l), range(l).dir >= 0, merged); }
   function segsOfTs(ts, asc, merged) {
     const X = d => G.LEFT + (d - gOff) * G.dayW, Yt = i => G.TOP + (G.L - 1 - (G.rm ? G.rm[i] : i)) * G.rowH, Yb = i => G.TOP + (G.L - (G.rm ? G.rm[i] : i)) * G.rowH;
