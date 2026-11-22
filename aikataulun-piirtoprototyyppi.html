@@ -2385,6 +2385,13 @@ function qlMatch(name, leaves) {
     }
     if (role === 'dep' || role === 'depend') { if (!ctrl) return; }
     selDep = null;
+    if ((role === 'body' || role === 'lbl') && el && !ctrl && !e.shiftKey) { // kaksoisklikkaus avoimen ylätehtävän viivalla sulkee ylätehtävän
+      const l0 = byId(el.dataset.id), now0 = Date.now();
+      if (l0 && l0.grp && groups.some(g => g.id === l0.grp)) {
+        if (gLast && gLast.id === 'L' + l0.id && now0 - gLast.t < 450) { gLast = null; gClosed['K' + l0.grp] = true; selGrp = l0.grp; selId = null; selLoc = null; e.preventDefault(); saveView(); render(); return; }
+        gLast = { id: 'L' + l0.id, t: now0 };
+      }
+    }
     if (role === 'gbody') { const gid = el.dataset.grp, now = Date.now(); e.preventDefault(); if (gLast && gLast.id === gid && now - gLast.t < 450) { gLast = null; delete gClosed['K' + gid]; saveView(); render(); return; } gLast = { id: gid, t: now }; selGrp = gid; selId = null; selLoc = null; render(); return; }
     if (role === 'body' && e.shiftKey && !ctrl) {
       const l0 = byId(el.dataset.id), tb0 = l0 && el.dataset.loc != null ? tasks(l0).find(t => String(t.locId) === el.dataset.loc) : null, nt0 = l0 ? (tb0 ? { l: l0.id, loc: tb0.locId } : nearestTask(P, 24)) : null;

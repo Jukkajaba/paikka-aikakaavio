@@ -33,6 +33,10 @@ const { chromium } = require('playwright');
   ok(await p.evaluate(() => [...document.querySelectorAll('#chart path[data-role="gbody"]')].every(e => (e.getAttribute('d').match(/L/g) || []).length === 1)), 'straight single segment');
   await p.click('#grpBtn'); await p.waitForTimeout(250); ok(await gb() === 0, 'button opens all ' + await gb());
   await p.click('#grpBtn'); await p.waitForTimeout(250); await p.locator('#chart path[data-role="gbody"]').first().click({ force: true }); const bx2 = await p.locator('#chart path[data-role="gbody"]').first().boundingBox(); await p.mouse.click(bx2.x + bx2.width / 2, bx2.y + bx2.height / 2); await p.mouse.click(bx2.x + bx2.width / 2, bx2.y + bx2.height / 2); await p.waitForTimeout(250);
+  // kaksoisklikkaus avoimen ylätehtävän viivalla sulkee sen
+  { const before = await gb(); const lid = await p.evaluate(() => { const A = __aik(), l = A.lines.find(q => q.grp && document.querySelector('#chart path[data-role="body"][data-id="' + q.id + '"]')); return l ? l.id : null; });
+    ok(lid != null, 'open grouped line found');
+    if (lid != null) { const pt = await p.evaluate(id => { const e = document.querySelector('#chart path[data-role="body"][data-id="' + id + '"]'), L = e.getTotalLength(), m = e.getScreenCTM(); for (let f = 0.05; f < 1; f += 0.05) { const q = e.getPointAtLength(L * f), x = q.x * m.a + m.e, y = q.y * m.d + m.f, top = document.elementFromPoint(x, y); if (top === e) return { x, y }; } return null; }, lid); ok(!!pt, 'free point on line'); const px = pt ? pt.x : 0, py = pt ? pt.y : 0; await p.mouse.click(px, py); await p.mouse.click(px, py); await p.waitForTimeout(250); ok(await gb() === before + 1, 'dblclick closes group ' + before + '→' + await gb()); } }
   // riippuvuus avoimen ryhmän ja suljetun ryhmän välillä: ei virheitä, nuoli piirtyy ylätehtävän viivalle
   await p.click('#depBtn').catch(() => {});
   const pts = await p.evaluate(() => [...document.querySelectorAll('#chart path[data-role="body"]')].slice(-2).map(e => { const L = e.getTotalLength(), q = e.getPointAtLength(L * 0.5), m = e.getScreenCTM(); return { x: q.x * m.a + m.e, y: q.y * m.d + m.f }; }));
