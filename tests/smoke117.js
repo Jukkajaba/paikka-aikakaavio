@@ -48,6 +48,14 @@ const { chromium } = require('playwright');
   await cellEdit(2, '19.2.'); const eIso = await p.evaluate(() => { const A = __aik(), rs = (typeof A.gRows === 'function' ? A.gRows() : A.gRows), r = rs.find(x => !x.g && /Ikkunat, Kerros 3/.test(x.label)); return fmtE(r.e); }); ok(/19\.2\./.test(eIso), 'loppu 19.2. ' + eIso);
   await cellEdit(4, '2'); r1_ = await rowOf(); ok(r1_.crew === 2, 'resurssi 2 ' + JSON.stringify(r1_));
   await cellEdit(3, '48'); ok(await p.evaluate(() => { const A = __aik(), l = A.lines.find(x => x.ov && Object.values(x.ov).some(o => o.q === 48)); return !!l; }), 'määrä 48');
+  // Työvaiheet-lista: sama sarakeasetus ja muokkaus
+  await p.click('[data-ptog=list]'); await p.waitForTimeout(200);
+  ok(await p.locator('input.lcell').count() > 5, 'listan solut');
+  const sp0 = await p.evaluate(() => { const l = __aik().lines[0]; return Math.round((lineEnd(l) - l.start) * 10) / 10; });
+  await p.fill('input.lcell[data-lcell=dur] >> nth=0', '20'); await p.keyboard.press('Enter'); await p.waitForTimeout(250);
+  ok(await p.evaluate(() => { const l = __aik().lines[0]; return Math.abs((lineEnd(l) - l.start) - 20) < 0.1; }), 'listan kesto 20 (oli ' + sp0 + ')');
+  await p.fill('input.lcell[data-lcell=crew] >> nth=1', '9'); await p.keyboard.press('Enter'); await p.waitForTimeout(250);
+  ok(await p.evaluate(() => __aik().lines[1].lockC === 9), 'listan resurssi lukitsee työryhmän');
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();

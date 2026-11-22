@@ -20,7 +20,7 @@ await p.waitForTimeout(1700);console.log('after wait',await p.textContent('#save
 // reload -> auto-open latest
 await p.reload();await p.waitForSelector('#chart path');await p.waitForTimeout(500);
 await p.click('[data-ptog=list]');
-console.log('after reload runko',await p.$$eval('#listCard .item small',e=>e[0].textContent),'sub',await p.textContent('#subline'));
+console.log('after reload runko',await p.$$eval('#listCard input.lcell',e=>e[0].value),'sub',await p.textContent('#subline'));
 // rename + new project + list
 await p.click('#projBtn');await p.fill('#pj-name','Kerrostalo A');await p.dispatchEvent('#pj-name','change');await p.waitForTimeout(1600);
 await p.click('[data-pj=example]');await p.waitForTimeout(400);
