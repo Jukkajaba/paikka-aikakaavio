@@ -28,6 +28,9 @@ const { chromium } = require('playwright');
   // alkupäivä vaihtuu
   await p.fill('[data-cal=start]', '2027-03-01'); await p.dispatchEvent('[data-cal=start]', 'change'); await p.waitForTimeout(150);
   ok(await p.evaluate(() => __aik().stateObj().cal.start === '2027-03-01'), 'alkupäivä');
+  // otsikkotilat
+  for (const m of ['dt', 'wd', 'wk']) { await p.selectOption('[data-cal=ax]', m); await p.waitForTimeout(150); ok(await p.evaluate(() => __aik().stateObj().cal.ax) === m, 'ax ' + m); }
+  await p.selectOption('[data-cal=ax]', 'dt'); await p.waitForTimeout(150); ok(await p.evaluate(() => /^\d+\.\d+\.$/.test([...document.querySelectorAll('svg text.ax')].map(x => x.textContent).find(x => /\./.test(x)) || '')), 'pvm-otsikot'); await p.selectOption('[data-cal=ax]', 'wk');
   // poista poikkeus
   await p.click('[data-cal=exdel]'); await p.waitForTimeout(100);
   ok(await p.evaluate(() => __aik().stateObj().cal.ex.length === 0), 'poikkeus poistettu');

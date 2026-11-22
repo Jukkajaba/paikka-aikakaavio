@@ -733,7 +733,7 @@ function wouldCycle(deps, a, b, lns) {
 // Laskenta tehdään edelleen työpäivinä (päiväindeksi 0..N_DAYS). Kalenteri muuntaa työpäivän kalenteripäiväksi (piirto, päivämäärät)
 // ja takaisin. Oletuskalenteri (ma–pe, ei pyhiä) tuottaa täsmälleen saman kuin ennen kalenteria.
 const DOW = ['ma', 'ti', 'ke', 'to', 'pe', 'la', 'su'], DAY_MS = 86400000;
-const CAL_DEF = () => ({ start: '2027-01-04', wk: [1, 1, 1, 1, 1, 0, 0], hol: false, hpd: 8, ex: [], sw: false });
+const CAL_DEF = () => ({ start: '2027-01-04', wk: [1, 1, 1, 1, 1, 0, 0], hol: false, hpd: 8, ex: [], sw: false, ax: 'wk' });
 let CAL = CAL_DEF(), calVer = 1, CC = null, CCver = -1;
 function isoMs(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m) return null; const t = Date.UTC(+m[1], +m[2] - 1, +m[3]), d = new Date(t); return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && +m[1] >= 1990 && +m[1] <= 2100 ? t : null; }
 const msIso = ms => new Date(ms).toISOString().slice(0, 10);
@@ -749,7 +749,7 @@ function fiHolidays(y) { // Suomen pyhät ja rakennusalan käytännön vapaat (j
   return _holC[y] = H;
 }
 function calNorm(c) { // tarkistaa ja täydentää kalenterin: virheellinen osa korvataan oletuksella
-  const d = CAL_DEF(), o = { start: isoMs(c && c.start) != null ? c.start : d.start, wk: d.wk.slice(), hol: !!(c && c.hol), sw: !!(c && c.sw), hpd: c && c.hpd >= 1 && c.hpd <= 24 ? Math.round(c.hpd * 4) / 4 : d.hpd, ex: [] };
+  const d = CAL_DEF(), o = { start: isoMs(c && c.start) != null ? c.start : d.start, wk: d.wk.slice(), hol: !!(c && c.hol), sw: !!(c && c.sw), ax: c && (c.ax === 'dt' || c.ax === 'wd') ? c.ax : 'wk', hpd: c && c.hpd >= 1 && c.hpd <= 24 ? Math.round(c.hpd * 4) / 4 : d.hpd, ex: [] };
   if (c && Array.isArray(c.wk) && c.wk.length === 7) { const w = c.wk.map(x => x ? 1 : 0); if (w.some(x => x)) o.wk = w; }
   if (c && Array.isArray(c.ex)) c.ex.slice(0, 200).forEach(x => { const a = x && isoMs(x.from), b = x && isoMs(x.to != null ? x.to : x.from); if (a != null && b != null && a <= b) o.ex.push({ from: msIso(a), to: msIso(b), work: !!x.work, name: String(x.name || '').slice(0, 40) }); });
   return o;
@@ -783,6 +783,10 @@ function c2w(u) { // aikajanan koordinaatti (liukuluku) → työpäiväindeksi; 
 function calWeekCal(w) { const dow = (new Date(cc().s0).getUTCDay() + 6) % 7; return w <= 0 ? 0 : (7 - dow) + 7 * (w - 1); }
 function calWeekC(w) { return c2u(calWeekCal(w)); } // viikon w alku kalenteripäivinä (viikko 0 = alkupäivän viikko)
 function calShadeRuns(u0, u1) { const C = cc(), out = [], a = Math.max(0, Math.floor(u2c(u0)) - 1), b = Math.min(C.isW.length, Math.ceil(u2c(u1)) + 1); for (let c = a; c < b; c++) { if (C.isW[c] || C.vcum[c + 1] === C.vcum[c]) continue; const s = C.vcum[c], l = out[out.length - 1]; if (l && l[1] === s) l[1] = s + 1; else out.push([s, s + 1]); } return out; }
+// aikajanan otsikot: ax = 'wk' viikkonumerot, 'dt' viikon alkupäivä, 'wd' viikkonumerot + päivänumerot (kun tilaa riittää)
+function axLabel(w) { if (CAL.ax !== 'dt') return String(w + 1); const t = new Date(cc().s0 + calWeekCal(w) * DAY_MS); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
+const axUnit = () => CAL.ax === 'dt' ? 'pvm' : 'vk';
+function axDays(xc, u0, u1, dayW, y) { if (CAL.ax !== 'wd' || dayW < 15) return ''; const C = cc(), o = []; for (let u = Math.max(0, Math.floor(u0)); u < Math.min(C.vis.length, Math.ceil(u1)); u++) { const c = C.vis[u]; o.push('<text class="ax" x="' + (xc(u) + dayW / 2).toFixed(1) + '" y="' + y + '" text-anchor="middle"' + (C.isW[c] ? '' : ' opacity=".45"') + '>' + new Date(C.s0 + c * DAY_MS).getUTCDate() + '</text>'); } return o.join(''); }
 function shadeSvg(xc, c0, c1, y, h, dayW) { if (dayW < 1.1) return ''; return calShadeRuns(c0, c1).map(r => '<rect x="' + xc(r[0]).toFixed(1) + '" y="' + y + '" width="' + ((r[1] - r[0]) * dayW).toFixed(1) + '" height="' + h + '" fill="var(--ink)" opacity=".07" pointer-events="none"/>').join('');  }
 function dateOfDay(k) { return cc().s0 + Math.round(wdOff(Math.max(0, Math.floor(k + 1e-9)))) * DAY_MS; }
 function fmtMs(ms) { const t = new Date(ms); return DOW[(t.getUTCDay() + 6) % 7] + ' ' + t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
@@ -1081,14 +1085,15 @@ function qlMatch(name, leaves) {
     const p = [], lab = [];
     p.push('<defs><clipPath id="fclip"><rect x="' + LEFT + '" y="0" width="' + (W - LEFT - RIGHT) + '" height="' + H + '"/></clipPath></defs><g clip-path="url(#fclip)">');
     const weekPx = dayW * calVpw(), step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
-    lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="18" text-anchor="end">vk</text>');
+    lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="18" text-anchor="end">' + axUnit() + '</text>');
     p.push(shadeSvg(XC, gOff, gOff + visD, TOP, histTop + HH - TOP, dayW));
     for (let w = 0, cl = calLen(); w <= Math.ceil(cl / calVpw()) + 2; w++) {
       const wc = calWeekC(w); if (wc < gOff - calVpw()) continue; if (wc > gOff + visD + calVpw()) break;
       const x = XC(wc), major = w % step === 0;
       p.push('<line x1="' + x + '" x2="' + x + '" y1="' + (major ? 22 : TOP) + '" y2="' + (histTop + HH) + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .6) + '"/>');
-      if (major && wc < cl) p.push('<text class="ax" x="' + (x + 3) + '" y="18">' + (w + 1) + '</text>');
+      if (major && wc < cl) p.push('<text class="ax" x="' + (x + 3) + '" y="18">' + axLabel(w) + '</text>');
     }
+    p.push(axDays(XC, gOff, gOff + visD, dayW, 28));
     const maxc = narrow ? 7 : Math.floor((LEFT - 18) / 6.4);
     for (let i = 0; i < L; i++) {
       const y = Yrow(i), rw = VR ? VR.rows[i] : null, nm = rw ? rw.name : LOCS[i].name;
@@ -1439,12 +1444,13 @@ function qlMatch(name, leaves) {
       const wc = calWeekC(w); if (wc < gOff - calVpw()) continue; if (wc > gOff + visD + calVpw()) break;
       const major = w % step === 0, x = XC(wc);
       hp.push('<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (major ? 14 : 26) + '" y2="' + HEAD + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '"/>');
-      if (major && wc < cl) hp.push('<text class="ax" x="' + (x + 3).toFixed(1) + '" y="24">' + (w + 1) + '</text>');
+      if (major && wc < cl) hp.push('<text class="ax" x="' + (x + 3).toFixed(1) + '" y="' + (CAL.ax === 'wd' && dayW >= 15 ? 12 : 24) + '">' + axLabel(w) + '</text>');
     }
+    hp.push(axDays(XC, gOff, gOff + visD, dayW, 29));
     hp.push('<rect x="0" y="0" width="' + (LEFT - 4) + '" height="' + HEAD + '" fill="var(--panel)"/>');
     
     ['Alku', 'Loppu', 'pv', 'määrä'].concat(stOn() ? ['%'] : []).concat(curBl() ? ['Poik.'] : []).concat(fcOn() ? ['Enn.'] : []).forEach((t, i) => { if (colX[i] != null) hp.push('<text class="ax" x="' + colX[i] + '" y="24" text-anchor="end">' + t + '</text>'); });
-    hp.push('<text class="ax" x="' + (LEFT + 3) + '" y="11">vk</text>');
+    if (!(CAL.ax === 'wd' && dayW >= 15)) hp.push('<text class="ax" x="' + (LEFT + 3) + '" y="11">' + axUnit() + '</text>');
     hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
     gHead.setAttribute('width', W); gHead.setAttribute('height', HEAD); gHead.setAttribute('viewBox', '0 0 ' + W + ' ' + HEAD); gHead.innerHTML = hp.join('');
     gSpacer.style.height = Math.max(gRows.length, 2) * rowH + 'px';
@@ -2914,7 +2920,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '144';
+  const APP_BUILD = '145';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3053,6 +3059,7 @@ function qlMatch(name, leaves) {
       '<div class="row" style="border-top:0;padding-top:0"><label>Työpäivät</label><span>' + DOW.map((n, i) => '<label style="margin-right:6px"><input type="checkbox" data-cal="wk" data-i="' + i + '"' + (CAL.wk[i] ? ' checked' : '') + '> ' + n + '</label>').join('') + '</span></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="hol"' + (CAL.hol ? ' checked' : '') + '> Suomen pyhät vapaina</label></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="sw"' + (CAL.sw ? ' checked' : '') + '> Näytä la–su aikajanalla</label></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label for="pj-ax">Aikajanan otsikko</label><select id="pj-ax" data-cal="ax"><option value="wk"' + (CAL.ax === 'wk' ? ' selected' : '') + '>Viikkonumerot</option><option value="dt"' + (CAL.ax === 'dt' ? ' selected' : '') + '>Viikon alkupäivä</option><option value="wd"' + (CAL.ax === 'wd' ? ' selected' : '') + '>Viikot ja päivät</option></select></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-hpd">Työtunnit / pv</label><input id="pj-hpd" class="num" type="number" min="1" max="24" step="0.5" value="' + CAL.hpd + '" data-cal="hpd"></div>' +
       CAL.ex.map((x, i) => '<div class="row" style="border-top:0;padding-top:0"><span>' + esc(x.from) + (x.to !== x.from ? ' – ' + esc(x.to) : '') + ' · ' + (x.work ? 'työpäivä' : 'vapaa') + (x.name ? ' · ' + esc(x.name) : '') + '</span><button type="button" data-cal="exdel" data-i="' + i + '" aria-label="Poista poikkeus">×</button></div>').join('') +
       '<div class="row" style="border-top:0;padding-top:0"><input id="pj-exf" type="date" class="txt" style="max-width:120px"><input id="pj-ext" type="date" class="txt" style="max-width:120px"><select id="pj-exw"><option value="0">vapaa</option><option value="1">työ</option></select><input id="pj-exn" class="txt" style="max-width:80px" maxlength="24" placeholder="nimi"><button type="button" data-cal="exadd">Lisää poikkeus</button></div>' +
@@ -3109,6 +3116,7 @@ function qlMatch(name, leaves) {
       else if (k === 'wk') { c.wk[+e.target.dataset.i] = e.target.checked ? 1 : 0; if (!c.wk.some(x => x)) { e.target.checked = true; return; } }
       else if (k === 'hol') c.hol = e.target.checked;
       else if (k === 'sw') c.sw = e.target.checked;
+      else if (k === 'ax') c.ax = e.target.value;
       else if (k === 'hpd') c.hpd = clamp(parseFloat(e.target.value) || 8, 1, 24);
       else return;
       pushUndo(snapshot()); setCal(c); render(); renderSub(); renderProj(); scheduleSave(); return;
