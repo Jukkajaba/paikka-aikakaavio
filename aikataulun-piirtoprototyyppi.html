@@ -2036,9 +2036,9 @@ function qlMatch(name, leaves) {
       '<p class="ok hlp" style="margin:0 0 6px">Viivan ajoitus ja koko: kokonaiskesto, aika sijainnissa, viive sijaintien välillä, työryhmä ja määrä vaikuttavat toisiinsa. Lukko pitää arvon paikallaan, ja muut arvot lasketaan sen mukaan. Tehtävät-osiossa voi muuttaa yksittäisen sijainnin kestoa ja viivettä. Työlajin nimi, yksikkö ja tuottavuus koskevat koko työlajia.</p>' +
       '' + grpSelect(l) + locSelect(l) +
       '<div class="row"><label for="f-tname" title="Nimi muuttuu kaikilla tämän työlajin viivoilla">Työlajin nimi</label><input id="f-tname" class="txt" style="max-width:170px" type="text" maxlength="24" value="' + esc(t.name) + '" data-field="tr-name" data-id="' + t.id + '"></div>' +
-      '<div class="row"><label for="f-total">Kokonaiskesto</label><span><input id="f-total" class="num" type="number" min="0.5" max="' + N_DAYS + '" step="0.1" value="' + r1(span(l)) + '" data-field="total" data-id="' + l.id + '"' + (l.tctl && l.lockC == null ? '' : ' disabled') + '> pv · ' + (Math.round(span(l) / 5 * 10) / 10) + ' vk</span></div>' +
+      '<div class="row"><label for="f-total">Kokonaiskesto</label><span><input id="f-total" class="num" type="number" min="0.5" max="' + N_DAYS + '" step="0.1" value="' + r1(span(l)) + '" data-field="total" data-id="' + l.id + '"' + '> pv · ' + (Math.round(span(l) / 5 * 10) / 10) + ' vk</span></div>' +
       '<div class="row"><label>Kokonaiskesto ohjaa</label><button type="button" class="chip" data-act="tctl" data-id="' + l.id + '" aria-pressed="' + (!!l.tctl) + '">' + (l.tctl ? 'Päällä' : 'Pois') + '</button></div>' +
-      '<p class="ok" style="margin:0 0 6px">' + (l.tctl ? 'Kokonaiskeston muutos jakautuu alatehtäville.' : 'Kokonaiskesto muuttuu vain, kun alatehtävien kestoja muutetaan.') + '</p>' +
+      '<p class="ok" style="margin:0 0 6px">' + (l.tctl ? 'Kokonaiskeston muutos jakautuu alatehtäville.' : 'Kokonaiskeston muokkaus kytkee tämän päälle ja jakaa keston alatehtäville.') + '</p>' +
       '<div class="row"><label>' + (l.total != null ? 'Aika sijainnissa (keskim.)' : 'Aika sijainnissa') + '</label>' + stepper('dur', l.id, '', null, r1(perLoc(l)), MIN_D) + '</div>' +
       '<div class="row"><label title="Seuraava sijainti alkaa tämän verran edellisen lopun jälkeen. Negatiivinen arvo tarkoittaa päällekkäisyyttä.">Viive sijaintien välillä</label>' + stepper('gap', l.id, '', null, r1(l.gap), -30) + '</div>' +
       '<div class="row"><label>' + (resIdOf(t) === RES[0].id ? 'Työryhmä (suurin)' : esc(resById(resIdOf(t)).name) + ' (suurin)') + '</label><span class="qrow">' + lockBtn('clock', l.id, l.lockC != null, 'Poista työryhmän lukitus', 'Lukitse työryhmä', 'Lukittu: työryhmä pysyy samana, ja kestot lasketaan määrästä ja tuottavuudesta', 'Lukitse työryhmä') + stepper('crew', l.id, c + ' ' + resUnit(t)) + '</span></div>' +
@@ -2601,7 +2601,7 @@ function qlMatch(name, leaves) {
       }
     }
     else if (f === 'lgrp') { const l = byId(id); if (l) { ensureOrd(); const v2 = e.target.value; if (v2 && groups.some(x => x.id === v2)) { l.grp = v2; } else delete l.grp; l.ord = maxOrd() + 10; } }
-    else if (f === 'total') { const l = byId(id); if (l && l.tctl && v > 0) setTotal(l, v); }
+    else if (f === 'total') { const l = byId(id); if (l && v > 0) { if (!l.tctl || l.lockC != null) { l.tctl = true; l.lockC = null; if (_tc) _tc.delete(l); } setTotal(l, v); } }
     else if (f === 'tqty') { const l = byId(id); if (l && v > 0) setTotalQty(l, v); }
     else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, r1(v) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }
     else if (f === 'gap-v') { const l = byId(id); if (l && isFinite(v)) { l.gap = clamp(r1(v), -30, 60); fit(l); } }
