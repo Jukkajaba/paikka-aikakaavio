@@ -219,6 +219,11 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #gantt { position: absolute; left: 0; display: block; user-select: none; -webkit-user-select: none; }
 #gantt * { pointer-events: none; }
 #gantt [data-gi] { pointer-events: all; cursor: pointer; }
+.gced { position: absolute; z-index: 7; box-sizing: border-box; font: 12px var(--mono); text-align: right; padding: 0 4px; border: 1.5px solid var(--ink); border-radius: 4px; background: var(--panel); color: var(--ink); }
+.gcm { position: absolute; z-index: 9; width: 160px; background: var(--panel); border: 1px solid var(--grid2); border-radius: 8px; padding: 8px 10px; box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.gcm label { display: flex; align-items: center; gap: 7px; padding: 3px 0; cursor: pointer; font-size: 13px; }
+.gcm button { margin-top: 6px; width: 100%; font-size: 12px; }
+.gc.gce { cursor: text; }
 #gantt [data-gr] { pointer-events: all; }
 #gantt [data-gr="gmove"] { cursor: grab; }
 #gantt [data-gr="gend"] { cursor: ew-resize; }
@@ -1284,7 +1289,7 @@ function qlMatch(name, leaves) {
   const FLOW_HINT = hintEl.textContent;
   const GANTT_HINT = 'Gantt: Valitse rivi klikkaamalla. Kaksoisklikkaa rivin nimeä muokataksesi sitä: Enter tallentaa ja siirtyy seuraavalle riville. + Tehtävä ja + Ylätehtävä lisäävät uuden rivin valitun rivin alapuolelle. Ylätehtävä kokoaa tehtäviä yhteen, ja ▸/▾ avaa tai sulkee ryhmän. Siirrä riviä vetämällä sen nimestä, ja pudota se ylätehtävän päälle liittääksesi sen ryhmään. Vedä palkkia siirtääksesi sitä ja palkin oikeaa reunaa muuttaaksesi kestoa. Ylätehtävän oikean reunan veto muuttaa alatehtävien kestoja, kun Tehtävä-paneelissa on päällä Kokonaiskesto ohjaa. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle. Samalla tavalla nuolen vetäminen sivusuunnassa muuttaa viivettä, ja nuolen päätypallon voi vetää toiselle riville. Delete poistaa valitun riippuvuuden. Riippuvuudet näkyvät, kun Riippuvuudet-painike on päällä. Tavoite, Tilanne ja Ennuste näkyvät vain, kun niiden paneeli on auki.';
   const VKEY = 'aik-nakyma-v1';
-  let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gSyncing = false, fSyncing = false;
+  let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); } } catch (err) { }
   let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
@@ -1362,6 +1367,56 @@ function qlMatch(name, leaves) {
     return snapshot() !== before;
   }
   // tehtävärivien rakennus: yksi viiva (ylärivi + sijaintirivit), lvl = sisennystaso
+  // Gantt-taulukon sarakkeet: valittavissa ja muokattavissa
+  const COLDEF = { dur: { l: 'Kesto', w: 48 }, start: { l: 'Alku', w: 58 }, end: { l: 'Loppu', w: 58 }, qty: { l: 'Määrä', w: 56 }, crew: { l: 'Resurssi', w: 68 }, prod: { l: 'Tuott.', w: 56 } };
+  const COLORDER = ['dur', 'start', 'end', 'qty', 'crew', 'prod'], COLDEFAULT = ['dur', 'start', 'end', 'qty', 'crew'];
+  const vCols = () => COLORDER.filter(k => gCols.indexOf(k) >= 0);
+  function gCell(r, key) { // solun teksti
+    if (r.empty) return '';
+    const l = r.line != null ? byId(r.line) : null, isGrp = !!(l && r.g && !r.nh && !r.gk), k = l && !r.g && r.locId != null ? tasks(l).find(x => x.locId === r.locId) : null;
+    if (key === 'dur') return dd(r.e - r.s);
+    if (key === 'start') return dateOnly(fmt(r.s));
+    if (key === 'end') return dateOnly(fmtE(r.e));
+    if (key === 'crew') return String(r.crew);
+    if (key === 'qty') return k ? String(r2(k.qty)) : isGrp ? String(r2(totalQty(l))) : '';
+    if (key === 'prod') return k || isGrp ? String(l.prod) : '';
+    return '';
+  }
+  function gEditable(r, key) { if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (!isGrp && r.locId == null) return false; return isGrp ? /^(dur|start|end|qty)$/.test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
+  function parseDay(txt, refIdx) { // "4.1.", "4.1.2027" tai "2027-01-04" → iso
+    const s = String(txt).trim(); let y, mo, d, m;
+    if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = /^(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?\.?$/.exec(s))) {
+      d = +m[1]; mo = +m[2]; const ref = new Date(dateOfDay(refIdx)); y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : null;
+      if (y == null) { let best = null; [-1, 0, 1].forEach(dy => { const c = Date.UTC(ref.getUTCFullYear() + dy, mo - 1, d); if (best == null || Math.abs(c - ref.getTime()) < Math.abs(best - ref.getTime())) best = c; }); y = new Date(best).getUTCFullYear(); }
+    } else return null;
+    const ms = Date.UTC(y, mo - 1, d); return isoMs(msIso(ms)) != null && new Date(ms).getUTCDate() === d ? msIso(ms) : null;
+  }
+  function gApply(i, key, txt) { // solun arvon muutos → malliin; false jos arvo ei kelvannut
+    const r = gRows[i]; if (!gEditable(r, key)) return false; const l = byId(r.line); if (!l) return false;
+    const isGrp = !!r.g, ts = tasks(l), idx = isGrp ? -1 : ts.findIndex(x => x.locId === r.locId), k = idx >= 0 ? ts[idx] : null; if (!isGrp && !k) return false;
+    const num = parseFloat(String(txt).replace(',', '.')), t0 = isGrp ? l.start : k.s;
+    let ok = true; const snap0 = snapshot();
+    if (key === 'dur' || key === 'end' || key === 'crew') {
+      let nd;
+      if (key === 'dur') nd = num;
+      else if (key === 'end') { const iso = parseDay(txt, Math.max(0, Math.floor(r.e - 1))); const di = iso ? dayOfIso(iso, true) : null; nd = di == null ? NaN : di + 1 - t0; }
+      else nd = k.qty / l.prod / num;
+      if (!(nd > 0) || !isFinite(nd)) return false; nd = Math.min(nd, N_DAYS);
+      if (isGrp) setTotal(l, nd);
+      else if (l.flat) { releaseTotal(l); if (l.ov && l.ov[k.locId]) delete l.ov[k.locId].d; l.dur = Math.max(MIN_D, r1(nd)); }
+      else { releaseTotal(l); ovOf(l, k.locId).d = Math.max(MIN_D, r1(nd)); }
+    } else if (key === 'start') {
+      const iso = parseDay(txt, Math.max(0, Math.floor(r.s))), ns = iso ? dayOfIso(iso, false) : null; if (ns == null) return false;
+      if (isGrp || l.flat || idx === 0) l.start = clamp(isGrp || l.flat ? ns : l.start + (ns - k.s), 0, Math.max(0, N_DAYS - span(l)));
+      else { const minShift = ts[idx - 1].s - (ts[idx - 1].e + l.gap); releaseTotal(l); ovOf(l, k.locId).shift = Math.max(minShift, k.shift + (ns - k.s)); }
+    } else if (key === 'qty') {
+      if (!(num > 0) || num > 1e7) return false;
+      if (isGrp || (l.flat && l.lockQ != null)) setTotalQty(l, num); else if (l.flat) l.qty = num; else ovOf(l, k.locId).q = num;
+    } else ok = false;
+    if (!ok) return false;
+    pushUndo(snap0); fit(l); if (key !== 'qty') absorbSlack(l.id); return true;
+  }
   const nClosed = (k, id) => k in gClosed ? !!gClosed[k] : lcol.has(id);
   function gAnc(locId) {
     if (!gAncC || gAncC.lt !== LT || gAncC.n !== LT.length) { const m = new Map(), byId = new Map(LT.map(n => [n.id, n])); gAncC = { lt: LT, n: LT.length, m: m, byId: byId }; }
@@ -1437,10 +1492,10 @@ function qlMatch(name, leaves) {
     if (view !== 'gantt') return;
     gRows = buildGanttRows();
     const W = Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = CAL.ax === 'wd' ? 46 : 34, rowH = ROWH[gRowK], RIGHT = 14;
-    const NAME = narrow ? 150 : 215, cw = narrow ? [] : [58, 58, 34, 34].concat(stOn() ? [34] : []).concat(curBl() ? [40] : []).concat(fcOn() ? [40] : []), colX = []; let cx = 12 + NAME; cw.forEach(w => { cx += w; colX.push(cx); });
+    const NAME = narrow ? 150 : 215, vc = vCols(), cw = narrow ? [] : vc.map(k => COLDEF[k].w).concat(stOn() ? [34] : []).concat(curBl() ? [40] : []).concat(fcOn() ? [40] : []), colX = []; let cx = 12 + NAME; cw.forEach(w => { cx += w; colX.push(cx); });
     const LEFT = cx + 10, visD = Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw())), dayW = (W - LEFT - RIGHT) / visD;
     gOff = clamp(gOff, 0, Math.max(0, calLen() - visD));
-    gGeo = { W: W, LEFT: LEFT, RIGHT: RIGHT, dayW: dayW, rowH: rowH, NAME: NAME, colX: colX, narrow: narrow, visD: visD, blK: curBl() ? (stOn() ? 5 : 4) : -1, fcK: fcOn() ? 4 + (stOn() ? 1 : 0) + (curBl() ? 1 : 0) : -1 };
+    gGeo = { W: W, LEFT: LEFT, RIGHT: RIGHT, dayW: dayW, rowH: rowH, NAME: NAME, colX: colX, narrow: narrow, visD: visD, cols: vc, cw: cw, blK: curBl() ? vc.length + (stOn() ? 1 : 0) : -1, fcK: fcOn() ? vc.length + (stOn() ? 1 : 0) + (curBl() ? 1 : 0) : -1 };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
     { const need = visD < calLen(); gH.hidden = !need; if (need) { const cw = gH.clientWidth || W; gHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(gH.scrollLeft - sl) > 1) { gSyncing = true; gH.scrollLeft = sl; } } }
     gIdx = {};
@@ -1455,7 +1510,11 @@ function qlMatch(name, leaves) {
     hp.push(axDays(XC, gOff, gOff + visD, dayW, HEAD - 5)); hp.push(axMonths(XC, gOff, gOff + visD, 10));
     hp.push('<rect x="0" y="0" width="' + (LEFT - 4) + '" height="' + HEAD + '" fill="var(--panel)"/>');
     
-    ['Alku', 'Loppu', 'pv', 'määrä'].concat(stOn() ? ['%'] : []).concat(curBl() ? ['Poik.'] : []).concat(fcOn() ? ['Enn.'] : []).forEach((t, i) => { if (colX[i] != null) hp.push('<text class="ax" x="' + colX[i] + '" y="' + (HEAD - 10) + '" text-anchor="end">' + t + '</text>'); });
+    vc.map(k => COLDEF[k].l).concat(stOn() ? ['%'] : []).concat(curBl() ? ['Poik.'] : []).concat(fcOn() ? ['Enn.'] : []).forEach((t, i) => {
+      if (colX[i] == null) return;
+      if (i < vc.length) hp.push('<g data-gcm="' + i + '" style="cursor:pointer"><rect x="' + (colX[i] - COLDEF[vc[i]].w) + '" y="0" width="' + COLDEF[vc[i]].w + '" height="' + HEAD + '" fill="transparent"/><text class="ax" x="' + (colX[i] - 9) + '" y="' + (HEAD - 10) + '" text-anchor="end">' + t + '</text><text class="ax" x="' + colX[i] + '" y="' + (HEAD - 10) + '" text-anchor="end">▾</text></g>');
+      else hp.push('<text class="ax" x="' + colX[i] + '" y="' + (HEAD - 10) + '" text-anchor="end">' + t + '</text>');
+    });
     if (CAL.ax !== 'wd') hp.push('<text class="ax" x="' + (LEFT + 3) + '" y="11">' + axUnit() + '</text>');
     hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
     gHead.setAttribute('width', W); gHead.setAttribute('height', HEAD); gHead.setAttribute('viewBox', '0 0 ' + W + ' ' + HEAD); gHead.innerHTML = hp.join('');
@@ -1496,7 +1555,7 @@ function qlMatch(name, leaves) {
       if (r.g) cov.push('<text class="gt" x="' + (12 + (r.lvl || 0) * 12) + '" y="' + (mid + 4) + '">' + (r.closed ? '▸' : '▾') + '</text>');
       cov.push('<text class="gt' + (r.g ? ' gg' : '') + '" x="' + ind + '" y="' + (mid + 4) + '">' + esc(lab) + '<title>' + esc(r.label) + '</title></text>');
       const bsp = blRow(r), fsp = fcRow(r);
-      if (!g.narrow && !r.empty) [dateOnly(fmt(r.s)), dateOnly(fmtE(r.e)), dd(r.e - r.s), String(r.crew)].concat(stOn() ? [r.pct != null && r.pct > 0 ? String(Math.round(r.pct)) : ''] : []).concat(curBl() ? [bsp ? (r1(bestEndRow(r) - bsp.e) > 0 ? '+' : r1(bestEndRow(r) - bsp.e) < 0 ? '−' : '') + dd(Math.abs(bestEndRow(r) - bsp.e)) : ''] : []).concat(fcOn() ? [fsp ? (r1(fsp.e - r.e) > 0 ? '+' : r1(fsp.e - r.e) < 0 ? '−' : '') + dd(Math.abs(fsp.e - r.e)) : ''] : []).forEach((t, k) => cov.push('<text class="gc" x="' + g.colX[k] + '" y="' + (mid + 4) + '" text-anchor="end"' + (k === 3 && over || ((k === g.blK || k === g.fcK) && String(t).charAt(0) === '+') ? ' style="fill:var(--warn);font-weight:700"' : (k === g.blK && String(t).charAt(0) === '−' ? ' style="fill:#2E9E6B;font-weight:700"' : '')) + '>' + t + (k === 3 && over ? '▲' : '') + '</text>'));
+      if (!g.narrow && !r.empty) g.cols.map(k => gCell(r, k)).concat(stOn() ? [r.pct != null && r.pct > 0 ? String(Math.round(r.pct)) : ''] : []).concat(curBl() ? [bsp ? (r1(bestEndRow(r) - bsp.e) > 0 ? '+' : r1(bestEndRow(r) - bsp.e) < 0 ? '−' : '') + dd(Math.abs(bestEndRow(r) - bsp.e)) : ''] : []).concat(fcOn() ? [fsp ? (r1(fsp.e - r.e) > 0 ? '+' : r1(fsp.e - r.e) < 0 ? '−' : '') + dd(Math.abs(fsp.e - r.e)) : ''] : []).forEach((t, k) => cov.push('<text class="gc' + (k < g.cols.length && gEditable(r, g.cols[k]) ? ' gce' : '') + '" x="' + g.colX[k] + '" y="' + (mid + 4) + '" text-anchor="end"' + (g.cols[k] === 'crew' && over || ((k === g.blK || k === g.fcK) && String(t).charAt(0) === '+') ? ' style="fill:var(--warn);font-weight:700"' : (k === g.blK && String(t).charAt(0) === '−' ? ' style="fill:#2E9E6B;font-weight:700"' : '')) + '>' + t + (g.cols[k] === 'crew' && over ? '▲' : '') + '</text>'));
       const x0 = X(r.s), x1 = XE(r.e), col = r.col ? colorOf(r.col) : 'var(--ink)', sel = gRowSel(r), by0 = stOn() ? 3.5 : 5, bh = stOn() ? 9 : rowH - 10;
       if (r.empty) { /* tyhjällä ryhmällä ei palkkia */ }
       else if (r.g) {
@@ -1574,7 +1633,37 @@ function qlMatch(name, leaves) {
     const el = e.target.closest('[data-gi]'); if (!el || el.dataset.gr) return;
     const bx = e.clientX - gSvg.getBoundingClientRect().left;
     gRowClick(+el.dataset.gi, bx); gTap(+el.dataset.gi, bx);
+    if (gGeo && !gGeo.narrow && gGeo.cols) { const gi = +el.dataset.gi; for (let ci = 0; ci < gGeo.cols.length; ci++) if (bx <= gGeo.colX[ci] + 2 && bx > gGeo.colX[ci] - gGeo.cw[ci] && gEditable(gRows[gi], gGeo.cols[ci])) { openCellEdit(gi, ci); break; } }
   });
+  // solun muokkaus: tekstikenttä solun päällä (Enter tai poistuminen tallentaa, Esc peruu)
+  let cellEd = null;
+  function closeEd() { if (cellEd) { const e = cellEd; cellEd = null; e.el.remove(); } }
+  function openCellEdit(i, ci) {
+    closeEd(); const r = gRows[i], key = gGeo.cols[ci], rowEl = gSvg.querySelector('rect[data-gi="' + i + '"]'); if (!r || !rowEl) return;
+    const rb = rowEl.getBoundingClientRect(), wb = gWrap.getBoundingClientRect(), w = COLDEF[key].w, inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'gced'; inp.value = gCell(r, key); inp.setAttribute('aria-label', COLDEF[key].l);
+    inp.style.cssText = 'left:' + Math.round(rb.left - wb.left + gGeo.colX[ci] - w + 1) + 'px;top:' + Math.round(rb.top - wb.top + 1) + 'px;width:' + (w - 2) + 'px;height:' + (gGeo.rowH - 2) + 'px';
+    gWrap.appendChild(inp); const st = { el: inp, i: i, key: key }; cellEd = st; inp.focus(); inp.select();
+    const done = commit => { if (cellEd !== st) return; closeEd(); if (commit && inp.value.trim() !== gCell(r, key)) { if (gApply(i, key, inp.value)) render(); else toast('Arvo ei kelpaa: ' + COLDEF[key].l + (key === 'start' || key === 'end' ? ' (esim. 12.3.)' : '')); } };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') { e.preventDefault(); done(false); } else if (e.key === 'Tab') { done(true); } });
+    inp.addEventListener('blur', () => done(true));
+  }
+  gScroll.addEventListener('scroll', () => { if (cellEd) cellEd.el.blur(); });
+  // sarakevalikko: otsikon ▾ avaa valintalistan
+  const gcm = document.createElement('div'); gcm.className = 'gcm'; gcm.hidden = true; gWrap.appendChild(gcm);
+  function gcmRender() { gcm.innerHTML = '<div class="lab2">Sarakkeet</div>' + COLORDER.map(k => '<label><input type="checkbox" data-gcol="' + k + '"' + (gCols.indexOf(k) >= 0 ? ' checked' : '') + '> ' + COLDEF[k].l + '</label>').join('') + '<button type="button" data-gcol="_def">Palauta oletus</button>'; }
+  gHead.addEventListener('click', e => {
+    const g = e.target.closest ? e.target.closest('[data-gcm]') : null; if (!g) return;
+    if (!gcm.hidden) { gcm.hidden = true; return; }
+    gcmRender(); const wb = gWrap.getBoundingClientRect(), hb = g.getBoundingClientRect(); gcm.style.left = Math.round(Math.min(hb.left - wb.left, wb.width - 170)) + 'px'; gcm.style.top = Math.round(hb.bottom - wb.top + 2) + 'px'; gcm.hidden = false;
+  });
+  gcm.addEventListener('change', e => {
+    const k = e.target.dataset && e.target.dataset.gcol; if (!k) return;
+    gCols = COLORDER.filter(x => x === k ? e.target.checked : gCols.indexOf(x) >= 0); saveView(); renderGantt();
+  });
+  gcm.addEventListener('click', e => { const b = e.target.closest('button[data-gcol]'); if (b) { gCols = COLDEFAULT.slice(); saveView(); gcmRender(); renderGantt(); } });
+  document.addEventListener('pointerdown', e => { if (!gcm.hidden && !gcm.contains(e.target) && !(e.target.closest && e.target.closest('[data-gcm]'))) gcm.hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !gcm.hidden) gcm.hidden = true; });
   // aikanäkymän vieritys: vaakavierityspalkki, hiiren pyörä (vaaka / Shift) ja tyhjän alueen veto
   function gSetOff(v) { const m = Math.max(0, calLen() - Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw()))); const nv = clamp(v, 0, m); if (Math.abs(nv - gOff) < 1e-9) return; gOff = nv; if (view === 'gantt') renderGantt(); else render(); }
   gH.addEventListener('scroll', () => { if (gSyncing) { gSyncing = false; return; } if (!gGeo) return; gSetOff(gH.scrollLeft * gGeo.visD / (gH.clientWidth || 1)); });
@@ -2882,7 +2971,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved, res: RES, cal: CAL });
+  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols }, imp: impSaved, res: RES, cal: CAL });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -2920,7 +3009,7 @@ function qlMatch(name, leaves) {
     nextDepId = Math.max(parseInt(st.nextDepId, 10) || 1, maxNum(deps) + 1);
     _uid = Math.max(_uid, maxNum(LOCS), maxNum(LT), maxNum(TRADES), maxNum(groups), maxNum(baselines));
     drawTrade = trade(st.drawTrade) ? st.drawTrade : (TRADES.length ? TRADES[0].id : null);
-    { const vw = st.view || {}; lcol = new Set(Array.isArray(vw.lcol) ? vw.lcol : []); locHid = new Set(Array.isArray(vw.hid) ? vw.hid : []); gClosed = vw.gc && typeof vw.gc === 'object' ? vw.gc : {}; if (vw.zv >= 4 && vw.zv <= 260) gVisW = Math.round(vw.zv); gRowK = ROWH[vw.rh] ? vw.rh : 'n'; try { document.getElementById('rowSel').value = gRowK; } catch (e) { } }
+    { const vw = st.view || {}; lcol = new Set(Array.isArray(vw.lcol) ? vw.lcol : []); locHid = new Set(Array.isArray(vw.hid) ? vw.hid : []); gClosed = vw.gc && typeof vw.gc === 'object' ? vw.gc : {}; if (vw.zv >= 4 && vw.zv <= 260) gVisW = Math.round(vw.zv); gRowK = ROWH[vw.rh] ? vw.rh : 'n'; gCols = Array.isArray(vw.cols) ? vw.cols.filter(k => COLORDER.indexOf(k) >= 0) : COLDEFAULT.slice(); try { document.getElementById('rowSel').value = gRowK; } catch (e) { } }
     selId = null; selDep = null; undoStack = [];
     RES = Array.isArray(st.res) && st.res.length && st.res.every(r => r && r.id && r.name) ? st.res.map(r => ({ id: String(r.id), name: String(r.name).slice(0, 24), unit: String(r.unit || 'kpl').slice(0, 6), avail: r.avail > 0 ? +r.avail : undefined })) : DEF_RES(); if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     syncWeeks(); try { impLoad(st.imp); } catch (err) { }
@@ -2929,7 +3018,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '147';
+  const APP_BUILD = '148';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3046,7 +3135,7 @@ function qlMatch(name, leaves) {
     else {
       setCal(kind === 'example' ? CAL_DEF() : Object.assign(CAL_DEF(), { hol: true })); if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
       RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; statusDay = null; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
-      selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
+      selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; gCols = COLDEFAULT.slice(); try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
     }
     projId = null; projName = name; renderSub(); render(); suspend = false; baseline = ''; try { renderWelcome(); } catch (err) { }
     await saveNow(); renderProj();

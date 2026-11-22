@@ -255,7 +255,14 @@
    "hid": [],
    "gc": {},
    "zv": 26,
-   "rh": "n"
+   "rh": "n",
+   "cols": [
+    "dur",
+    "start",
+    "end",
+    "qty",
+    "crew"
+   ]
   },
   "imp": null,
   "res": [
