@@ -2257,7 +2257,7 @@ function qlMatch(name, leaves) {
     const kids = new Map(); LT.forEach(n => { const k = n.par || ''; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(n); });
     const leafN = new Map(), cntLeaves = n => { if (leafN.has(n.id)) return leafN.get(n.id); const ks = kids.get(n.id); const c = ks ? ks.reduce((q, x) => q + cntLeaves(x), 0) : 1; leafN.set(n.id, c); return c; };
     let h = '<h2>Sijainnit</h2><p class="ok hlp">Sijainnit ovat puu: ylempi taso (esim. talo, rappu, kerros) kokoaa alatasonsa. Aikataulutus tapahtuu alimman tason sijainneissa. Ylin rivi vastaa kaavion ylintä riviä. Osuus kertoo, kuinka suuri osa viivan määrästä kuuluu sijaintiin (100 % = koko määrä). Jaa jakaa sijainnin kahteen osaan, ja sen läpi kulkevat viivat sisältävät molemmat.</p>';
-    h += '<details class="loctools"' + (locTools ? ' open' : '') + '><summary>Luo rakenne</summary>' +
+    h += '<details class="loctools"' + (locTools ? ' open' : '') + '><summary>Luo sijaintirakenne</summary>' +
       '<div class="row" style="border-top:0"><label>Generaattori</label><span style="font-size:12px;color:var(--muted)">talot × rappuja × kerroksia × asuntoja</span></div>' +
       '<div class="locgen">' + [['tl', 'Talot'], ['rp', 'Rappuja'], ['kr', 'Kerroksia'], ['as', 'Asuntoja']].map(x => '<label>' + x[1] + '<input class="num" type="number" min="' + (x[0] === 'as' ? 0 : 1) + '" max="999" value="' + locDraft[x[0]] + '" data-ld="' + x[0] + '"></label>').join('') + '</div>' +
       '<div class="btns" style="border-top:0;padding-top:4px"><button type="button" data-act="locgen" data-mode="replace">Korvaa rakenne</button><button type="button" data-act="locgen" data-mode="append">Lisää loppuun</button></div>' +
