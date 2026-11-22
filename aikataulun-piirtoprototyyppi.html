@@ -244,6 +244,10 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   #welcome .rc{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--grid2);font-size:13px}
   #impBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
   #impBox.on{display:flex}
+  #bugBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:91;display:none;align-items:flex-start;justify-content:center;padding:40px 12px;overflow:auto}
+  #bugBox.on{display:flex}
+  #bugBox .imp{background:var(--bg,#fff);color:inherit;border:1px solid #888;border-radius:8px;max-width:600px;width:100%;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  #bugBox h2{margin:0 0 6px;font-size:16px}#bugBox textarea{width:100%;height:90px;box-sizing:border-box;font:13px inherit}#bugBox .row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}#bugBox .note{font-size:12px;opacity:.8;margin:4px 0}
   #impBox .imp{background:var(--bg,#fff);color:inherit;border:1px solid #888;border-radius:8px;max-width:1100px;width:100%;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
   #impBox h2{margin:0 0 6px;font-size:16px}#impBox h3{margin:12px 0 4px;font-size:13px}
   #impBox textarea{width:100%;height:110px;font:12px monospace;box-sizing:border-box}
@@ -277,6 +281,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
       <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määrät</button>
       <button id="undo" type="button">Kumoa</button>
+      <button id="bugBtn" type="button" title="Ilmoita ongelma tai virhe">Ilmoita ongelma</button>
     </div>
   </div>
   <p class="hint" id="hint">Piirrä: valitse työlaji ja vedä tyhjästä kohdasta kaaviossa. Siirrä: vedä viivaa. Venytä: vedä päätepistettä. Sijainnit, työlajit ja muut tiedot ovat paneeleissa: avaa ne Paneelit-painikkeilla, raahaa otsikosta minne tahansa kaavion päälle ja piilota ×-painikkeella. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle, niin edellinen työntää seuraavaa, ja viiveen voi asettaa Tehtävä-paneelissa. Shift + veto viivan päällä siirtää vain sitä tehtävää (sijaintia) ja sen jälkeisiä. Ctrl pohjassa nuolen vetäminen sivusuunnassa muuttaa viivettä ja pään pallon vetäminen siirtää riippuvuuden toiseen tehtävään. Delete poistaa valitun viivan tai riippuvuuden.</p>
@@ -299,6 +304,10 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
 </div>
 
 <script>
+// diagnostiikka: viimeisimmät virheet ja toiminnot ongelmailmoitusta varten (ei tallenneta mihinkään ilman käyttäjän lupaa)
+window.__diag = { errs: [], acts: [] };
+window.addEventListener('error', e => { const d = window.__diag; d.errs.push({ m: String(e.message || '').slice(0, 200), at: String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0) }); if (d.errs.length > 10) d.errs.shift(); });
+window.addEventListener('unhandledrejection', e => { const d = window.__diag; d.errs.push({ m: 'promise: ' + String(e.reason && e.reason.message || e.reason).slice(0, 200), at: '' }); if (d.errs.length > 10) d.errs.shift(); });
 // <logic>
 let N_DAYS = 130, N_WEEKS = 26;
 const MIN_WEEKS = 4, MAX_WEEKS = 260;
@@ -564,6 +573,8 @@ let RES = DEF_RES();
 const resById = id => RES.find(r => r.id === id) || RES[0];
 const resIdOf = t => (t && t.res && RES.some(r => r.id === t.res)) ? t.res : RES[0].id;
 const resUnit = t => resById(resIdOf(t)).unit || 'kpl';
+// siisti ruudukon askel (1, 2, 5 × 10^n): suurillakin arvoilla vain muutama viiva
+function niceStep(x) { const e = Math.pow(10, Math.floor(Math.log10(Math.max(x, 1)))), m = x / e; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * e; }
 function histogram(lines, rid) {
   const h = Array.from({ length: N_DAYS }, () => []);
   for (const l of lines) {
@@ -1146,7 +1157,7 @@ function qlMatch(name, leaves) {
     });
     const peak = hist.reduce((m, a) => Math.max(m, a.reduce((s, x) => s + x.crew, 0)), 0), peakP = hRes === RES[0].id || RES.length < 2 ? peak : histogram(lines, RES[0].id).reduce((m, a) => Math.max(m, a.reduce((s, x) => s + x.crew, 0)), 0);
     if (resOn) {
-    const yMax = Math.ceil(Math.max(peak, hRes === RES[0].id ? 10 : 2) / 5) * 5, base = histTop + HH, sc = HH / yMax, gstep = yMax <= 5 ? 1 : yMax <= 10 ? 5 : 10;
+    const yMax = Math.ceil(Math.max(peak, hRes === RES[0].id ? 10 : 2) / 5) * 5, base = histTop + HH, sc = HH / yMax, gstep = yMax <= 5 ? 1 : yMax <= 10 ? 5 : yMax <= 100 ? 10 : niceStep(yMax / 8);
     for (let g = 0; g <= yMax; g += gstep) {
       const gy = base - g * sc;
       p.push('<line x1="' + LEFT + '" x2="' + (W - RIGHT) + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--grid2)" stroke-width="' + (g === 0 ? 1 : .6) + '"/>');
@@ -2795,7 +2806,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: 1, lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved, res: RES });
+  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved, res: RES });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -2805,9 +2816,22 @@ function qlMatch(name, leaves) {
     const a = document.getElementById('saveState'), b = document.getElementById('pj-status');
     if (a) a.textContent = t; if (b) b.textContent = t;
   }
+  // Tietomallin versiot: jokainen muutos tallennusmuotoon lisätään MIGRATIONS-listan loppuun (ei koskaan muuteta vanhoja).
+  // MIGRATIONS[i] muuntaa version i tallennetun tilan versioksi i+1. Vanhoja kenttiä ei poisteta ilman siirtorutiinia.
+  const MIGRATIONS = [
+    st => st // 0 → 1: ensimmäinen versionumeroitu muoto (aiemmat tallennukset ilman v-kenttää ovat samaa muotoa)
+  ];
+  const SCHEMA = () => MIGRATIONS.length;
+  let newerNote = false, newerLock = false; // uudemmalla versiolla tehtyä projektia ei tallenneta takaisin (estää tietojen katoamisen)
+  function migrateState(o) {
+    let v = Number.isInteger(o.v) && o.v >= 0 ? o.v : 0;
+    if (v > SCHEMA()) { newerNote = true; return o; } // uudemmalla versiolla tehty: avataan parhaalla yrityksellä, käyttäjälle ilmoitetaan
+    while (v < SCHEMA()) { o = MIGRATIONS[v](o) || o; v++; }
+    o.v = SCHEMA(); return o;
+  }
   function normState(st) {
     if (!st || !Array.isArray(st.lines) || !Array.isArray(st.locs) || !Array.isArray(st.trades)) return null;
-    const o = JSON.parse(JSON.stringify(st)); o.deps = Array.isArray(o.deps) ? o.deps : []; return o;
+    let o = JSON.parse(JSON.stringify(st)); o.deps = Array.isArray(o.deps) ? o.deps : []; return migrateState(o);
   }
   function applyState(st) {
     needRoom = true;
@@ -2824,15 +2848,64 @@ function qlMatch(name, leaves) {
     RES = Array.isArray(st.res) && st.res.length && st.res.every(r => r && r.id && r.name) ? st.res.map(r => ({ id: String(r.id), name: String(r.name).slice(0, 24), unit: String(r.unit || 'kpl').slice(0, 6), avail: r.avail > 0 ? +r.avail : undefined })) : DEF_RES(); if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     syncWeeks(); try { impLoad(st.imp); } catch (err) { }
   }
+
+  // ---------- Ilmoita ongelma ----------
+  // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
+  // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
+  const APP_BUILD = '141';
+  const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
+  document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
+  document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
+  function anonState(st) {
+    const o = JSON.parse(JSON.stringify(st)), nm = {};
+    (o.lt || []).forEach((n, i) => { nm[n.id] = 'Sijainti ' + (i + 1); n.name = nm[n.id]; });
+    (o.locs || []).forEach((n, i) => { n.name = nm[n.id] || 'Sijainti ' + (i + 1); });
+    [['trades', 'Työlaji'], ['groups', 'Ylätehtävä'], ['baselines', 'Tavoite'], ['res', 'Resurssi']].forEach(([k, pre]) => (o[k] || []).forEach((x, i) => { if (x && x.name != null) x.name = pre + ' ' + (i + 1); }));
+    (o.lines || []).forEach(l => { if (l.name != null) l.name = ''; Object.keys(l.ov || {}).forEach(k => { if (l.ov[k] && l.ov[k].name) l.ov[k].name = ''; }); delete l.mdl; });
+    delete o.imp; delete o.mdlTpl; return o;
+  }
+  function bugReport(desc, mode) {
+    const d = window.__diag || { errs: [] };
+    return JSON.stringify({ app: 'paikka-aikakaavio', build: APP_BUILD, schema: SCHEMA(), time: new Date().toISOString(), view: view, viewport: innerWidth + 'x' + innerHeight, ua: navigator.userAgent, storage: dbState,
+      description: desc, errors: d.errs, lastActions: actLog.slice(), counts: { lines: lines.length, locations: LOCS.length, trades: TRADES.length, deps: deps.length, groups: groups.length },
+      projectDataMode: mode, projectData: mode === 'none' ? null : mode === 'anon' ? anonState(stateObj()) : JSON.parse(JSON.stringify(stateObj())) }, null, 1);
+  }
+  const bugBox = document.createElement('div'); bugBox.id = 'bugBox';
+  bugBox.innerHTML = '<div class="imp" role="dialog" aria-label="Ilmoita ongelma"><h2>Ilmoita ongelma</h2>' +
+    '<p class="note">Kuvaa lyhyesti, mitä yritit tehdä ja mitä tapahtui. Raportti ei lähde minnekään automaattisesti: kopioit sen tai lataat tiedostona ja lähetät itse.</p>' +
+    '<textarea id="bugDesc" placeholder="Esim. Suljin Rungon ja viiva meni vinoon…"></textarea>' +
+    '<div class="row2" role="radiogroup" aria-label="Projektin tiedot"><label><input type="radio" name="bugMode" value="anon" checked> Liitä projektin rakenne ilman nimiä (suositus)</label><label><input type="radio" name="bugMode" value="full"> Liitä koko projekti nimineen</label><label><input type="radio" name="bugMode" value="none"> Älä liitä projektia</label></div>' +
+    '<p class="note">Aina mukana: sovelluksen versio, selain, viimeisimmät virheet ja viimeiset toiminnot (nimet ja numerot, ei kirjoitettua tekstiä).</p>' +
+    '<div class="row2"><button type="button" id="bugCopy">Kopioi raportti</button><button type="button" id="bugSave">Lataa tiedostona</button><button type="button" id="bugClose">Sulje</button><span id="bugMsg" class="note" role="status"></span></div>' +
+    '<textarea id="bugOut" readonly hidden style="height:130px;font:11px monospace" aria-label="Raportti"></textarea></div>';
+  document.body.appendChild(bugBox);
+  document.getElementById('bugBtn').addEventListener('click', () => { bugBox.classList.add('on'); bugBox.querySelector('#bugDesc').focus(); });
+  bugBox.addEventListener('click', async e => {
+    const b = e.target.closest ? e.target.closest('button') : null, msg = bugBox.querySelector('#bugMsg');
+    if (e.target === bugBox || (b && b.id === 'bugClose')) { bugBox.classList.remove('on'); msg.textContent = ''; return; }
+    if (!b || (b.id !== 'bugCopy' && b.id !== 'bugSave')) return;
+    const mode = (bugBox.querySelector('input[name="bugMode"]:checked') || {}).value || 'anon', txt = bugReport(bugBox.querySelector('#bugDesc').value.trim().slice(0, 2000), mode), out = bugBox.querySelector('#bugOut');
+    if (b.id === 'bugCopy') {
+      let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch (err) { }
+      if (ok) { msg.textContent = 'Raportti kopioitu leikepöydälle.'; out.hidden = true; } else { out.hidden = false; out.value = txt; out.focus(); out.select(); msg.textContent = 'Valitse ja kopioi alla oleva teksti (Ctrl+C).'; }
+    } else {
+      const fn = 'ongelmailmoitus-' + new Date().toISOString().slice(0, 10) + '.json';
+      try { if (dl) await dl.save({ filename: fn, data: txt }); else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' })); a.download = fn; document.body.appendChild(a); a.click(); a.remove(); } msg.textContent = 'Tiedosto tallennettu.'; }
+      catch (err) { if (!err || err.code !== 'declined') { out.hidden = false; out.value = txt; msg.textContent = 'Lataus ei onnistunut. Kopioi alla oleva teksti.'; } }
+    }
+  });
+  window.__bugReport = bugReport; window.__migr = { list: MIGRATIONS, run: migrateState, schema: SCHEMA };
   function renderSub() {
     document.getElementById('subline').textContent = projName + ' · alku ma 4.1.2027, ei vapaapäiviä.';
   }
   function scheduleSave() {
+    if (newerLock) return;
     if (suspend || !db || dbState !== 'ok' || stateJson() === baseline) return;
     clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 1200); setStatus('Muutoksia…');
   }
   async function saveNow() {
     clearTimeout(saveTimer);
+    if (newerLock) return;
     if (!db || dbState !== 'ok') return;
     if (saving) { pendingSave = true; return; }
     const json = stateJson(); if (json === baseline) return;
@@ -2881,12 +2954,14 @@ function qlMatch(name, leaves) {
   async function openProject(id) {
     welcomeOff = false; welcomeEl && (welcomeEl.dataset.h = '');
     const pr = projList.find(x => x.id === id); if (!pr) return;
-    const st = normState(pr.state); if (!st) { setStatus('Projektia ei voi avata'); return; }
+    newerNote = false; const st = normState(pr.state); if (!st) { setStatus('Projektia ei voi avata'); return; }
+    newerLock = newerNote;
     await flushSave();
     suspend = true; impReset(); applyState(st); projId = id; projName = pr.name || 'Projekti'; renderSub(); render(); baseline = stateJson(); suspend = false; try { renderWelcome(); } catch (err) { }
-    setStatus('Avattu ' + hhmm(new Date())); renderProj();
+    setStatus(newerLock ? 'Vain katselu: projekti on tehty uudemmalla versiolla, muutoksia ei tallenneta' : 'Avattu ' + hhmm(new Date())); renderProj();
   }
   async function newProject(name, kind, st) {
+    newerLock = false;
     welcomeOff = false; welcomeEl && (welcomeEl.dataset.h = '');
     await flushSave();
     suspend = true; impReset();
@@ -2959,7 +3034,7 @@ function qlMatch(name, leaves) {
       const f = e.target.files && e.target.files[0]; if (!f) return;
       const r = new FileReader();
       r.onload = () => {
-        try { const o = JSON.parse(String(r.result)), st = normState(o && o.state ? o.state : o); if (!st) throw new Error('bad'); newProject(String((o && o.name) || f.name.replace(/\.json$/i, '')).slice(0, 36) + ' (tuotu)', 'x', st); }
+        try { const o = JSON.parse(String(r.result)); newerNote = false; const st = normState(o && o.state ? o.state : o); if (!st) throw new Error('bad'); newProject(String((o && o.name) || f.name.replace(/\.json$/i, '')).slice(0, 36) + ' (tuotu)', 'x', st); }
         catch (err) { setStatus('Tiedostoa ei voitu lukea'); }
       };
       r.readAsText(f); e.target.value = '';

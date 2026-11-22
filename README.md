@@ -8,3 +8,11 @@ Yhden tiedoston rakennusaikataulutyökalu: paikka-aikakaavio, Gantt, riippuvuude
 - `stress_500x300.json` – kuormitustestidata (anonymisoitu)
 
 Julkaistu artifact: yksityinen. Ei käytetä entisen työnantajan koodia tai dataa.
+
+## Testit ja julkaisun tarkistus
+
+- `bash tests/run-all.sh` ajaa kaikki savutestit (`tests/smoke*.js`) ja satunnaistestin (`tests/fuzz.js`, useita siemenlukuja). Palauttaa 0 vain, jos kaikki läpäisevät. Aja ennen jokaista julkaisua.
+- Satunnaistestin yksittäinen ajo: `SEED=3 N=300 node tests/fuzz.js` (virheessä tulostuu toimintojen jälki, sama siemenluku toistaa virheen).
+- `.github/workflows/test.yml` ajaa saman GitHub Actionsissa (ei vielä kokeiltu).
+- Tallennusmuodon muutokset: lisää siirtorutiini `MIGRATIONS`-listan loppuun (ei koskaan muuteta vanhoja). Uudemmalla versiolla tehtyä projektia ei tallenneta takaisin.
+- Julkaisun yhteydessä päivitä `APP_BUILD` (näkyy ongelmailmoituksessa).
