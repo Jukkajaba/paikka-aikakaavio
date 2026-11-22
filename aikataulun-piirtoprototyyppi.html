@@ -1632,8 +1632,8 @@ function qlMatch(name, leaves) {
     else if (d.ii != null) IMP.inc[+d.ii] = t.checked;
     else if (d.id2 != null) { const it = IMP.items[+d.id2], i = +d.id2, c = IMP.crew[i] != null ? IMP.crew[i] : IMP.dCrew, dur = Math.max(0.1, +t.value || 1); if (it && it.total > 0) { IMP.prod[i] = it.total / (dur * c); impDraw(); } }
     else if (t.name === 'impLM') { IMP.lm = t.value; impDraw(); }
-    else if (d.ip != null) IMP.prod[+d.ip] = Math.max(0.1, +t.value || 1);
-    else if (d.ic != null) IMP.crew[+d.ic] = Math.max(1, Math.round(+t.value || 1));
+    else if (d.ip != null) { IMP.prod[+d.ip] = Math.max(0.1, +t.value || 1); impDraw(); }
+    else if (d.ic != null) { IMP.crew[+d.ic] = Math.max(1, Math.round(+t.value || 1)); impDraw(); }
     else if (d.it != null) IMP.trade[+d.it] = t.value;
     else if (t.id === 'impDP') { IMP.dProd = Math.max(0.1, +t.value || 10); impDraw(); }
     else if (t.id === 'impDC') { IMP.dCrew = Math.max(1, Math.round(+t.value || 2)); impDraw(); }

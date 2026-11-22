@@ -40,6 +40,11 @@ const { chromium } = require('playwright');
   await p.click('#impBtn'); await p.fill('#impTxt', "Suorite\tMäärä\tYks\tK1\tK2\nLaatta\t200\tm2\t120\t80"); await p.click('#impParse');
   await p.fill('[data-id2="0"]', '40'); await p.dispatchEvent('[data-id2="0"]', 'change');
   ok(Math.abs(+await p.inputValue('[data-ip="0"]') - 200 / (40 * 2)) < 0.01, 'duration edit updates productivity ' + await p.inputValue('[data-ip="0"]'));
+  // tuottavuuden ja hlö-määrän muutos päivittää keston
+  await p.fill('[data-ip="0"]', '10'); await p.dispatchEvent('[data-ip="0"]', 'change'); await p.waitForTimeout(100);
+  ok(Math.abs(+await p.inputValue('[data-id2="0"]') - 200 / (10 * 2)) < 0.11, 'productivity edit updates duration ' + await p.inputValue('[data-id2="0"]'));
+  await p.fill('[data-ic="0"]', '4'); await p.dispatchEvent('[data-ic="0"]', 'change'); await p.waitForTimeout(100);
+  ok(Math.abs(+await p.inputValue('[data-id2="0"]') - 200 / (10 * 4)) < 0.11, 'crew edit updates duration ' + await p.inputValue('[data-id2="0"]'));
   const locsBefore = await p.evaluate(() => __aik().LOCS.length);
   await p.check('input[name=impLM][value=koko]'); ok(await p.locator('[data-lm]').count() === 0, 'no location mapping when off');
   await p.click('#impGo'); await p.waitForTimeout(200);
