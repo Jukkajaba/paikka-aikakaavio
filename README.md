@@ -16,3 +16,6 @@ Julkaistu artifact: yksityinen. Ei käytetä entisen työnantajan koodia tai dat
 - `.github/workflows/test.yml` ajaa saman GitHub Actionsissa (ei vielä kokeiltu).
 - Tallennusmuodon muutokset: lisää siirtorutiini `MIGRATIONS`-listan loppuun (ei koskaan muuteta vanhoja). Uudemmalla versiolla tehtyä projektia ei tallenneta takaisin.
 - Julkaisun yhteydessä päivitä `APP_BUILD` (näkyy ongelmailmoituksessa).
+
+## Projektin kalenteri
+Projektilla on alkupäivä, työviikko (ma–su), valinnainen suomalaisten pyhien vapaapäivät, omat poikkeukset ja työtunnit/pv. Aikajana näyttää kalenteripäivät, vapaat harmaana; työ ei etene vapaina. Viikkonumerointi alkaa projektin alkuviikosta. Tallennusversio 2 (cal).

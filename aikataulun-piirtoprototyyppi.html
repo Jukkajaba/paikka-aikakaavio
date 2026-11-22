@@ -311,7 +311,7 @@ window.addEventListener('unhandledrejection', e => { const d = window.__diag; d.
 // <logic>
 let N_DAYS = 130, N_WEEKS = 26;
 const MIN_WEEKS = 4, MAX_WEEKS = 260;
-function setWeeks(w) { N_WEEKS = Math.max(MIN_WEEKS, Math.min(MAX_WEEKS, Math.round(w) || 26)); N_DAYS = N_WEEKS * 5; }
+function setWeeks(w) { N_WEEKS = Math.max(MIN_WEEKS, Math.min(MAX_WEEKS, Math.round(w) || 26)); N_DAYS = N_WEEKS * 5; calVer++; }
 let _tc = null; // tehtävälaskennan välimuisti: käytössä vain yhden piirron ajan (viivat eivät muutu kesken)
 let _uid = 100;
 let groups = [];
@@ -729,16 +729,64 @@ function wouldCycle(deps, a, b, lns) {
   }
   return false;
 }
-const DOW = ['ma', 'ti', 'ke', 'to', 'pe'];
-const START = Date.UTC(2027, 0, 4);
-function fmt(d) { d = Math.floor(d + 1e-9); const t = new Date(START + (Math.floor(d / 5) * 7 + d % 5) * 86400000); return DOW[d % 5] + ' ' + t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
+// ---- projektin kalenteri ----
+// Laskenta tehdään edelleen työpäivinä (päiväindeksi 0..N_DAYS). Kalenteri muuntaa työpäivän kalenteripäiväksi (piirto, päivämäärät)
+// ja takaisin. Oletuskalenteri (ma–pe, ei pyhiä) tuottaa täsmälleen saman kuin ennen kalenteria.
+const DOW = ['ma', 'ti', 'ke', 'to', 'pe', 'la', 'su'], DAY_MS = 86400000;
+const CAL_DEF = () => ({ start: '2027-01-04', wk: [1, 1, 1, 1, 1, 0, 0], hol: false, hpd: 8, ex: [] });
+let CAL = CAL_DEF(), calVer = 1, CC = null, CCver = -1;
+function isoMs(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m) return null; const t = Date.UTC(+m[1], +m[2] - 1, +m[3]), d = new Date(t); return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && +m[1] >= 1990 && +m[1] <= 2100 ? t : null; }
+const msIso = ms => new Date(ms).toISOString().slice(0, 10);
+function easterMs(y) { const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1; return Date.UTC(y, mo - 1, da); }
+const _holC = {};
+function fiHolidays(y) { // Suomen pyhät ja rakennusalan käytännön vapaat (juhannusaatto, jouluaatto) → { 'YYYY-MM-DD': nimi }
+  if (_holC[y]) return _holC[y];
+  const H = {}, add = (t, n) => { H[msIso(t)] = n; }, E = easterMs(y);
+  add(Date.UTC(y, 0, 1), 'Uudenvuodenpäivä'); add(Date.UTC(y, 0, 6), 'Loppiainen'); add(E - 2 * DAY_MS, 'Pitkäperjantai'); add(E, 'Pääsiäispäivä'); add(E + DAY_MS, '2. pääsiäispäivä'); add(Date.UTC(y, 4, 1), 'Vappu'); add(E + 39 * DAY_MS, 'Helatorstai'); add(E + 49 * DAY_MS, 'Helluntaipäivä');
+  for (let d = 19; d <= 25; d++) { const t = Date.UTC(y, 5, d); if (new Date(t).getUTCDay() === 5) { add(t, 'Juhannusaatto'); add(t + DAY_MS, 'Juhannuspäivä'); } }
+  for (let d = 0; d < 7; d++) { const t = Date.UTC(y, 9, 31) + d * DAY_MS; if (new Date(t).getUTCDay() === 6) add(t, 'Pyhäinpäivä'); }
+  add(Date.UTC(y, 11, 6), 'Itsenäisyyspäivä'); add(Date.UTC(y, 11, 24), 'Jouluaatto'); add(Date.UTC(y, 11, 25), 'Joulupäivä'); add(Date.UTC(y, 11, 26), 'Tapaninpäivä');
+  return _holC[y] = H;
+}
+function calNorm(c) { // tarkistaa ja täydentää kalenterin: virheellinen osa korvataan oletuksella
+  const d = CAL_DEF(), o = { start: isoMs(c && c.start) != null ? c.start : d.start, wk: d.wk.slice(), hol: !!(c && c.hol), hpd: c && c.hpd >= 1 && c.hpd <= 24 ? Math.round(c.hpd * 4) / 4 : d.hpd, ex: [] };
+  if (c && Array.isArray(c.wk) && c.wk.length === 7) { const w = c.wk.map(x => x ? 1 : 0); if (w.some(x => x)) o.wk = w; }
+  if (c && Array.isArray(c.ex)) c.ex.slice(0, 200).forEach(x => { const a = x && isoMs(x.from), b = x && isoMs(x.to != null ? x.to : x.from); if (a != null && b != null && a <= b) o.ex.push({ from: msIso(a), to: msIso(b), work: !!x.work, name: String(x.name || '').slice(0, 40) }); });
+  return o;
+}
+function setCal(c) { CAL = calNorm(c); calVer++; }
+function calWorks(ms, exr) {
+  const t = new Date(ms), dow = (t.getUTCDay() + 6) % 7; let w = !!CAL.wk[dow];
+  if (CAL.hol && fiHolidays(t.getUTCFullYear())[msIso(ms)]) w = false;
+  for (let i = 0; i < exr.length; i++) if (ms >= exr[i][0] && ms <= exr[i][1]) w = exr[i][2];
+  return w;
+}
+function cc() { // johdetut taulukot: työpäivä → kalenteripäivä (w2c), kertymä (cum), onko työpäivä (isW)
+  if (CC && CCver === calVer && CC.nd === N_DAYS) return CC;
+  const s0 = isoMs(CAL.start), exr = CAL.ex.map(x => [isoMs(x.from), isoMs(x.to), x.work]), w2c = [], cum = [0], isW = [];
+  for (let c = 0, k = 0; k <= N_DAYS && c < 40000; c++) { const w = calWorks(s0 + c * DAY_MS, exr); isW.push(w ? 1 : 0); cum.push(cum[c] + (w ? 1 : 0)); if (w) { w2c.push(c); k++; } }
+  CC = { s0: s0, w2c: w2c, cum: cum, isW: isW, CD: w2c[N_DAYS] != null ? w2c[N_DAYS] : N_DAYS * 7 / 5, nd: N_DAYS }; CCver = calVer; return CC;
+}
+const calLen = () => cc().CD; // aikajanan pituus kalenteripäivinä
+function wdOff(k) { const A = cc().w2c; return k < 0 ? A[0] + k * 1.4 : k > N_DAYS ? A[N_DAYS] + (k - N_DAYS) * 1.4 : A[k]; } // työpäivän k alku kalenteripäivinä
+function w2cS(w) { const k = Math.floor(w + 1e-9); return wdOff(k) + Math.max(0, Math.min(1, w - k)); } // alkuhetki (kalenteripäivänä)
+function w2cE(e) { if (e <= 0) return wdOff(0) + e * 1.4; const k = Math.ceil(e - 1e-9) - 1; return wdOff(k) + Math.max(0, Math.min(1, e - k)); } // loppuhetki: päättyy työpäivän loppuun, ei seuraavan alkuun
+function c2w(c) { // kalenteripäivä (liukuluku) → työpäiväindeksi; vapaa päivä painuu seuraavan työpäivän alkuun
+  const C = cc(); if (c <= 0) return c * 5 / 7 + C.cum[0]; if (c >= C.CD) return N_DAYS + (c - C.CD) * 5 / 7;
+  const d = Math.floor(c); return C.cum[d] + (C.isW[d] ? c - d : 0);
+}
+function calWeekC(w) { const dow = (new Date(cc().s0).getUTCDay() + 6) % 7; return w <= 0 ? 0 : (7 - dow) + 7 * (w - 1); } // viikon w alku kalenteripäivinä (viikko 0 = alkupäivän viikko)
+function calShadeRuns(c0, c1) { const C = cc(), a = Math.max(0, Math.floor(c0)), b = Math.min(C.isW.length, Math.ceil(c1)), out = []; let s = -1; for (let c = a; c < b; c++) { if (!C.isW[c]) { if (s < 0) s = c; } else if (s >= 0) { out.push([s, c]); s = -1; } } if (s >= 0) out.push([s, b]); return out; }
+function shadeSvg(xc, c0, c1, y, h, dayW) { if (dayW < 1.1) return ''; return calShadeRuns(c0, c1).map(r => '<rect x="' + xc(r[0]).toFixed(1) + '" y="' + y + '" width="' + ((r[1] - r[0]) * dayW).toFixed(1) + '" height="' + h + '" fill="var(--ink)" opacity=".07" pointer-events="none"/>').join('');  }
+function dateOfDay(k) { return cc().s0 + Math.round(wdOff(Math.max(0, Math.floor(k + 1e-9)))) * DAY_MS; }
+function fmtMs(ms) { const t = new Date(ms); return DOW[(t.getUTCDay() + 6) % 7] + ' ' + t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
+function fmt(d) { return fmtMs(dateOfDay(d)); }
 const fmtE = e => fmt(Math.ceil(e - 1e-9) - 1);
-// päiväindeksi <-> ISO-päivämäärä (5 työpäivää / viikko, alku START)
-function isoOfDay(d) { d = Math.max(0, Math.floor(d + 1e-9)); return new Date(START + (Math.floor(d / 5) * 7 + d % 5) * 86400000).toISOString().slice(0, 10); }
-function dayOfIso(iso, endIncl) { // viikonloppu: alkupäivä siirtyy seuraavaan maanantaihin, loppupäivä edelliseen perjantaihin
-  const m = /^(\d+)-(\d+)-(\d+)/.exec(iso || ''); if (!m) return null;
-  const n = Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - START) / 86400000); if (n < 0) return endIncl ? null : 0;
-  const w = Math.floor(n / 7), dw = n % 7; return w * 5 + (dw > 4 ? (endIncl ? 4 : 5) : dw);
+function isoOfDay(d) { return msIso(dateOfDay(d)); }
+function dayOfIso(iso, endIncl) { // vapaa päivä: alkupäivä siirtyy seuraavaan työpäivään, loppupäivä edelliseen
+  const ms = isoMs(iso); if (ms == null) return null; const C = cc(), n = Math.round((ms - C.s0) / DAY_MS);
+  if (n < 0) return endIncl ? null : 0; if (n >= C.isW.length) return N_DAYS;
+  return C.cum[n] - (!C.isW[n] && endIncl ? 1 : 0);
 }
 // toteuma: pct (0–100), as (toteutunut alku), ae (toteutunut loppu, avoin); sijainnittomalla tehtävällä viivalla itsellään, muuten ov[sijainti]
 const actBox = (l, locId) => l.flat ? l : ((l.ov && l.ov[locId]) || {});
@@ -748,7 +796,7 @@ function actOf(l, k) { // k = tasks()-rivi
 }
 function pctOfTasks(items) { let d = 0, w = 0; items.forEach(q => { d += q.k.d; w += q.k.d * actOf(q.l, q.k).pct; }); return d ? w / d : 0; }
 const dateOnly = t => t.replace(/^(ma|ti|ke|to|pe) /, '');
-const weekOf = d => Math.floor(d / 5) + 1;
+const weekOf = d => { const c = wdOff(Math.max(0, Math.floor(d + 1e-9))), w1 = calWeekC(1); return c < w1 ? 1 : 2 + Math.floor((c - w1) / 7); };
 // ---- määräluettelon tuonti: puhdas logiikka ----
 // Taulukko (liitetty Excelistä) -> sarakeroolit -> suoritteet (rakenne = ylätehtävä, suorite = viiva).
 function qlParse(text) {
@@ -853,14 +901,14 @@ function qlMatch(name, leaves) {
     ];
   }
   const byId = id => lines.find(l => String(l.id) === String(id));
-  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES });
+  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES, cal: CAL });
   function syncWeeks() {
     const w = document.getElementById('weeks'), t = document.getElementById('target');
     if (w) w.value = N_WEEKS; if (t) { t.max = N_WEEKS; t.value = target; }
     const pw = document.getElementById('pj-weeks'), pt = document.getElementById('pj-target'); if (pw) pw.value = N_WEEKS; if (pt) { pt.max = N_WEEKS; pt.value = target; }
   }
   function restore(s) {
-    const o = JSON.parse(s); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; statusDay = o.statusDay != null ? o.statusDay : null; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
+    const o = JSON.parse(s); setCal(o.cal); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; statusDay = o.statusDay != null ? o.statusDay : null; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
     if (Array.isArray(o.res) && o.res.length) RES = o.res; if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     if (!trade(drawTrade)) drawTrade = TRADES.length ? TRADES[0].id : null;
     if (selId !== null && !byId(selId)) selId = null;
@@ -1012,26 +1060,28 @@ function qlMatch(name, leaves) {
     { const lid = new Set(LOCS.map(x => x.id)); locHid.forEach(id => { if (!lid.has(id)) locHid.delete(id); }); }
     const VR = (lcol.size || locHid.size) ? viewRows(lcol, locHid) : null, L = VR ? VR.rows.length : L0, RM = VR ? VR.map : null;
     let labMax = 0; if (VR) VR.rows.forEach(r => { labMax = Math.max(labMax, r.name.length); }); else LOCS.forEach(x => { labMax = Math.max(labMax, x.name.length); }); labMax = Math.min(labMax, 30);
-    const LEFT = narrow ? 56 : clamp(Math.round(labMax * 6.4 + 22), 112, 210), RIGHT = 14, visD = Math.min(N_DAYS, Math.max(5, gVisW * 5)), dayW = (W - LEFT - RIGHT) / visD;
-    gOff = clamp(gOff, 0, Math.max(0, N_DAYS - visD));
+    const LEFT = narrow ? 56 : clamp(Math.round(labMax * 6.4 + 22), 112, 210), RIGHT = 14, visD = Math.min(calLen(), Math.max(7, gVisW * 7)), dayW = (W - LEFT - RIGHT) / visD;
+    gOff = clamp(gOff, 0, Math.max(0, calLen() - visD));
     if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     const hist = histogram(lines, hRes), histN = hist.reduce((q, x) => q + x.length, 0), hr = resById(hRes);
     resOn = resMode === 'on' || (resMode === 'auto' && histN <= 15000); // hyvin isoissa aikatauluissa resurssit ovat oletuksena piilossa
     const rowH = clamp(Math.floor(330 / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round(46 * ROWF[gRowK])), TOP = 30, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
     G = { LEFT: LEFT, dayW: dayW, rowH: rowH, TOP: TOP, bodyH: bodyH, L: L, rm: RM, rows: VR ? VR.rows : null, W: W, visD: visD, RIGHT: RIGHT };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
-    { const need = visD < N_DAYS; fH.hidden = !need; if (need) { const cw = fH.clientWidth || W; fHi.style.width = Math.round(cw * N_DAYS / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(fH.scrollLeft - sl) > 1) { fSyncing = true; fH.scrollLeft = sl; } } }
-    const X = d => LEFT + (d - gOff) * dayW;
+    { const need = visD < calLen(); fH.hidden = !need; if (need) { const cw = fH.clientWidth || W; fHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(fH.scrollLeft - sl) > 1) { fSyncing = true; fH.scrollLeft = sl; } } }
+    const XC = c => LEFT + (c - gOff) * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e));
     const Ytop = i => TOP + (L - 1 - (RM ? RM[i] : i)) * rowH, Ybot = i => TOP + (L - (RM ? RM[i] : i)) * rowH, Yrow = r => TOP + (L - 1 - r) * rowH;
     PH('buildsvg'); const vio = violations(lines); PH('violations'); PH('hist');
     const p = [], lab = [];
     p.push('<defs><clipPath id="fclip"><rect x="' + LEFT + '" y="0" width="' + (W - LEFT - RIGHT) + '" height="' + H + '"/></clipPath></defs><g clip-path="url(#fclip)">');
-    const weekPx = dayW * 5, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
+    const weekPx = dayW * 7, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
     lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="18" text-anchor="end">vk</text>');
-    for (let w = Math.max(0, Math.floor(gOff / 5) - 1); w <= Math.min(N_WEEKS, Math.ceil((gOff + visD) / 5) + 1); w++) {
-      const x = X(w * 5), major = w % step === 0;
+    p.push(shadeSvg(XC, gOff, gOff + visD, TOP, histTop + HH - TOP, dayW));
+    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / 7) + 1; w++) {
+      const wc = calWeekC(w); if (wc < gOff - 7) continue; if (wc > gOff + visD + 7) break;
+      const x = XC(wc), major = w % step === 0;
       p.push('<line x1="' + x + '" x2="' + x + '" y1="' + (major ? 22 : TOP) + '" y2="' + (histTop + HH) + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .6) + '"/>');
-      if (major && w < N_WEEKS) p.push('<text class="ax" x="' + (x + 3) + '" y="18">' + (w + 1) + '</text>');
+      if (major && wc < cl) p.push('<text class="ax" x="' + (x + 3) + '" y="18">' + (w + 1) + '</text>');
     }
     const maxc = narrow ? 7 : Math.floor((LEFT - 18) / 6.4);
     for (let i = 0; i < L; i++) {
@@ -1041,7 +1091,7 @@ function qlMatch(name, leaves) {
       lab.push('<text class="loc" x="' + (LEFT - 8) + '" y="' + (y + rowH / 2 + 4) + '" text-anchor="end"' + (rw && rw.coll ? ' style="font-weight:700"' : '') + '>' + esc(nm.length > maxc ? nm.slice(0, maxc - 1) + '…' : nm) + '<title>' + esc(rw && rw.coll ? rw.name + ' (' + rw.n + ' sijaintia)' : nm) + '</title></text>');
     }
     p.push('<line x1="' + LEFT + '" x2="' + (W - RIGHT) + '" y1="' + (TOP + bodyH) + '" y2="' + (TOP + bodyH) + '" stroke="var(--grid2)" stroke-width=".8"/>');
-    const tx = X(target * 5);
+    const tx = XC(calWeekC(target));
     p.push('<line x1="' + tx + '" x2="' + tx + '" y1="22" y2="' + (histTop + HH) + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4"/>');
     p.push('<text class="tgtl" x="' + (tx - 5) + '" y="' + (TOP + 12) + '" text-anchor="end">Tavoite vk ' + target + '</text>');
     if (stOn() && statusDay != null) { const sx = X(statusDay); p.push('<line x1="' + sx.toFixed(1) + '" x2="' + sx.toFixed(1) + '" y1="22" y2="' + (histTop + HH) + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"/>'); p.push('<text class="tgtl" x="' + (sx + 5) + '" y="' + (TOP + 12) + '" style="fill:#b86a0c">Tilanne ' + esc(fmtE(statusDay)) + '</text>'); }
@@ -1051,13 +1101,13 @@ function qlMatch(name, leaves) {
       const ts0 = mergeRows(tsArg || tasks(l), RM); if (!ts0.length) return ''; const asc = tsArg ? ts0[0].loc <= ts0[ts0.length - 1].loc : range(l).dir >= 0; let d = '';
       ts0.forEach((t, i) => {
         const y0 = asc ? Ybot(t.loc) : Ytop(t.loc), y1 = asc ? Ytop(t.loc) : Ybot(t.loc);
-        d += (i === 0 ? 'M' : 'L') + X(t.s).toFixed(1) + ' ' + y0 + 'L' + X(t.e).toFixed(1) + ' ' + y1;
+        d += (i === 0 ? 'M' : 'L') + X(t.s).toFixed(1) + ' ' + y0 + 'L' + XE(t.e).toFixed(1) + ' ' + y1;
       });
       return d;
     }
     function ends(l) {
       const ts = mergeRows(tasks(l), RM), asc = range(l).dir >= 0, a = ts[0], b = ts[ts.length - 1];
-      return { sx: X(a.s), sy: asc ? Ybot(a.loc) : Ytop(a.loc), ex: X(b.e), ey: asc ? Ytop(b.loc) : Ybot(b.loc), asc: asc };
+      return { sx: X(a.s), sy: asc ? Ybot(a.loc) : Ytop(a.loc), ex: XE(b.e), ey: asc ? Ytop(b.loc) : Ybot(b.loc), asc: asc };
     }
     if (curBl()) vlines().forEach(l => { const a = blLine(l.id); if (a && a.length) p.push('<path d="' + pathOf(l, a) + '" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round" stroke-linejoin="round" opacity=".4" pointer-events="none"/>'); });
     vlines().forEach(l => {
@@ -1067,9 +1117,9 @@ function qlMatch(name, leaves) {
       p.push('<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"' + (over ? ' stroke-dasharray="1 6"' : '') + '/>');
       p.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" data-role="body" data-id="' + l.id + '"><title>' + esc(t.name + '\n' + tasks(l).map(k => LOCS[k.loc].name + (k.name ? ': ' + k.name : '') + '  ' + dateOnly(fmt(k.s)) + ' – ' + dateOnly(fmtE(k.e))).join('\n')) + '</title></path>');
       tasks(l).forEach(k => {
-        if (!VR && k.name && (k.e - k.s) * dayW > 44) {
+        if (!VR && k.name && (XE(k.e) - X(k.s)) > 44) {
           const nm = k.name.length > 18 ? k.name.slice(0, 17) + '…' : k.name;
-          p.push('<text class="tl" x="' + (X((k.s + k.e) / 2) + 6) + '" y="' + (Ytop(k.loc) + rowH / 2 - 5) + '" pointer-events="none">' + esc(nm) + '</text>');
+          p.push('<text class="tl" x="' + ((X(k.s) + XE(k.e)) / 2 + 6) + '" y="' + (Ytop(k.loc) + rowH / 2 - 5) + '" pointer-events="none">' + esc(nm) + '</text>');
         }
       });
     });
@@ -1107,7 +1157,7 @@ function qlMatch(name, leaves) {
     if (FC) vlines().forEach(l => {
       const a = FC.get(l.id), ts = tasks(l); if (!a || !a.length || !a.some((q, i) => ts[i] && (Math.abs(q.s - ts[i].s) > 0.05 || Math.abs(q.e - ts[i].e) > 0.05))) return;
       const asc = range(l).dir >= 0; let d = '';
-      mergeRows(a, RM).forEach((q, i) => { const y0 = asc ? Ybot(q.loc) : Ytop(q.loc), y1 = asc ? Ytop(q.loc) : Ybot(q.loc); d += (i === 0 ? 'M' : 'L') + X(q.s).toFixed(1) + ' ' + y0 + 'L' + X(q.e).toFixed(1) + ' ' + y1; });
+      mergeRows(a, RM).forEach((q, i) => { const y0 = asc ? Ybot(q.loc) : Ytop(q.loc), y1 = asc ? Ytop(q.loc) : Ybot(q.loc); d += (i === 0 ? 'M' : 'L') + X(q.s).toFixed(1) + ' ' + y0 + 'L' + XE(q.e).toFixed(1) + ' ' + y1; });
       p.push('<path d="' + d + '" fill="none" stroke="' + colorOf(l.trade) + '" stroke-width="3" stroke-dasharray="7 4" stroke-linecap="round" stroke-linejoin="round" opacity=".95" pointer-events="none"><title>Ennuste</title></path>');
     });
     // toteuma: tummat umpiviivat toteutuneiden päivien kohdalla (alku -> loppu tai tilannepäivä, korkeus valmiusasteen mukaan)
@@ -1118,7 +1168,7 @@ function qlMatch(name, leaves) {
         const a = actOf(l, k); if (a.as == null) return;
         const y0 = asc ? Ybot(k.loc) : Ytop(k.loc), y1 = asc ? Ytop(k.loc) : Ybot(k.loc);
         const xe = a.ae != null ? a.ae : (statusDay != null ? Math.max(a.as, statusDay) : k.s + (k.e - k.s) * a.pct / 100), ye = a.ae != null ? y1 : y0 + (y1 - y0) * a.pct / 100;
-        d += 'M' + X(a.as).toFixed(1) + ' ' + y0 + 'L' + X(xe).toFixed(1) + ' ' + ye.toFixed(1);
+        d += 'M' + X(a.as).toFixed(1) + ' ' + y0 + 'L' + XE(xe).toFixed(1) + ' ' + ye.toFixed(1);
       });
       if (d) { p.push('<path d="' + d + '" fill="none" stroke="var(--panel)" stroke-width="6.5" stroke-linecap="round" pointer-events="none"/>'); p.push('<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" pointer-events="none"><title>Toteuma</title></path>'); }
     });
@@ -1167,12 +1217,12 @@ function qlMatch(name, leaves) {
     if (locHid.size) lab.push('<text class="ax" x="' + (LEFT + 4) + '" y="' + (histTop - 4) + '">Resurssit: koko projekti</text>');
     let peakDay = -1;
     let runKey = null, runStart = 0;
-    const flushRun = (d0, d1, arr) => { let acc = 0; arr.forEach(x => { const h = x.crew * sc; p.push('<rect x="' + X(d0).toFixed(2) + '" y="' + (base - acc - h).toFixed(2) + '" width="' + Math.max(1, (d1 - d0) * dayW - .5).toFixed(2) + '" height="' + h.toFixed(2) + '" fill="' + colorOf(x.trade) + '" opacity=".85" shape-rendering="crispEdges"/>'); acc += h; }); };
+    const flushRun = (d0, d1, arr) => { let acc = 0; arr.forEach(x => { const h = x.crew * sc; p.push('<rect x="' + X(d0).toFixed(2) + '" y="' + (base - acc - h).toFixed(2) + '" width="' + Math.max(1, XE(d1) - X(d0) - .5).toFixed(2) + '" height="' + h.toFixed(2) + '" fill="' + colorOf(x.trade) + '" opacity=".85" shape-rendering="crispEdges"/>'); acc += h; }); };
     const bigHist = histN > 15000 || (!!drag && histN > 3000); // isossa aikataulussa pinottujen palkkien sijaan vain kokonaissiluetti (vedon aikana jo pienemmällä määrällä)
     if (bigHist) {
       let dstr = 'M' + X(0).toFixed(1) + ' ' + base;
-      hist.forEach((arr, d) => { let sum = 0; arr.forEach(x => { sum += x.crew; }); if (sum === peak && peakDay < 0 && peak > 0) peakDay = d; const yy = (base - sum * sc).toFixed(1); dstr += 'L' + X(d).toFixed(1) + ' ' + yy + 'L' + X(d + 1).toFixed(1) + ' ' + yy; });
-      p.push('<path d="' + dstr + 'L' + X(hist.length).toFixed(1) + ' ' + base + 'Z" fill="var(--grid2)" opacity=".75"/>');
+      hist.forEach((arr, d) => { let sum = 0; arr.forEach(x => { sum += x.crew; }); if (sum === peak && peakDay < 0 && peak > 0) peakDay = d; const yy = (base - sum * sc).toFixed(1); dstr += 'L' + X(d).toFixed(1) + ' ' + yy + 'L' + XE(d + 1).toFixed(1) + ' ' + yy; });
+      p.push('<path d="' + dstr + 'L' + XE(hist.length).toFixed(1) + ' ' + base + 'Z" fill="var(--grid2)" opacity=".75"/>');
     } else hist.forEach((arr, d) => {
       let sum = 0; arr.forEach(x => { sum += x.crew; });
       if (sum === peak && peakDay < 0 && peak > 0) peakDay = d;
@@ -1371,18 +1421,19 @@ function qlMatch(name, leaves) {
     gRows = buildGanttRows();
     const W = Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = 34, rowH = ROWH[gRowK], RIGHT = 14;
     const NAME = narrow ? 150 : 215, cw = narrow ? [] : [58, 58, 34, 34].concat(stOn() ? [34] : []).concat(curBl() ? [40] : []).concat(fcOn() ? [40] : []), colX = []; let cx = 12 + NAME; cw.forEach(w => { cx += w; colX.push(cx); });
-    const LEFT = cx + 10, visD = Math.min(N_DAYS, Math.max(5, gVisW * 5)), dayW = (W - LEFT - RIGHT) / visD;
-    gOff = clamp(gOff, 0, Math.max(0, N_DAYS - visD));
+    const LEFT = cx + 10, visD = Math.min(calLen(), Math.max(7, gVisW * 7)), dayW = (W - LEFT - RIGHT) / visD;
+    gOff = clamp(gOff, 0, Math.max(0, calLen() - visD));
     gGeo = { W: W, LEFT: LEFT, RIGHT: RIGHT, dayW: dayW, rowH: rowH, NAME: NAME, colX: colX, narrow: narrow, visD: visD, blK: curBl() ? (stOn() ? 5 : 4) : -1, fcK: fcOn() ? 4 + (stOn() ? 1 : 0) + (curBl() ? 1 : 0) : -1 };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
-    { const need = visD < N_DAYS; gH.hidden = !need; if (need) { const cw = gH.clientWidth || W; gHi.style.width = Math.round(cw * N_DAYS / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(gH.scrollLeft - sl) > 1) { gSyncing = true; gH.scrollLeft = sl; } } }
+    { const need = visD < calLen(); gH.hidden = !need; if (need) { const cw = gH.clientWidth || W; gHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(gH.scrollLeft - sl) > 1) { gSyncing = true; gH.scrollLeft = sl; } } }
     gIdx = {};
     gRows.forEach((r, i) => { if (r.nh) return; if (r.gk) gIdx['K|' + r.grp] = i; else if (r.g) gIdx[gGroup === 'trade' ? 'g|' + r.line : 'p|' + (r.locId == null ? 'none' : r.locId)] = i; else gIdx[r.line + '|' + r.locId] = i; });
-    const X = d => LEFT + (d - gOff) * dayW, hp = [], weekPx = dayW * 5, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
-    for (let w = Math.max(0, Math.floor(gOff / 5) - 1); w <= Math.min(N_WEEKS, Math.ceil((gOff + visD) / 5) + 1); w++) {
-      const major = w % step === 0, x = X(w * 5);
+    const XC = c => LEFT + (c - gOff) * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), hp = [], weekPx = dayW * 7, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
+    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / 7) + 1; w++) {
+      const wc = calWeekC(w); if (wc < gOff - 7) continue; if (wc > gOff + visD + 7) break;
+      const major = w % step === 0, x = XC(wc);
       hp.push('<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (major ? 14 : 26) + '" y2="' + HEAD + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '"/>');
-      if (major && w < N_WEEKS) hp.push('<text class="ax" x="' + (x + 3).toFixed(1) + '" y="24">' + (w + 1) + '</text>');
+      if (major && wc < cl) hp.push('<text class="ax" x="' + (x + 3).toFixed(1) + '" y="24">' + (w + 1) + '</text>');
     }
     hp.push('<rect x="0" y="0" width="' + (LEFT - 4) + '" height="' + HEAD + '" fill="var(--panel)"/>');
     
@@ -1398,7 +1449,7 @@ function qlMatch(name, leaves) {
     const n = gRows.length, rowH = g.rowH, W = g.W, vh = gScroll.clientHeight || 560, st = gScroll.scrollTop;
     const first = Math.max(0, Math.floor(st / rowH) - 3), last = Math.min(n, Math.ceil((st + vh) / rowH) + 3), h = Math.max(2, last - first) * rowH, oy = first * rowH;
     gOy = oy;
-    const X = d => g.LEFT + (d - gOff) * g.dayW, p = [], cov = [], weekPx = g.dayW * 5, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
+    const XC = c => g.LEFT + (c - gOff) * g.dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), p = [], cov = [], weekPx = g.dayW * 7, step = weekPx < 4.5 ? 13 : weekPx < 7.5 ? 8 : weekPx < 16 ? 4 : weekPx < 30 ? 2 : 1;
     gSvg.style.top = oy + 'px'; gSvg.setAttribute('width', W); gSvg.setAttribute('height', h); gSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + h);
     if (!n) { gSvg.innerHTML = '<text class="gc" x="12" y="30">Ei viivoja. Piirrä viivat Paikka-aika-näkymässä.</text>'; return; }
     for (let i = first; i < last; i++) {
@@ -1406,11 +1457,13 @@ function qlMatch(name, leaves) {
       if (i % 2 === 0) p.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + rowH + '" fill="var(--band)" opacity=".7"/>');
       if (gRowSel(r) || (r.gk && r.grp === selGrp && selId == null)) p.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + rowH + '" fill="var(--ink)" opacity=".09"/>');
     }
-    for (let w = Math.max(0, Math.floor(gOff / 5) - 1); w <= Math.min(N_WEEKS, Math.ceil((gOff + g.visD) / 5) + 1); w++) {
-      const major = w % step === 0, x = X(w * 5).toFixed(1);
+    p.push(shadeSvg(XC, gOff, gOff + g.visD, 0, h, g.dayW));
+    for (let w = 0, cl = calLen(); w <= Math.ceil(cl / 7) + 1; w++) {
+      const wc = calWeekC(w); if (wc < gOff - 7) continue; if (wc > gOff + g.visD + 7) break;
+      const major = w % step === 0, x = XC(wc).toFixed(1);
       p.push('<line x1="' + x + '" x2="' + x + '" y1="0" y2="' + h + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .55) + '"/>');
     }
-    const tx = X(target * 5).toFixed(1);
+    const tx = XC(calWeekC(target)).toFixed(1);
     p.push('<line x1="' + tx + '" x2="' + tx + '" y1="0" y2="' + h + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4"/>');
     if (stOn() && statusDay != null) p.push('<line x1="' + X(statusDay).toFixed(1) + '" x2="' + X(statusDay).toFixed(1) + '" y1="0" y2="' + h + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"><title>Tilanne ' + fmtE(statusDay) + '</title></line>');
     for (let i = first; i < last; i++) {
@@ -1426,7 +1479,7 @@ function qlMatch(name, leaves) {
       cov.push('<text class="gt' + (r.g ? ' gg' : '') + '" x="' + ind + '" y="' + (mid + 4) + '">' + esc(lab) + '<title>' + esc(r.label) + '</title></text>');
       const bsp = blRow(r), fsp = fcRow(r);
       if (!g.narrow && !r.empty) [dateOnly(fmt(r.s)), dateOnly(fmtE(r.e)), dd(r.e - r.s), String(r.crew)].concat(stOn() ? [r.pct != null && r.pct > 0 ? String(Math.round(r.pct)) : ''] : []).concat(curBl() ? [bsp ? (r1(bestEndRow(r) - bsp.e) > 0 ? '+' : r1(bestEndRow(r) - bsp.e) < 0 ? '−' : '') + dd(Math.abs(bestEndRow(r) - bsp.e)) : ''] : []).concat(fcOn() ? [fsp ? (r1(fsp.e - r.e) > 0 ? '+' : r1(fsp.e - r.e) < 0 ? '−' : '') + dd(Math.abs(fsp.e - r.e)) : ''] : []).forEach((t, k) => cov.push('<text class="gc" x="' + g.colX[k] + '" y="' + (mid + 4) + '" text-anchor="end"' + (k === 3 && over || ((k === g.blK || k === g.fcK) && String(t).charAt(0) === '+') ? ' style="fill:var(--warn);font-weight:700"' : (k === g.blK && String(t).charAt(0) === '−' ? ' style="fill:#2E9E6B;font-weight:700"' : '')) + '>' + t + (k === 3 && over ? '▲' : '') + '</text>'));
-      const x0 = X(r.s), x1 = X(r.e), col = r.col ? colorOf(r.col) : 'var(--ink)', sel = gRowSel(r), by0 = stOn() ? 3.5 : 5, bh = stOn() ? 9 : rowH - 10;
+      const x0 = X(r.s), x1 = XE(r.e), col = r.col ? colorOf(r.col) : 'var(--ink)', sel = gRowSel(r), by0 = stOn() ? 3.5 : 5, bh = stOn() ? 9 : rowH - 10;
       if (r.empty) { /* tyhjällä ryhmällä ei palkkia */ }
       else if (r.g) {
         p.push('<rect x="' + x0.toFixed(1) + '" y="' + (mid - 3) + '" width="' + Math.max(2, x1 - x0).toFixed(1) + '" height="6" fill="' + col + '" opacity="' + (r.col ? 1 : .75) + '"/>');
@@ -1434,10 +1487,10 @@ function qlMatch(name, leaves) {
       } else {
         p.push('<rect x="' + x0.toFixed(1) + '" y="' + (y + by0) + '" width="' + Math.max(2, x1 - x0).toFixed(1) + '" height="' + bh + '" rx="3" fill="' + col + '" opacity=".92"' + (sel ? ' stroke="var(--ink)" stroke-width="1.5"' : '') + '/>');
       }
-      if (fsp && !r.empty && (Math.abs(fsp.s - r.s) > 0.05 || Math.abs(fsp.e - r.e) > 0.05)) p.push('<rect x="' + X(fsp.s).toFixed(1) + '" y="' + (r.g ? mid - 4 : y + 4) + '" width="' + Math.max(2, X(fsp.e) - X(fsp.s)).toFixed(1) + '" height="' + (r.g ? 8 : rowH - 8) + '" rx="3" fill="none" stroke="' + col + '" stroke-width="1.8" stroke-dasharray="4 3" pointer-events="none"><title>Ennuste</title></rect>');
+      if (fsp && !r.empty && (Math.abs(fsp.s - r.s) > 0.05 || Math.abs(fsp.e - r.e) > 0.05)) p.push('<rect x="' + X(fsp.s).toFixed(1) + '" y="' + (r.g ? mid - 4 : y + 4) + '" width="' + Math.max(2, XE(fsp.e) - X(fsp.s)).toFixed(1) + '" height="' + (r.g ? 8 : rowH - 8) + '" rx="3" fill="none" stroke="' + col + '" stroke-width="1.8" stroke-dasharray="4 3" pointer-events="none"><title>Ennuste</title></rect>');
       if (stOn() && !r.empty && r.pct > 0 && x1 > x0) p.push('<rect x="' + x0.toFixed(1) + '" y="' + (r.g ? mid - 3 : y + by0) + '" width="' + (Math.max(2, x1 - x0) * Math.min(100, r.pct) / 100).toFixed(1) + '" height="' + (r.g ? 6 : bh) + '" fill="#000" opacity=".32" pointer-events="none"/>');
       if (stOn() && r.act && r.act.as != null) { const ae0 = r.act.ae != null ? r.act.ae : (statusDay != null ? Math.max(r.act.as, statusDay) : r.s + (r.e - r.s) * r.act.pct / 100); p.push('<rect x="' + X(r.act.as).toFixed(1) + '" y="' + (y + 13.5) + '" width="' + Math.max(2, X(ae0) - X(r.act.as)).toFixed(1) + '" height="7" rx="2" fill="' + col + '" style="fill:color-mix(in srgb, ' + col + ' 55%, #000)" stroke="var(--ink)" stroke-width=".6" pointer-events="none"><title>Toteuma</title></rect>'); }
-      if (bsp && !r.empty) p.push('<rect x="' + X(bsp.s).toFixed(1) + '" y="' + (y + rowH - 3.5) + '" width="' + Math.max(2, X(bsp.e) - X(bsp.s)).toFixed(1) + '" height="3" rx="1.5" fill="var(--ink)" opacity=".38" pointer-events="none"><title>Tavoite</title></rect>');
+      if (bsp && !r.empty) p.push('<rect x="' + X(bsp.s).toFixed(1) + '" y="' + (y + rowH - 3.5) + '" width="' + Math.max(2, XE(bsp.e) - X(bsp.s)).toFixed(1) + '" height="3" rx="1.5" fill="var(--ink)" opacity=".38" pointer-events="none"><title>Tavoite</title></rect>');
     }
     const gdh = [], dg = drag && (drag.type === 'gdep' || drag.type === 'gdepend') ? drag : null;
     if (showDeps) {
@@ -1445,7 +1498,7 @@ function qlMatch(name, leaves) {
       allDeps().forEach(d => {
         const ta = depTask(lines, d.a, 'a'), tb = depTask(lines, d.b, 'b'), ia = rowOf(d.a, 'a'), ib = rowOf(d.b, 'b'); if (!ta || !tb || ia == null || ib == null) return;
         const ya = ia * rowH + rowH / 2 - oy, yb = ib * rowH + rowH / 2 - oy; if (Math.max(ya, yb) < -rowH || Math.min(ya, yb) > h + rowH) return;
-        const x1 = X(ta.e), x2 = X(tb.s), slk = tb.s - (ta.e + (d.lag || 0)), dc = depCol(d, slk), sel = d.id === selDep;
+        const x1 = XE(ta.e), x2 = X(tb.s), slk = tb.s - (ta.e + (d.lag || 0)), dc = depCol(d, slk), sel = d.id === selDep;
         if (dg && dg.type === 'gdepend' && dg.id === d.id) {
           const fx = dg.end === 'a' ? x2 : x1, fy = dg.end === 'a' ? yb : ya;
           p.push('<line x1="' + fx.toFixed(1) + '" y1="' + fy + '" x2="' + dg.cur.x.toFixed(1) + '" y2="' + (dg.cur.y - oy).toFixed(1) + '" stroke="' + dc + '" stroke-width="1" stroke-dasharray="4 3" pointer-events="none"/>');
@@ -1465,17 +1518,17 @@ function qlMatch(name, leaves) {
       if (tg && ti >= first && ti < last) { const ok = gCanLink(tg); p.push('<rect x="1" y="' + ((ti - first) * rowH + 1) + '" width="' + (W - 2) + '" height="' + (rowH - 2) + '" fill="none" stroke="' + (ok ? 'var(--dep)' : 'var(--warn)') + '" stroke-width="1.5" stroke-dasharray="' + (ok ? 'none' : '3 2') + '" pointer-events="none"/>'); }
       if (dg.type === 'gdep') {
         const ta = depTask(lines, dg.from, 'a'), ia = gRowOf(dg.from, 'a');
-        if (ta && ia != null) p.push('<line x1="' + X(ta.e).toFixed(1) + '" y1="' + (ia * rowH + rowH / 2 - oy) + '" x2="' + dg.cur.x.toFixed(1) + '" y2="' + (dg.cur.y - oy).toFixed(1) + '" stroke="var(--dep)" stroke-width="1" stroke-dasharray="4 3" pointer-events="none"/>');
+        if (ta && ia != null) p.push('<line x1="' + XE(ta.e).toFixed(1) + '" y1="' + (ia * rowH + rowH / 2 - oy) + '" x2="' + dg.cur.x.toFixed(1) + '" y2="' + (dg.cur.y - oy).toFixed(1) + '" stroke="var(--dep)" stroke-width="1" stroke-dasharray="4 3" pointer-events="none"/>');
       }
     }
     for (let i = first; i < last; i++) p.push('<rect data-gi="' + i + '" x="0" y="' + ((i - first) * rowH) + '" width="' + W + '" height="' + rowH + '" fill="transparent"/>');
     p.push(gdh.join(''));
     for (let i = first; i < last; i++) {
       const r = gRows[i];
-      if (r.gk) { if (!r.empty) p.push('<rect data-gr="ggmove" data-gi="' + i + '" x="' + X(r.s).toFixed(1) + '" y="' + ((i - first) * rowH + 3) + '" width="' + Math.max(2, X(r.e) - X(r.s)).toFixed(1) + '" height="' + (rowH - 6) + '" fill="transparent" style="cursor:grab"/>'); continue; }
-      if (((gGroup === 'loc' && r.g && (r.nh || r.locId != null) && r.line == null) || (gGroup === 'trade' && r.nh && r.pl != null))) { p.push('<rect data-gr="glmove" data-gi="' + i + '" x="' + X(r.s).toFixed(1) + '" y="' + ((i - first) * rowH + 3) + '" width="' + Math.max(2, X(r.e) - X(r.s)).toFixed(1) + '" height="' + (rowH - 6) + '" fill="transparent" style="cursor:grab"/>'); continue; }
+      if (r.gk) { if (!r.empty) p.push('<rect data-gr="ggmove" data-gi="' + i + '" x="' + X(r.s).toFixed(1) + '" y="' + ((i - first) * rowH + 3) + '" width="' + Math.max(2, XE(r.e) - X(r.s)).toFixed(1) + '" height="' + (rowH - 6) + '" fill="transparent" style="cursor:grab"/>'); continue; }
+      if (((gGroup === 'loc' && r.g && (r.nh || r.locId != null) && r.line == null) || (gGroup === 'trade' && r.nh && r.pl != null))) { p.push('<rect data-gr="glmove" data-gi="' + i + '" x="' + X(r.s).toFixed(1) + '" y="' + ((i - first) * rowH + 3) + '" width="' + Math.max(2, XE(r.e) - X(r.s)).toFixed(1) + '" height="' + (rowH - 6) + '" fill="transparent" style="cursor:grab"/>'); continue; }
       if (r.line == null || (r.g && gGroup !== 'trade')) continue;
-      const y = (i - first) * rowH, x0 = X(r.s), x1 = X(r.e), w = Math.max(2, x1 - x0), hw = Math.min(6, Math.max(2, w / 3)), ln = byId(r.line), canEnd = !r.g || !!(ln && ln.tctl && ln.lockC == null);
+      const y = (i - first) * rowH, x0 = X(r.s), x1 = XE(r.e), w = Math.max(2, x1 - x0), hw = Math.min(6, Math.max(2, w / 3)), ln = byId(r.line), canEnd = !r.g || !!(ln && ln.tctl && ln.lockC == null);
       p.push('<rect data-gr="gmove" data-gi="' + i + '" x="' + x0.toFixed(1) + '" y="' + (y + 3) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 6) + '" fill="transparent"/>');
       if (canEnd) p.push('<rect data-gr="gend" data-gi="' + i + '" x="' + (x0 + w - hw).toFixed(1) + '" y="' + (y + 3) + '" width="' + (hw + 2).toFixed(1) + '" height="' + (rowH - 6) + '" fill="transparent"/>');
     }
@@ -1505,15 +1558,15 @@ function qlMatch(name, leaves) {
     gRowClick(+el.dataset.gi, bx); gTap(+el.dataset.gi, bx);
   });
   // aikanäkymän vieritys: vaakavierityspalkki, hiiren pyörä (vaaka / Shift) ja tyhjän alueen veto
-  function gSetOff(v) { const m = Math.max(0, N_DAYS - Math.min(N_DAYS, Math.max(5, gVisW * 5))); const nv = clamp(v, 0, m); if (Math.abs(nv - gOff) < 1e-9) return; gOff = nv; if (view === 'gantt') renderGantt(); else render(); }
+  function gSetOff(v) { const m = Math.max(0, calLen() - Math.min(calLen(), Math.max(7, gVisW * 7))); const nv = clamp(v, 0, m); if (Math.abs(nv - gOff) < 1e-9) return; gOff = nv; if (view === 'gantt') renderGantt(); else render(); }
   gH.addEventListener('scroll', () => { if (gSyncing) { gSyncing = false; return; } if (!gGeo) return; gSetOff(gH.scrollLeft * gGeo.visD / (gH.clientWidth || 1)); });
   gWrap.addEventListener('wheel', e => {
-    if (!gGeo || gGeo.visD >= N_DAYS) return;
+    if (!gGeo || gGeo.visD >= calLen()) return;
     if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { e.preventDefault(); gSetOff(gOff + (e.deltaX || e.deltaY) / gGeo.dayW); }
   }, { passive: false });
   fH.addEventListener('scroll', () => { if (fSyncing) { fSyncing = false; return; } if (!G) return; gSetOff(fH.scrollLeft * G.visD / (fH.clientWidth || 1)); });
   wrap.addEventListener('wheel', e => {
-    if (!G || G.visD >= N_DAYS) return;
+    if (!G || G.visD >= calLen()) return;
     if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { e.preventDefault(); gSetOff(gOff + (e.deltaX || e.deltaY) / G.dayW); }
   }, { passive: false });
 
@@ -1522,8 +1575,8 @@ function qlMatch(name, leaves) {
   function zoomVis(nw, frac) { // frac = kohdan suhteellinen sijainti näkymässä (0..1), pidetään paikallaan
     const geo = view === 'gantt' ? gGeo : G; if (!geo) return;
     const oldV = geo.visD, anchor = gOff + oldV * (frac == null ? .5 : frac);
-    gVisW = clamp(Math.round(nw), 4, Math.max(4, Math.min(260, N_WEEKS))); const nv = Math.min(N_DAYS, Math.max(5, gVisW * 5));
-    gOff = clamp(anchor - nv * (frac == null ? .5 : frac), 0, Math.max(0, N_DAYS - nv));
+    gVisW = clamp(Math.round(nw), 4, Math.max(4, Math.min(260, N_WEEKS))); const nv = Math.min(calLen(), Math.max(7, gVisW * 7));
+    gOff = clamp(anchor - nv * (frac == null ? .5 : frac), 0, Math.max(0, calLen() - nv));
     saveView(); if (view === 'gantt') renderGantt(); else render();
   }
   document.getElementById('zIn').addEventListener('click', () => zoomVis(Math.max(4, Math.min(gVisW, N_WEEKS) / 1.5), .5));
@@ -1793,7 +1846,7 @@ function qlMatch(name, leaves) {
       const d = deps.find(x => x.id === Number(gel.dataset.id));
       if (d) {
         let end = gel.dataset.end;
-        if (!end) { const P = gPt(e), ta = depTask(lines, d.a, 'a'), tb = depTask(lines, d.b, 'b'), ia = gRowOf(d.a, 'a'), ib = gRowOf(d.b, 'b'); end = ta && tb && ia != null && ib != null && Math.hypot(P.x - (gGeo.LEFT + (ta.e - gOff) * gGeo.dayW), P.y - (ia + .5) * gGeo.rowH) > Math.hypot(P.x - (gGeo.LEFT + (tb.s - gOff) * gGeo.dayW), P.y - (ib + .5) * gGeo.rowH) ? 'b' : 'a'; }
+        if (!end) { const P = gPt(e), ta = depTask(lines, d.a, 'a'), tb = depTask(lines, d.b, 'b'), ia = gRowOf(d.a, 'a'), ib = gRowOf(d.b, 'b'); end = ta && tb && ia != null && ib != null && Math.hypot(P.x - (gGeo.LEFT + (w2cE(ta.e) - gOff) * gGeo.dayW), P.y - (ia + .5) * gGeo.rowH) > Math.hypot(P.x - (gGeo.LEFT + (w2cS(tb.s) - gOff) * gGeo.dayW), P.y - (ib + .5) * gGeo.rowH) ? 'b' : 'a'; }
         selDep = d.id; drag = { type: 'gdepend', id: d.id, end: end, cur: gPt(e), snap: snapshot() };
         gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return;
       }
@@ -1838,9 +1891,9 @@ function qlMatch(name, leaves) {
     if (drag.type === 'gdep' || drag.type === 'gdepend') { drag.cur = gPt(e); renderSoon(); return; }
     if (drag.type === 'gpan') { if (Math.abs(e.clientX - drag.x0) > 4) drag.moved = true; if (drag.moved) gSetOff(drag.off0 - (e.clientX - drag.x0) / gGeo.dayW); return; }
     if (drag.type === 'gorder') { drag.cur = gPt(e); if (Math.abs(e.clientY - drag.y0) > 4) drag.moved = true; if (drag.moved) renderSoon(); return; }
-    if (drag.type === 'gdeplag') { const d = deps.find(x => x.id === drag.id); if (d) { const nl = clamp(r1(drag.lag0 + Math.round((e.clientX - drag.x0) / gGeo.dayW)), -60, 60); if (nl !== drag.last) { drag.last = nl; d.rigid = true; d.lag = nl; renderSoon(); } } return; }
+    if (drag.type === 'gdeplag') { const d = deps.find(x => x.id === drag.id); if (d) { const nl = clamp(r1(drag.lag0 + wDx(gGeo, gSvg, drag.x0, e.clientX)), -60, 60); if (nl !== drag.last) { drag.last = nl; d.rigid = true; d.lag = nl; renderSoon(); } } return; }
     if (drag.type === 'glmove') {
-      const dx = Math.round((e.clientX - drag.x0) / gGeo.dayW);
+      const dx = wDx(gGeo, gSvg, drag.x0, e.clientX);
       lines = JSON.parse(JSON.stringify(drag.base));
       drag.tg.forEach(t => {
         const l = byId(t.id), o = t.orig; if (!l) return; const room = N_DAYS - lineEnd(o);
@@ -1853,10 +1906,10 @@ function qlMatch(name, leaves) {
     if (drag.type === 'ggmove') {
       lines = JSON.parse(JSON.stringify(drag.base));
       let lo = -Infinity, hi = Infinity; drag.kids.forEach(id => { const k = byId(id); lo = Math.max(lo, -k.start); hi = Math.min(hi, N_DAYS - lineEnd(k)); });
-      const dx = clamp(Math.round((e.clientX - drag.x0) / gGeo.dayW), lo, Math.max(lo, hi));
+      const dx = clamp(wDx(gGeo, gSvg, drag.x0, e.clientX), lo, Math.max(lo, hi));
       drag.kids.forEach(id => { const k = byId(id); k.start += dx; fit(k); }); renderSoon(); return;
     }
-    const dx = Math.round((e.clientX - drag.x0) / gGeo.dayW);
+    const dx = wDx(gGeo, gSvg, drag.x0, e.clientX);
     lines = JSON.parse(JSON.stringify(drag.base));
     const l = byId(drag.id), o = drag.orig; if (!l) return;
     const room = N_DAYS - lineEnd(o);
@@ -2346,14 +2399,14 @@ function qlMatch(name, leaves) {
   // suljettu ylätehtävä: yksi suora viiva ensimmäisen sijainnin alusta viimeisen sijainnin loppuun
   function grpSeg(s) {
     const ts = G && G.rm ? s.ts.filter(t => G.rm[t.loc] >= 0) : s.ts; if (!ts.length) return null;
-    const a = ts[0], b = ts[ts.length - 1], X = d => G.LEFT + (d - gOff) * G.dayW, rw = i => G.rm ? G.rm[i] : i;
+    const a = ts[0], b = ts[ts.length - 1], X = d => G.LEFT + (w2cS(d) - gOff) * G.dayW, XE = d => G.LEFT + (w2cE(d) - gOff) * G.dayW, rw = i => G.rm ? G.rm[i] : i;
     const Yt = i => G.TOP + (G.L - 1 - rw(i)) * G.rowH, Yb = i => G.TOP + (G.L - rw(i)) * G.rowH;
-    return { x0: X(s.s), y0: s.asc ? Yb(a.loc) : Yt(a.loc), x1: X(s.e), y1: s.asc ? Yt(b.loc) : Yb(b.loc) };
+    return { x0: X(s.s), y0: s.asc ? Yb(a.loc) : Yt(a.loc), x1: XE(s.e), y1: s.asc ? Yt(b.loc) : Yb(b.loc) };
   }
   function segsOf(l, merged) { return segsOfTs(tasks(l), range(l).dir >= 0, merged); }
   function segsOfTs(ts, asc, merged) {
-    const X = d => G.LEFT + (d - gOff) * G.dayW, Yt = i => G.TOP + (G.L - 1 - (G.rm ? G.rm[i] : i)) * G.rowH, Yb = i => G.TOP + (G.L - (G.rm ? G.rm[i] : i)) * G.rowH;
-    const sg = t => ({ x0: X(t.s), y0: asc ? Yb(t.loc) : Yt(t.loc), x1: X(t.e), y1: asc ? Yt(t.loc) : Yb(t.loc) });
+    const X = d => G.LEFT + (w2cS(d) - gOff) * G.dayW, XE = d => G.LEFT + (w2cE(d) - gOff) * G.dayW, Yt = i => G.TOP + (G.L - 1 - (G.rm ? G.rm[i] : i)) * G.rowH, Yb = i => G.TOP + (G.L - (G.rm ? G.rm[i] : i)) * G.rowH;
+    const sg = t => ({ x0: X(t.s), y0: asc ? Yb(t.loc) : Yt(t.loc), x1: XE(t.e), y1: asc ? Yt(t.loc) : Yb(t.loc) });
     if (merged) return mergeRows(ts, G.rm).map(sg);
     return ts.map(t => G.rm && G.rm[t.loc] < 0 ? null : sg(t)); // rajattujen sijaintien kohdalla null, indeksit täsmäävät tehtäviin
   }
@@ -2377,8 +2430,10 @@ function qlMatch(name, leaves) {
     });
     return bt;
   }
+  // hiirisiirtymä työpäivinä: muunnetaan kalenteriaikajanan kautta (vapaat päivät eivät ole työpäiviä)
+  function wDx(geo, ref, x0, x1) { const l = ref.getBoundingClientRect().left; return Math.round(c2w((x1 - l - geo.LEFT) / geo.dayW + gOff) - c2w((x0 - l - geo.LEFT) / geo.dayW + gOff)); }
   function pt(e) { const r = svg.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  const dayAt = (x, mode) => clamp(Math[mode]((x - G.LEFT) / G.dayW + gOff), 0, N_DAYS);
+  const dayAt = (x, mode) => clamp(Math[mode](c2w((x - G.LEFT) / G.dayW + gOff)), 0, N_DAYS);
   const locAt = y => { const r = clamp(G.L - 1 - Math.floor((y - G.TOP) / G.rowH), 0, G.L - 1); return LOCS[G.rows ? G.rows[r].a : r].id; };
 
   let gLast = null; // kaksoisklikkaus havaitaan itse, koska render korvaa SVG:n klikkausten välissä
@@ -2441,13 +2496,13 @@ function qlMatch(name, leaves) {
     if (!drag) return;
     const P = pt(e);
     if (drag.type === 'fsmove') {
-      const dx = Math.round((e.clientX - drag.x0) / G.dayW); lines = JSON.parse(JSON.stringify(drag.base));
+      const dx = wDx(G, svg, drag.x0, e.clientX); lines = JSON.parse(JSON.stringify(drag.base));
       const l = byId(drag.id), o = drag.orig; if (!l) return;
       if (drag.idx <= 0) l.start = clamp(o.start + dx, 0, N_DAYS - span(o));
       else { releaseTotal(l); ovOf(l, drag.loc).shift = Math.max(drag.minShift, drag.k.shift + Math.min(dx, N_DAYS - lineEnd(o))); }
       fit(l); renderSoon(); return;
     }
-    if (drag.type === 'deplag') { const d = deps.find(x => x.id === drag.id); if (d) { const nl = clamp(r1(drag.lag0 + Math.round((e.clientX - drag.x0) / G.dayW)), -60, 60); if (nl !== drag.last) { drag.last = nl; d.rigid = true; d.lag = nl; renderSoon(); } } return; }
+    if (drag.type === 'deplag') { const d = deps.find(x => x.id === drag.id); if (d) { const nl = clamp(r1(drag.lag0 + wDx(G, svg, drag.x0, e.clientX)), -60, 60); if (nl !== drag.last) { drag.last = nl; d.rigid = true; d.lag = nl; renderSoon(); } } return; }
     if (drag.type === 'fpan') { gSetOff(drag.off0 - (e.clientX - drag.x0) / G.dayW); return; }
     if (drag.type === 'dep' || drag.type === 'depend') { drag.cur = P; renderSoon(); return; }
     if (drag.type === 'draw') {
@@ -2459,7 +2514,7 @@ function qlMatch(name, leaves) {
     } else {
       lines = JSON.parse(JSON.stringify(drag.base));
       const l = byId(drag.id), o = drag.orig; if (!l) return;
-      if (drag.type === 'body') { Object.assign(l, o); l.start = clamp(o.start + Math.round((P.x - drag.p0.x) / G.dayW), 0, N_DAYS - span(l)); }
+      if (drag.type === 'body') { Object.assign(l, o); l.start = clamp(o.start + Math.round(c2w((P.x - G.LEFT) / G.dayW + gOff) - c2w((drag.p0.x - G.LEFT) / G.dayW + gOff)), 0, N_DAYS - span(l)); }
       else if (drag.type === 'lbl') { l.lblT = labelT(segsOf(l, true), P); }
       else if (drag.type === 'he') { Object.assign(l, o); setSpan(l, o.start, o.from, dayAt(P.x, 'round'), locAt(P.y)); }
       else { const endFixed = lineEnd(o); Object.assign(l, o); setSpan(l, dayAt(P.x, 'round'), locAt(P.y), endFixed, o.to); }
@@ -2806,7 +2861,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved, res: RES });
+  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK }, imp: impSaved, res: RES, cal: CAL });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -2819,7 +2874,8 @@ function qlMatch(name, leaves) {
   // Tietomallin versiot: jokainen muutos tallennusmuotoon lisätään MIGRATIONS-listan loppuun (ei koskaan muuteta vanhoja).
   // MIGRATIONS[i] muuntaa version i tallennetun tilan versioksi i+1. Vanhoja kenttiä ei poisteta ilman siirtorutiinia.
   const MIGRATIONS = [
-    st => st // 0 → 1: ensimmäinen versionumeroitu muoto (aiemmat tallennukset ilman v-kenttää ovat samaa muotoa)
+    st => st, // 0 → 1: ensimmäinen versionumeroitu muoto (aiemmat tallennukset ilman v-kenttää ovat samaa muotoa)
+    st => { st.cal = calNorm(st.cal || CAL_DEF()); return st; } // 1 → 2: projektin kalenteri (aiemmat: ma–pe, ei pyhiä, alku 4.1.2027 eli täsmälleen vanha toiminta)
   ];
   const SCHEMA = () => MIGRATIONS.length;
   let newerNote = false, newerLock = false; // uudemmalla versiolla tehtyä projektia ei tallenneta takaisin (estää tietojen katoamisen)
@@ -2835,7 +2891,7 @@ function qlMatch(name, leaves) {
   }
   function applyState(st) {
     needRoom = true;
-    setWeeks(st.weeks || 26);
+    setCal(st.cal); setWeeks(st.weeks || 26);
     LT = ltFrom(st); syncLocs(); TRADES = st.trades;
     lines = st.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
     deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
@@ -2852,7 +2908,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '141';
+  const APP_BUILD = '142';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -2896,7 +2952,7 @@ function qlMatch(name, leaves) {
   });
   window.__bugReport = bugReport; window.__migr = { list: MIGRATIONS, run: migrateState, schema: SCHEMA };
   function renderSub() {
-    document.getElementById('subline').textContent = projName + ' · alku ma 4.1.2027, ei vapaapäiviä.';
+    document.getElementById('subline').textContent = projName + ' · alku ' + fmtMs(isoMs(CAL.start)) + (CAL.hol ? ', suomalaiset pyhät' : ', ei pyhiä') + (CAL.ex.length ? ', ' + CAL.ex.length + ' poikkeusta' : '') + '.';
   }
   function scheduleSave() {
     if (newerLock) return;
@@ -2967,7 +3023,7 @@ function qlMatch(name, leaves) {
     suspend = true; impReset();
     if (st) applyState(st);
     else {
-      if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
+      setCal(kind === 'example' ? CAL_DEF() : Object.assign(CAL_DEF(), { hol: true })); if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
       RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; statusDay = null; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
       selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
     }
@@ -2986,6 +3042,14 @@ function qlMatch(name, leaves) {
     const off = dbState === 'off' || dbState === 'denied';
     let h = '<div class="row" style="border-top:0;padding-top:0"><label for="pj-name">Nimi</label><input id="pj-name" class="txt" style="max-width:190px" type="text" maxlength="40" value="' + esc(projName) + '" data-pjname="1"></div>' +
       '<p class="ok" id="pj-status" style="margin:2px 0 4px">' + esc(statusText) + '</p>' +
+      '<div class="lab2" style="margin:8px 0 2px">Kalenteri</div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label for="pj-cstart">Alkupäivä</label><input id="pj-cstart" class="txt" style="max-width:140px" type="date" value="' + esc(CAL.start) + '" data-cal="start"></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label>Työpäivät</label><span>' + DOW.map((n, i) => '<label style="margin-right:6px"><input type="checkbox" data-cal="wk" data-i="' + i + '"' + (CAL.wk[i] ? ' checked' : '') + '> ' + n + '</label>').join('') + '</span></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label><input type="checkbox" data-cal="hol"' + (CAL.hol ? ' checked' : '') + '> Suomen pyhät vapaina</label></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label for="pj-hpd">Työtunnit / pv</label><input id="pj-hpd" class="num" type="number" min="1" max="24" step="0.5" value="' + CAL.hpd + '" data-cal="hpd"></div>' +
+      CAL.ex.map((x, i) => '<div class="row" style="border-top:0;padding-top:0"><span>' + esc(x.from) + (x.to !== x.from ? ' – ' + esc(x.to) : '') + ' · ' + (x.work ? 'työpäivä' : 'vapaa') + (x.name ? ' · ' + esc(x.name) : '') + '</span><button type="button" data-cal="exdel" data-i="' + i + '" aria-label="Poista poikkeus">×</button></div>').join('') +
+      '<div class="row" style="border-top:0;padding-top:0"><input id="pj-exf" type="date" class="txt" style="max-width:120px"><input id="pj-ext" type="date" class="txt" style="max-width:120px"><select id="pj-exw"><option value="0">vapaa</option><option value="1">työ</option></select><input id="pj-exn" class="txt" style="max-width:80px" maxlength="24" placeholder="nimi"><button type="button" data-cal="exadd">Lisää poikkeus</button></div>' +
+      '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Vapaat päivät näkyvät harmaina, eikä työ etene niinä.</p>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-weeks">Kesto (vk)</label><input id="pj-weeks" class="num" type="number" min="4" max="260" value="' + N_WEEKS + '" data-pjweeks="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-target">Tavoite (vk)</label><input id="pj-target" class="num" type="number" min="1" max="' + N_WEEKS + '" value="' + target + '" data-pjtarget="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-tpl" title="Mallilinkkien osoitepohja">Mallin osoitepohja</label><input id="pj-tpl" class="txt" style="max-width:170px" type="text" maxlength="500" value="' + esc(mdlTpl) + '" data-pjtpl="1" placeholder="https://…{model}…{ids}"></div>' +
@@ -3007,6 +3071,16 @@ function qlMatch(name, leaves) {
   }
   const projCard = document.getElementById('projCard');
   projCard.addEventListener('click', async e => {
+    const cb = e.target.closest('[data-cal]');
+    if (cb && (cb.dataset.cal === 'exdel' || cb.dataset.cal === 'exadd')) {
+      const c = JSON.parse(JSON.stringify(CAL));
+      if (cb.dataset.cal === 'exdel') c.ex.splice(+cb.dataset.i, 1);
+      else {
+        const f = projCard.querySelector('#pj-exf').value, to = projCard.querySelector('#pj-ext').value || f; if (!f) return;
+        c.ex.push({ from: f, to: to < f ? f : to, work: projCard.querySelector('#pj-exw').value === '1', name: projCard.querySelector('#pj-exn').value.trim().slice(0, 24) });
+      }
+      pushUndo(snapshot()); setCal(c); render(); renderSub(); renderProj(); scheduleSave(); return;
+    }
     const b = e.target.closest('[data-pj]'); if (!b) return;
     const a = b.dataset.pj, id = b.dataset.id;
     if (a === 'new') { newForm = !newForm; renderProj(); }
@@ -3022,6 +3096,15 @@ function qlMatch(name, leaves) {
     }
   });
   projCard.addEventListener('change', e => {
+    if (e.target.dataset.cal) {
+      const k = e.target.dataset.cal, c = JSON.parse(JSON.stringify(CAL));
+      if (k === 'start') { if (!/^\d{4}-\d\d-\d\d$/.test(e.target.value)) { e.target.value = CAL.start; return; } c.start = e.target.value; }
+      else if (k === 'wk') { c.wk[+e.target.dataset.i] = e.target.checked ? 1 : 0; if (!c.wk.some(x => x)) { e.target.checked = true; return; } }
+      else if (k === 'hol') c.hol = e.target.checked;
+      else if (k === 'hpd') c.hpd = clamp(parseFloat(e.target.value) || 8, 1, 24);
+      else return;
+      pushUndo(snapshot()); setCal(c); render(); renderSub(); renderProj(); scheduleSave(); return;
+    }
     if (e.target.dataset.pjweeks) {
       const need = Math.max(MIN_WEEKS, Math.ceil(lines.reduce((m, l) => Math.max(m, lineEnd(l)), 0) / 5));
       pushUndo(snapshot()); setWeeks(Math.max(need, parseInt(e.target.value, 10) || 26)); target = clamp(target, 1, N_WEEKS);

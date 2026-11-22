@@ -3,7 +3,7 @@
  "v": 1,
  "name": "Kerrostalo A",
  "state": {
-  "v": 1,
+  "v": 2,
   "lines": [
    {
     "id": 1,
@@ -264,6 +264,21 @@
     "name": "Työntekijät",
     "unit": "hlö"
    }
-  ]
+  ],
+  "cal": {
+   "start": "2027-01-04",
+   "wk": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0
+   ],
+   "hol": false,
+   "hpd": 8,
+   "ex": []
+  }
  }
 }
