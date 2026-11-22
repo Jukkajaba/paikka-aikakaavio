@@ -1,0 +1,48 @@
+name: Tarkistukset
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    name: Tietomalli ja laskenta
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Riippuvuudet
+        run: npm install --no-audit --no-fund
+      - name: Tyyppitarkistus
+        run: npm run typecheck
+      - name: Testit (sis. vertailu prototyyppiin)
+        run: npm test
+
+  db:
+    name: Tietokanta
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migraatiot järjestyksessä
+        run: for f in db/migrations/*.sql; do echo "== $f"; psql -v ON_ERROR_STOP=1 -q -f "$f"; done
+      - name: Tietokantatestit
+        run: for f in db/tests/*.sql; do echo "== $f"; psql -v ON_ERROR_STOP=1 -q -f "$f"; done

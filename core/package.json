@@ -1,0 +1,22 @@
+{
+  "name": "@paikka/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Yhteinen tietomalli ja aikataululaskenta (selain ja palvelin)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^6.0.0"
+  }
+}
