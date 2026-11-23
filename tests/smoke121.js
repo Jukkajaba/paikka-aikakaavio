@@ -14,7 +14,7 @@ const { chromium } = require('playwright');
   await clickCell(0); ok(await p.locator('input.gced').count() === 1, 'editori aukeaa ryhmärivillä');
   const target = Math.round((g0.e - g0.s) * 1.5);
   await p.fill('input.gced', String(target)); await p.keyboard.press('Enter'); await p.waitForTimeout(250);
-  const g1 = await grpInfo(); ok(Math.abs((g1.e - g1.s) - target) < 1.2, 'kesto ' + (g0.e - g0.s) + ' → ' + (g1.e - g1.s) + ' (tavoite ' + target + ')'); ok(Math.abs(g1.s - g0.s) < 0.2, 'alku ennallaan');
+  const g1 = await grpInfo(); ok(await p.evaluate(() => { const A = __aik(); return A.lines.filter(l => l.grp === 'KT1').every(l => Number.isInteger(l.start) && Math.abs(lineEnd(l) - Math.round(lineEnd(l))) < 1e-9); }), 'kokonaiset päivät'); ok(Math.abs((g1.e - g1.s) - target) < 1.2, 'kesto ' + (g0.e - g0.s) + ' → ' + (g1.e - g1.s) + ' (tavoite ' + target + ')'); ok(Math.abs(g1.s - g0.s) < 0.2, 'alku ennallaan');
   await clickCell(1); await p.fill('input.gced', '1.3.'); await p.keyboard.press('Enter'); await p.waitForTimeout(250);
   const g2 = await grpInfo(); ok(g2.s > g1.s && Math.abs((g2.e - g2.s) - (g1.e - g1.s)) < 0.5, 'alku siirsi ryhmää: ' + g1.s + ' → ' + g2.s);
   ok(errs.length === 0, 'virheet ' + errs.join('|'));

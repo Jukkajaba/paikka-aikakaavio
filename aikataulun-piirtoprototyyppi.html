@@ -1440,13 +1440,13 @@ function qlMatch(name, leaves) {
     const snap0 = snapshot();
     if (key === 'start') {
       const iso = parseDay(txt, Math.max(0, Math.floor(gS))), ns = iso ? dayOfIso(iso, false) : null; if (ns == null) return false;
-      const dl = clamp(ns - gS, -gS, N_DAYS - gE); ms.forEach(l => { l.start = r1(l.start + dl); });
+      const dl = Math.round(clamp(ns - gS, -gS, N_DAYS - gE)); ms.forEach(l => { l.start = r1(l.start + dl); });
     } else {
       let nd;
       if (key === 'dur') nd = parseFloat(String(txt).replace(',', '.'));
       else { const iso = parseDay(txt, Math.max(0, Math.floor(gE - 1))), di = iso ? dayOfIso(iso, true) : null; nd = di == null ? NaN : di + 1 - gS; }
       if (!(nd > 0) || !isFinite(nd)) return false; nd = Math.min(nd, N_DAYS - gS); const f = nd / W0;
-      ms.forEach(l => { const sp = lineEnd(l) - l.start; l.start = r1(gS + (l.start - gS) * f); setTotal(l, Math.max(MIN_D, sp * f)); });
+      ms.forEach(l => { const ns = Math.round(gS + (l.start - gS) * f), ne = Math.round(gS + (lineEnd(l) - gS) * f); l.start = ns; setTotal(l, Math.max(1, ne - ns)); }); // kokonaisiin päiviin
     }
     ms.forEach(l => fit(l)); pushUndo(snap0); ms.forEach(l => absorbSlack(l.id)); return true;
   }
@@ -3097,7 +3097,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '154';
+  const APP_BUILD = '155';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
