@@ -2063,7 +2063,7 @@ function qlMatch(name, leaves) {
     if (grole === 'gorder' && !ctrl) {
       const rr = gRows[+gel.dataset.gi], l0 = rr && rr.line != null ? byId(rr.line) : null;
       if (rr && rr.gk) { selGrp = rr.grp; selId = null; selDep = null; drag = { type: 'gorder', kind: 'group', id: rr.grp, px: gPt(e).x, row: +gel.dataset.gi, y0: e.clientY, cur: gPt(e), moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
-      if (l0) { selId = l0.id; selGrp = null; selDep = null; drag = { type: 'gorder', kind: 'line', id: l0.id, px: gPt(e).x, row: +gel.dataset.gi, y0: e.clientY, cur: gPt(e), moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
+      if (l0) { selId = l0.id; selLoc = null; selGrp = null; selDep = null; drag = { type: 'gorder', kind: 'line', id: l0.id, px: gPt(e).x, row: +gel.dataset.gi, y0: e.clientY, cur: gPt(e), moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
     }
     if (grole === 'gdeppick' && ctrl) { const d0 = deps.find(x => x.id === Number(gel.dataset.id)); selDep = Number(gel.dataset.id); if (d0) { drag = { type: 'gdeplag', id: d0.id, x0: e.clientX, lag0: lagStart(d0), rigid0: !!d0.rigid, last: null, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); } e.preventDefault(); render(); return; }
     if (grole === 'gdepend' && ctrl) {
@@ -2106,7 +2106,7 @@ function qlMatch(name, leaves) {
     const r = gRows[+el.dataset.gi]; if (!r || r.line == null) return;
     const l = byId(r.line); if (!l) return;
     const ts = tasks(l), idx = r.g ? -1 : ts.findIndex(t => t.locId === r.locId);
-    selId = l.id; selDep = null;
+    selId = l.id; selDep = null; selLoc = !r.g && !r.flat && r.locId != null ? { l: l.id, loc: r.locId } : null;
     drag = { type: el.dataset.gr, id: l.id, x0: e.clientX, orig: JSON.parse(JSON.stringify(l)), loc: r.g ? null : r.locId, idx: idx, k: idx >= 0 ? ts[idx] : ts[ts.length - 1], endLoc: ts[ts.length - 1].locId, minShift: idx > 0 ? ts[idx - 1].s - (ts[idx - 1].e + l.gap) : 0, snap: snapshot(), base: JSON.parse(JSON.stringify(lines)) };
     gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render();
   });
@@ -3153,7 +3153,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '162';
+  const APP_BUILD = '163';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

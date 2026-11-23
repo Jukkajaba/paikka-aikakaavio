@@ -18,6 +18,11 @@ const { chromium } = require('playwright');
   const rowH = await p.evaluate(() => __aik().gRows.length && parseFloat(document.querySelector('#gantt rect[data-gi]').getAttribute('height')));
   const first = await p.evaluate(() => parseFloat(document.querySelector('#gantt rect[data-gi]').getAttribute('data-gi')));
   const idxs = rowsHl.map(y => Math.round(parseFloat(y) / rowH) + first); ok(!idxs.includes(gi), 'yhteenvetorivi ei korostu (korostetut rivit ' + idxs.join(',') + ', yhteenveto ' + gi + ')');
+  // palkin klikkaus: sijaintirivin jälkeen yhteenvetorivin palkki valitsee yhteenvetorivin
+  const bar = await p.evaluate(gi => { const r = document.querySelector('#gantt rect[data-gr="gmove"][data-gi="' + gi + '"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, gi);
+  await p.mouse.click(bar.x, bar.y); await p.waitForTimeout(250);
+  const sel2 = await p.evaluate(() => { const A = __aik(); return { id: A.selId, loc: A.selLoc }; }); ok(sel2.id === 1 && !sel2.loc, 'yhteenvetopalkin klikkaus nollaa sijaintivalinnan');
+  const hlAfter = await p.evaluate(() => [...document.querySelectorAll('#gantt rect[fill="var(--ink)"][opacity=".09"]')].length); ok(hlAfter >= 1, 'yhteenvetorivi korostuu palkkia klikatessa (' + hlAfter + ')');
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
