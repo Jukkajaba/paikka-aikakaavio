@@ -1419,7 +1419,7 @@ function qlMatch(name, leaves) {
     if (key === 'prod') return k || isGrp ? String(l.prod) : '';
     return '';
   }
-  function gEditable(r, key) { if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (!isGrp && r.locId == null) return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
+  function gEditable(r, key) { if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && lines.some(l => l.grp === r.grp); if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (!isGrp && r.locId == null) return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
   function parseDay(txt, refIdx) { // "4.1.", "4.1.2027" tai "2027-01-04" → iso
     const s = String(txt).trim(); let y, mo, d, m;
     if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
@@ -1434,8 +1434,24 @@ function qlMatch(name, leaves) {
     const ts = tasks(l), base = { line: l.id, s: l.start, e: lineEnd(l), crew: crewOf(l) };
     return l.flat ? Object.assign(base, { g: false, flat: true, locId: ts[0] && ts[0].locId }) : Object.assign(base, { g: true, lineRow: true });
   }
+  function gApplyGrp(r, key, txt) { // ylätehtävän (yhteenvetorivin) kesto, alku tai loppu: jäsenviivat venytetään tai siirretään suhteessa
+    const ms = lines.filter(l => l.grp === r.grp); if (!ms.length) return false;
+    const gS = ms.reduce((m, l) => Math.min(m, l.start), Infinity), gE = ms.reduce((m, l) => Math.max(m, lineEnd(l)), 0), W0 = gE - gS; if (!(W0 > 0)) return false;
+    const snap0 = snapshot();
+    if (key === 'start') {
+      const iso = parseDay(txt, Math.max(0, Math.floor(gS))), ns = iso ? dayOfIso(iso, false) : null; if (ns == null) return false;
+      const dl = clamp(ns - gS, -gS, N_DAYS - gE); ms.forEach(l => { l.start = r1(l.start + dl); });
+    } else {
+      let nd;
+      if (key === 'dur') nd = parseFloat(String(txt).replace(',', '.'));
+      else { const iso = parseDay(txt, Math.max(0, Math.floor(gE - 1))), di = iso ? dayOfIso(iso, true) : null; nd = di == null ? NaN : di + 1 - gS; }
+      if (!(nd > 0) || !isFinite(nd)) return false; nd = Math.min(nd, N_DAYS - gS); const f = nd / W0;
+      ms.forEach(l => { const sp = lineEnd(l) - l.start; l.start = r1(gS + (l.start - gS) * f); setTotal(l, Math.max(MIN_D, sp * f)); });
+    }
+    ms.forEach(l => fit(l)); pushUndo(snap0); ms.forEach(l => absorbSlack(l.id)); return true;
+  }
   function gApplyRow(r, key, txt) { // solun arvon muutos → malliin; false jos arvo ei kelvannut
-    if (!gEditable(r, key)) return false; const l = byId(r.line); if (!l) return false;
+    if (!gEditable(r, key)) return false; if (r.gk) return gApplyGrp(r, key, txt); const l = byId(r.line); if (!l) return false;
     const isGrp = !!r.g, ts = tasks(l), idx = isGrp ? -1 : ts.findIndex(x => x.locId === r.locId), k = idx >= 0 ? ts[idx] : null; if (!isGrp && !k) return false;
     const num = parseFloat(String(txt).replace(',', '.')), t0 = isGrp ? l.start : k.s;
     let ok = true; const snap0 = snapshot();
@@ -3081,7 +3097,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '153';
+  const APP_BUILD = '154';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
