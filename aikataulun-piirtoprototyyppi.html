@@ -970,13 +970,19 @@ function qlMatch(name, leaves) {
   const descRef = ref => { if (isGref(ref)) { const g = groups.find(q => q.id === ref.g); return (g ? g.name : '?') + ' (ylätehtävä)'; } const l = byId(ref.l), x = LOCS.find(q => q.id === ref.loc); return (l ? trade(l.trade).name : '?') + (ref.loc == null ? ' (ylätehtävä)' : ' · ' + (x ? x.name : '?')); };
   // värit: punainen, kun viive on plussalla tai hukka-aikaa on (seuraaja alkaa myöhemmin kuin edeltäjän loppu + viive); muuten violetti
   const depCol = (d, slack) => (d.lag || 0) > 1e-9 || (!d.rigid && slack > 1e-9) ? 'var(--dep)' : 'var(--dep2)';
+  function depEnd(ref, role) { // riippuvuuden pää paikka-aikakaaviossa: {t: tehtävä, sg: viivasegmentti, grp}; ylätehtäväviite → ryhmän viimeinen (a) tai ensimmäinen (b) tehtävä
+    if (isGref(ref)) {
+      let best = null;
+      lines.forEach(l => { if (l.flat || l.grp !== ref.g) return; const r = repOf(l); r.ts.forEach((x, i) => { if (!r.segs[i]) return; if (!best || (role === 'a' ? x.e > best.t.e : x.s < best.t.s)) best = { t: x, sg: r.segs[i], grp: r.grp || null }; }); });
+      return best;
+    }
+    const l = byId(ref.l); if (!l || l.flat) return null; const r = repOf(l), lc = refLoc(lines, ref, role), i = r.ts.findIndex(x => x.locId === lc);
+    return i < 0 || !r.segs[i] ? null : { t: r.ts[i], sg: r.segs[i], grp: r.grp || null };
+  }
   function depGeom(d) {
-    const la = byId(d.a.l), lb = byId(d.b.l); if (!la || !lb || la.flat || lb.flat) return null;
-    const ra = repOf(la), rb = repOf(lb); if (ra.grp && ra.grp === rb.grp) return null; // saman suljetun ylätehtävän sisäinen riippuvuus ei näy
-    const ta = ra.ts, tb = rb.ts, dal = refLoc(lines, d.a, 'a'), dbl = refLoc(lines, d.b, 'b'), ia = ta.findIndex(t => t.locId === dal), ib = tb.findIndex(t => t.locId === dbl);
-    if (ia < 0 || ib < 0) return null;
-    const sa = ra.segs[ia], sb = rb.segs[ib]; if (!sa || !sb) return null;
-    return { ax: sa.x1, ay: sa.y1, bx: sb.x0, by: sb.y0, viol: tb[ib].s < ta[ia].e, slack: tb[ib].s - (ta[ia].e + (d.lag || 0)) };
+    const A = depEnd(d.a, 'a'), B = depEnd(d.b, 'b'); if (!A || !B) return null;
+    if (A.grp && A.grp === B.grp) return null; // saman suljetun ylätehtävän sisäinen riippuvuus ei näy
+    return { ax: A.sg.x1, ay: A.sg.y1, bx: B.sg.x0, by: B.sg.y0, viol: B.t.s < A.t.e, slack: B.t.s - (A.t.e + (d.lag || 0)) };
   }
   // suljettu ylätehtävä (Ganttin ▸/▾) näkyy paikka-aikakaaviossa yhtenä yhteenvetoviivana
   const grpClosedOf = l => { const g = !l.flat && l.grp ? groups.find(q => q.id === l.grp) : null; return g && gClosed['K' + g.id] ? g : null; };
@@ -1190,7 +1196,7 @@ function qlMatch(name, leaves) {
       p.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" data-role="gbody" data-grp="' + esc(s.g.id) + '" style="cursor:pointer"><title>' + esc(s.g.name + ' (ylätehtävä, ' + n + ' tehtävää)\nKaksoisklikkaa avataksesi tehtävät') + '</title></path>');
     });
     if (showDeps) {
-      validDeps().forEach(d => {
+      allDeps().forEach(d => {
         const g = depGeom(d); if (!g) return;
         const dc = depCol(d, g.slack);
         const moving = drag && drag.type === 'depend' && drag.id === d.id;
@@ -1243,7 +1249,7 @@ function qlMatch(name, leaves) {
       p.push('<text class="lbl" x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" text-anchor="middle" transform="rotate(' + ang.toFixed(1) + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')" style="fill:#8d99a6;font-weight:700;cursor:pointer" data-role="gbody" data-grp="' + esc(s.g.id) + '">' + esc(s.g.name) + ' ▸</text>');
     });
     if (showDeps) {
-      validDeps().forEach(d => {
+      allDeps().forEach(d => {
         const g = depGeom(d); if (!g || (drag && drag.type === 'depend' && drag.id === d.id)) return;
         const dc = depCol(d, g.slack);
         ['a', 'b'].forEach(end => {
@@ -2292,7 +2298,7 @@ function qlMatch(name, leaves) {
     });
     th += '</details>';
     if (slk) queueMicrotask(() => { const e = panel.querySelector('.task.sel'); if (!e) return; const pr = panel.getBoundingClientRect(), er = e.getBoundingClientRect(); if (er.bottom > pr.bottom) panel.scrollTop += er.bottom - pr.bottom + 8; else if (er.top < pr.top) panel.scrollTop -= pr.top - er.top + 8; });
-    const vd = validDeps(), myDeps = vd.filter(d => d.a.l === l.id || d.b.l === l.id), sd = vd.find(d => d.id === selDep);
+    const vd = validDeps(), myDeps = vd.filter(d => d.a.l === l.id || d.b.l === l.id), sd = allDeps().find(d => d.id === selDep);
     if (sd && myDeps.indexOf(sd) < 0) myDeps.push(sd);
     if (l.flat) th = '';
     th += mdlHtml(l);
@@ -3097,7 +3103,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '155';
+  const APP_BUILD = '156';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
