@@ -262,7 +262,8 @@
     "end",
     "qty",
     "crew"
-   ]
+   ],
+   "tx": false
   },
   "imp": null,
   "res": [
