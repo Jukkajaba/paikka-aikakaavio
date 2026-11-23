@@ -1441,6 +1441,7 @@ function qlMatch(name, leaves) {
     const ts = tasks(l), base = { line: l.id, s: l.start, e: lineEnd(l), crew: crewOf(l) };
     return l.flat ? Object.assign(base, { g: false, flat: true, locId: ts[0] && ts[0].locId }) : Object.assign(base, { g: true, lineRow: true });
   }
+  function totalCtl(l) { if (!l.tctl || l.lockC != null) { l.tctl = true; l.lockC = null; if (_tc) _tc.delete(l); } } // kokonaiskesto ohjaa (vapauttaa työryhmälukon) kuten Tehtävä-paneelissa
   function gApplyGrp(r, key, txt) { // ylätehtävän (yhteenvetorivin) kesto, alku tai loppu: jäsenviivat venytetään tai siirretään suhteessa
     const ms = lines.filter(l => l.grp === r.grp); if (!ms.length) return false;
     const gS = ms.reduce((m, l) => Math.min(m, l.start), Infinity), gE = ms.reduce((m, l) => Math.max(m, lineEnd(l)), 0), W0 = gE - gS; if (!(W0 > 0)) return false;
@@ -1453,7 +1454,7 @@ function qlMatch(name, leaves) {
       if (key === 'dur') nd = parseFloat(String(txt).replace(',', '.'));
       else { const iso = parseDay(txt, Math.max(0, Math.floor(gE - 1))), di = iso ? dayOfIso(iso, true) : null; nd = di == null ? NaN : di + 1 - gS; }
       if (!(nd > 0) || !isFinite(nd)) return false; nd = Math.min(nd, N_DAYS - gS); const f = nd / W0;
-      ms.forEach(l => { const ns = Math.round(gS + (l.start - gS) * f), ne = Math.round(gS + (lineEnd(l) - gS) * f); l.start = ns; setTotal(l, Math.max(1, ne - ns)); }); // kokonaisiin päiviin
+      ms.forEach(l => { const ns = Math.round(gS + (l.start - gS) * f), ne = Math.round(gS + (lineEnd(l) - gS) * f); l.start = ns; totalCtl(l); setTotal(l, Math.max(1, ne - ns)); }); // kokonaisiin päiviin
     }
     ms.forEach(l => fit(l)); pushUndo(snap0); ms.forEach(l => absorbSlack(l.id)); return true;
   }
@@ -1469,7 +1470,7 @@ function qlMatch(name, leaves) {
       else if (isGrp) { if (!(num >= 1) || num > 1e4) return false; releaseTotal(l); l.lockC = Math.round(num); fit(l); pushUndo(snap0); absorbSlack(l.id); return true; }
       else nd = k.qty / l.prod / num;
       if (!(nd > 0) || !isFinite(nd)) return false; nd = Math.min(nd, N_DAYS);
-      if (isGrp) setTotal(l, nd);
+      if (isGrp) { totalCtl(l); setTotal(l, nd); }
       else if (l.flat) { releaseTotal(l); if (l.ov && l.ov[k.locId]) delete l.ov[k.locId].d; l.dur = Math.max(MIN_D, r1(nd)); }
       else { releaseTotal(l); ovOf(l, k.locId).d = Math.max(MIN_D, r1(nd)); }
     } else if (key === 'start') {
@@ -3105,7 +3106,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '157';
+  const APP_BUILD = '158';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
