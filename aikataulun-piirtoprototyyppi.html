@@ -259,6 +259,10 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   #welcome .wb b{font-size:15px}#welcome .wb span{font-size:12.5px;opacity:.8;line-height:1.35}
   #welcome .wb .pri{border-color:var(--ink)}
   #welcome h3{margin:18px 0 6px;font-size:13px;opacity:.85}
+  #welcome .wf{display:flex;flex-wrap:wrap;gap:10px 18px;margin:0 0 14px}
+  #welcome .wf label{display:flex;align-items:center;gap:8px;font-size:13.5px}
+  #welcome .wf input{font:inherit;padding:5px 8px;border:1px solid var(--grid2);border-radius:6px;background:var(--panel);color:inherit}
+  #welcome .wf #wl-name{width:230px}
   #welcome .wg{display:grid;gap:8px;max-width:420px}
   #welcome .wg label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px}
   #welcome .wg input[type=number]{width:70px;font:inherit;padding:4px 6px;border:1px solid var(--grid2);border-radius:6px;background:var(--panel);color:inherit;text-align:right}
@@ -3160,7 +3164,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '164';
+  const APP_BUILD = '165';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3253,8 +3257,6 @@ function qlMatch(name, leaves) {
     if (!welcomeEl) return;
     const on = !lines.length && !welcomeOff && !suspend;
     if (!on) { if (welcomeEl.classList.contains('on')) { welcomeEl.classList.remove('on'); welcomeEl.innerHTML = ''; } return; }
-    const d = x => { try { return new Date(x).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' }); } catch (e) { return ''; } };
-    const recent = projList.filter(x => x.id !== projId).slice(0, 4);
     if (wlGen) {
       const h2 = '<div class="wl"><h2>Luo sijainnit</h2><p class="sub">' + esc(projName) + ' · aikataulun sijainnit syntyvät valinnoistasi, ja voit muokata niitä jälkeenpäin Sijainnit-paneelissa</p><div class="wg">' +
         '<label for="wg-b">Rakennuksia<input id="wg-b" type="number" min="1" max="12" value="1"></label>' +
@@ -3265,17 +3267,23 @@ function qlMatch(name, leaves) {
       if (welcomeEl.dataset.h !== h2) { welcomeEl.innerHTML = h2; welcomeEl.dataset.h = h2; wgMsg(); }
       welcomeEl.classList.add('on'); return;
     }
-    const h = '<div class="wl"><h2>Aloita aikataulu</h2><p class="sub">' + esc(projName) + ' · valitse, miten aloitat</p><div class="wb">' +
+    const h = '<div class="wl"><h2>Aloita aikataulu</h2><p class="sub">Anna projektille nimi ja aloituspäivä ja valitse, miten aloitat</p><div class="wf"><label for="wl-name">Projektin nimi<input id="wl-name" type="text" maxlength="40" value="' + esc(projName) + '"></label><label for="wl-start">Aloituspäivä<input id="wl-start" type="date" value="' + esc(CAL.start) + '"></label></div><div class="wb">' +
       '<button type="button" class="pri" data-wl="import"><b>Tuo määrät Excelistä</b><span>Kopioi määräluettelo ja liitä. Aikataulu syntyy automaattisesti, ja voit muokata kestoja ja työryhmiä.</span></button>' +
       '<button type="button" data-wl="gen"><b>Luo sijainnit generoimalla</b><span>Anna rakennusten, kerrosten ja huoneistojen määrä, niin sijainnit syntyvät valmiiksi.</span></button>' +
       '<button type="button" data-wl="blank"><b>Aloita tyhjästä</b><span>Luo sijainnit ja piirrä viivat itse paikka-aikakaavioon.</span></button>' +
       '<button type="button" data-wl="example"><b>Avaa esimerkkihanke</b><span>Tutustu valmiiseen aikatauluun ja kokeile toimintoja.</span></button></div>' +
-      (recent.length ? '<h3>Viimeksi avatut projektit</h3>' + recent.map(x => '<div class="rc"><span>' + esc(x.name || 'Projekti') + (x.updated ? ' <span style="opacity:.6">· ' + esc(d(x.updated)) + '</span>' : '') + '</span><button type="button" data-wl="open" data-id="' + esc(x.id) + '">Avaa</button></div>').join('') : '') + '</div>';
+      '</div>';
     if (welcomeEl.dataset.h !== h) { welcomeEl.innerHTML = h; welcomeEl.dataset.h = h; }
     welcomeEl.classList.add('on');
   }
+  function applyWl() { // projektin nimi ja aloituspäivä aloitusikkunasta
+    const n = document.getElementById('wl-name'), s = document.getElementById('wl-start');
+    if (n) { const v = n.value.trim().slice(0, 40); if (!v) n.value = projName; else if (v !== projName) { projName = v; renderSub(); scheduleSave(); } }
+    if (s && /^\d{4}-\d\d-\d\d$/.test(s.value) && isoMs(s.value) != null && s.value !== CAL.start) { const c = JSON.parse(JSON.stringify(CAL)); c.start = s.value; pushUndo(snapshot()); setCal(c); render(); renderSub(); renderProj(); scheduleSave(); }
+  }
+  if (welcomeEl) welcomeEl.addEventListener('change', e => { if (e.target.id === 'wl-name' || e.target.id === 'wl-start') applyWl(); });
   if (welcomeEl) welcomeEl.addEventListener('click', async e => {
-    const b = e.target.closest('[data-wl]'); if (!b) return; const a = b.dataset.wl;
+    const b = e.target.closest('[data-wl]'); if (!b) return; const a = b.dataset.wl; applyWl();
     if (a === 'import') document.getElementById('impBtn').click();
     else if (a === 'gen') { wlGen = true; welcomeEl.dataset.h = ''; renderWelcome(); }
     else if (a === 'genback') { wlGen = false; welcomeEl.dataset.h = ''; renderWelcome(); }
