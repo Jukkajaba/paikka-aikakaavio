@@ -2299,7 +2299,7 @@ function qlMatch(name, leaves) {
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
     ctx.innerHTML = l ? '<div class="ctx-h">' + esc(t.name) + '</div>' +
       '<button type="button" role="menuitem" data-cx="open" data-id="' + l.id + '"' + (u ? '' : ' disabled') + '>Avaa malli</button>' +
-      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? gt : '') : '<div class="ctx-h">Gantt</div>' + gt;
+      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (tehtävät säilyvät)</button>' : '') + gt;
     ctx.hidden = false;
     const w = ctx.offsetWidth, h = ctx.offsetHeight;
     ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
@@ -2307,7 +2307,8 @@ function qlMatch(name, leaves) {
   }
   ctx.addEventListener('click', e => {
     const b = e.target.closest('[data-cx]'); if (!b || b.disabled) return; const id = b.dataset.id, a = b.dataset.cx; closeCtx();
-    if (a === 'gtxt') { gTxt = !gTxt; saveView(); renderGantt(); }
+    if (a === 'grpdel') act('grpdel', id, {});
+    else if (a === 'gtxt') { gTxt = !gTxt; saveView(); renderGantt(); }
     else if (a === 'open') openMdl(id);
     else if (a === 'edit') { setVis('panel', true); setTimeout(() => { const i = document.getElementById('f-mdl-m'); if (i) { i.scrollIntoView({ block: 'nearest' }); i.focus(); } }, 0); }
   });
@@ -3051,6 +3052,7 @@ function qlMatch(name, leaves) {
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
     if (selDep != null && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('depdel', selDep); selId = null; selGrp = null; render(); return; }
+    if (selGrp && selId == null && (e.key === 'Delete' || e.key === 'Backspace') && groups.some(x => x.id === selGrp)) { e.preventDefault(); act('grpdel', selGrp); return; } // ylätehtävän poisto: tehtävät säilyvät
     const l = byId(selId); if (!l) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); act('del', l.id); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -3068,7 +3070,7 @@ function qlMatch(name, leaves) {
   });
   gSvg.addEventListener('contextmenu', e => {
     if (drag) return; const rw = gRows[Math.floor(gPt(e).y / (gGeo ? gGeo.rowH : 26))];
-    e.preventDefault(); openCtx(e.clientX, e.clientY, rw && rw.line != null && byId(rw.line) ? rw.line : null, { gantt: true });
+    e.preventDefault(); if (rw && rw.gk && groups.some(x => x.id === rw.grp)) { selGrp = rw.grp; selId = null; selLoc = null; selDep = null; render(); } openCtx(e.clientX, e.clientY, rw && rw.line != null && byId(rw.line) ? rw.line : null, { gantt: true, grp: rw && rw.gk ? rw.grp : null });
   });
 
   // leijuvat paneelit: näkyvyys ja sijainti (muistetaan selaimessa, jos mahdollista)
@@ -3174,7 +3176,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '166';
+  const APP_BUILD = '167';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
