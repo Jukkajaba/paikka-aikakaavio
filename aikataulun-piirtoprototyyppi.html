@@ -864,6 +864,8 @@ function qlGuess(grid) {
     if (roles[j] !== 'skip') continue;
     const v = col(j); if (!v.length) continue;
     const numR = v.filter(x => qlNum(x) != null).length / v.length;
+    // ilman otsikkoa: vasemmanpuoleisin sarake, jossa on hierarkkisia numeroita (1, 1.1, 1.2.3), on littera
+    if (j === 0 && !used.code && v.length > 1 && v.filter(x => /^\d+(\.\d+)*$/.test(x)).length / v.length >= 0.7 && v.some(x => x.indexOf('.') >= 0)) { roles[j] = 'code'; used.code = true; continue; }
     const unitR = v.filter(x => x.length <= 4 && /^[a-zäö²³\/%.0-9]+$/i.test(x)).length / v.length;
     if (numR >= 0.5) roles[j] = 'loc';
     else if (!used.unit && unitR >= 0.7 && v.length > 1) { roles[j] = 'unit'; used.unit = true; }
@@ -872,7 +874,12 @@ function qlGuess(grid) {
   }
   const locs = roles.map((r, j) => r === 'loc' ? j : -1).filter(j => j >= 0);
   if (!used.qty && locs.length === 1) { roles[locs[0]] = 'qty'; used.qty = true; }
-  else if (!used.qty && locs.length > 1 && head < 0) { roles[locs[0]] = 'qty'; used.qty = true; }
+  else if (!used.qty && locs.length > 1 && head < 0) {
+    // määrä-sarake on se numerosarake, joka on useimmilla riveillä sen oikealla puolella olevien numerosarakkeiden summa; muuten ensimmäinen
+    let pick = locs[0], best = 0;
+    locs.slice(0, -1).forEach((j, ix) => { const rest = locs.slice(ix + 1); let hit = 0, tot = 0; data.forEach(r => { const q = qlNum(r[j]), s = rest.reduce((a, k) => a + (qlNum(r[k]) || 0), 0); if (q != null && s > 0) { tot++; if (Math.abs(q - s) < 0.01 * Math.max(1, q)) hit++; } }); if (tot && hit / tot >= 0.6 && hit > best) { best = hit; pick = j; } });
+    roles[pick] = 'qty'; used.qty = true;
+  }
   if (!used.name) { const j = roles.indexOf('code'); if (j >= 0) { roles[j] = 'name'; } }
   return { head: head, roles: roles, names: Array.from({ length: n }, (_, j) => (head >= 0 && first[j]) ? first[j] : 'Sarake ' + (j + 1)) };
 }
@@ -3074,7 +3081,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '152';
+  const APP_BUILD = '153';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
