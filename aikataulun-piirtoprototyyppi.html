@@ -243,6 +243,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #chart [data-role="dep"], #chart [data-role="depend"], #gantt [data-gr="gdeppick"], #gantt [data-gr="gdepend"] { pointer-events: none; }
 body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depend"], body.ctrl-held #gantt [data-gr="gdeppick"], body.ctrl-held #gantt [data-gr="gdepend"] { pointer-events: all; }
 .gt { fill: var(--ink); font: 500 12px var(--sans); }
+.gt.gnew { fill: var(--muted); font-style: italic; font-weight: 400; }
 .gg { font-weight: 600; }
 .gc { fill: var(--muted); font: 500 11px var(--mono); }
 .seg { display: inline-flex; gap: 4px; }
@@ -1344,6 +1345,7 @@ function qlMatch(name, leaves) {
   const GANTT_HINT = 'Gantt: Valitse rivi klikkaamalla. Kaksoisklikkaa rivin nimeä muokataksesi sitä: Enter tallentaa ja siirtyy seuraavalle riville. + Tehtävä ja + Ylätehtävä lisäävät uuden rivin valitun rivin alapuolelle. Ylätehtävä kokoaa tehtäviä yhteen, ja ▸/▾ avaa tai sulkee ryhmän. Siirrä riviä vetämällä sen nimestä, ja pudota se ylätehtävän päälle liittääksesi sen ryhmään. Vedä palkkia siirtääksesi sitä ja palkin oikeaa reunaa muuttaaksesi kestoa. Ylätehtävän oikean reunan veto muuttaa alatehtävien kestoja, kun Tehtävä-paneelissa on päällä Kokonaiskesto ohjaa. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle. Samalla tavalla nuolen vetäminen sivusuunnassa muuttaa viivettä, ja nuolen päätypallon voi vetää toiselle riville. Delete poistaa valitun riippuvuuden. Riippuvuudet näkyvät, kun Riippuvuudet-painike on päällä. Tavoite, Tilanne ja Ennuste näkyvät vain, kun niiden paneeli on auki.';
   const VKEY = 'aik-nakyma-v1';
   let gTxt = false; // janatekstit (rivin nimi palkin perässä) Ganttissa
+  let gEntry = false; // Gantin syöttörivi: tyhjä rivi listan lopussa, johon kirjoitettu nimi luo tehtävän
   let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
@@ -1567,6 +1569,7 @@ function qlMatch(name, leaves) {
         if (!closed) fts.forEach(q => rows.push({ g: false, flat: true, label: trade(q.l.trade).name, s: q.x.s, e: q.x.e, crew: q.x.crew, max: trade(q.l.trade).maxCrew, col: q.l.trade, line: q.l.id, locId: q.x.locId }));
       }
     }
+    if (gGroup === 'trade' && (gEntry || !lines.length)) rows.push({ g: false, entry: true, empty: true, label: 'Uusi tehtävä…', s: 0, e: 0, crew: 0, line: null, lvl: 0, pg: null });
     return rows;
   }
   function renderGantt() {
@@ -1635,7 +1638,7 @@ function qlMatch(name, leaves) {
       cov.push('<line x1="0" x2="' + (g.LEFT - 4) + '" y1="' + (y + rowH) + '" y2="' + (y + rowH) + '" stroke="var(--grid2)" stroke-width=".5" opacity=".6"/>');
       if (r.nh && selNode && selNode.sid === selId && selNode.sg === selGrp && selNode.nid === r.nid && (selNode.l == null || selNode.l === r.pl)) cov.push('<rect x="0" y="' + y + '" width="' + (g.LEFT - 4) + '" height="' + rowH + '" fill="var(--ink)" opacity=".09" pointer-events="none"/>');
       if (r.g) cov.push('<text class="gt" x="' + (12 + (r.lvl || 0) * 12) + '" y="' + (mid + 4) + '">' + (r.closed ? '▸' : '▾') + '</text>');
-      cov.push('<text class="gt' + (r.g ? ' gg' : '') + '" x="' + ind + '" y="' + (mid + 4) + '">' + esc(lab) + '<title>' + esc(r.label) + '</title></text>');
+      cov.push('<text class="gt' + (r.g ? ' gg' : '') + (r.entry ? ' gnew' : '') + '" x="' + ind + '" y="' + (mid + 4) + '">' + esc(lab) + '<title>' + esc(r.label) + '</title></text>');
       const bsp = blRow(r), fsp = fcRow(r);
       if (!g.narrow && !r.empty) g.cols.map(k => gCell(r, k)).concat(stOn() ? [r.pct != null && r.pct > 0 ? String(Math.round(r.pct)) : ''] : []).concat(curBl() ? [bsp ? (r1(bestEndRow(r) - bsp.e) > 0 ? '+' : r1(bestEndRow(r) - bsp.e) < 0 ? '−' : '') + dd(Math.abs(bestEndRow(r) - bsp.e)) : ''] : []).concat(fcOn() ? [fsp ? (r1(fsp.e - r.e) > 0 ? '+' : r1(fsp.e - r.e) < 0 ? '−' : '') + dd(Math.abs(fsp.e - r.e)) : ''] : []).forEach((t, k) => cov.push('<text class="gc' + (k < g.cols.length && gEditable(r, g.cols[k]) ? ' gce' : '') + '" x="' + g.colX[k] + '" y="' + (mid + 4) + '" text-anchor="end"' + ((g.cols[k] === 'crew' && (over || agOver)) || (g.cols[k] === 'extra' && /h$/.test(t)) || ((k === g.blK || k === g.fcK) && String(t).charAt(0) === '+') ? ' style="fill:var(--warn);font-weight:700"' : (k === g.blK && String(t).charAt(0) === '−' ? ' style="fill:#2E9E6B;font-weight:700"' : '')) + '>' + t + (g.cols[k] === 'crew' && (over || agOver) ? '▲' : '') + '</text>'));
       const x0 = X(r.s), x1 = XE(r.e), col = r.col ? colorOf(r.col) : 'var(--ink)', sel = gRowSel(r), by0 = stOn() ? 3.5 : 5, bh = stOn() ? 9 : rowH - 10;
@@ -1706,6 +1709,7 @@ function qlMatch(name, leaves) {
   function gRowSel(r) { if (r.line == null || r.line !== selId) return false; if (r.g && selLoc && selLoc.l === r.line) return false; /* yksittäinen sijainti valittu: yhteenvetorivi ei korostu */ if (r.g || r.flat || r.locId == null) return true; return !!(selLoc && selLoc.l === r.line && selLoc.loc === r.locId); }
   function gRowClick(gi, bx) {
     const r = gRows[gi]; if (!r) return;
+    if (r.entry) { if (gGeo && bx < gGeo.LEFT - 4) gEditName(gi, Math.max(bx, 34)); return; }
     if (r.g && r.nh && bx >= 12 + (r.lvl || 0) * 12 + 16) { selLoc = null; selId = r.pl != null ? r.pl : null; selGrp = null; selDep = null; selNode = { nid: r.nid, l: r.pl != null ? r.pl : null, sid: selId, sg: null }; render(); return; }
     selNode = null;
     if (r.g && (gGroup === 'loc' || bx < 28 + (r.lvl || 0) * 12)) { if (r.nh) gClosed[r.key] = !r.closed; else if (gClosed[r.key]) delete gClosed[r.key]; else gClosed[r.key] = true; saveView(); renderGantt(); return; }
@@ -1787,9 +1791,9 @@ function qlMatch(name, leaves) {
     const g = geo(), r = ref.getBoundingClientRect(), frac = clamp((e.clientX - r.left - g.LEFT) / Math.max(1, g.visD * g.dayW), 0, 1);
     zoomVis(Math.min(gVisW, N_WEEKS) * (e.deltaY > 0 ? 1.25 : 1 / 1.25), frac);
   }, { passive: false }));
-  function addFlatTask(gid) {
-    pushUndo(snapshot()); ensureOrd();
-    const t = newTrade(); t.name = 'Uusi tehtävä'; t.flat = true;
+  function addFlatTask(gid, o) {
+    o = o || {}; if (!o.noUndo) pushUndo(snapshot()); ensureOrd(); if (o.end) { gEntry = true; selId = null; selGrp = null; selLoc = null; }
+    const t = newTrade(); t.name = o.name || 'Uusi tehtävä'; t.flat = true;
     const sel = byId(selId), g = gid ? groups.find(x => x.id === gid) : null, kids = g ? itemsOf(g.id).map(x => x.o) : [];
     { const st = sel && trade(sel.trade); if (st && st.col) t.col = st.col; } // uusi tehtävä saa valitun tehtävän värin
     const st0 = sel ? sel.start : (kids.length ? Math.min.apply(null, kids.map(k => k.start)) : 0);
@@ -1961,6 +1965,11 @@ function qlMatch(name, leaves) {
       if (anc) { const items = itemsOf(null).filter(x => x.o !== g), ix = items.findIndex(x => x.k === anc.k && String(x.id) === String(anc.id)); items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'g', id: g.id, o: g }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; }); } } selGrp = g.id; selId = null; selDep = null; gClosed['K' + g.id] = false; delete gClosed['K' + g.id]; render();
     gScroll.scrollTop = Math.max(0, gRows.findIndex(r => r.grp === g.id) * ROWH[gRowK] - 60);
   });
+  // tyhjässä projektissa Gantin syöttörivin nimikenttä avautuu itsestään: kirjoita nimi, Enter luo tehtävän ja avaa seuraavan
+  function gAutoEntry() {
+    if (view !== 'gantt' || gGroup !== 'trade' || lines.length || (typeof welcomeEl !== 'undefined' && welcomeEl && welcomeEl.classList.contains('on'))) return;
+    setTimeout(() => { if (view !== 'gantt' || lines.length || !gGeo || document.querySelector('body > input.gedit') || (welcomeEl && welcomeEl.classList.contains('on'))) return; const i = gRows.findIndex(r => r.entry); if (i >= 0) gEditName(i, 60); }, 80);
+  }
   // nimen muokkaus suoraan Gantt-rivillä (kaksoisklikkaus nimeen)
   let gTapLast = null;
   function gTap(gi, x) { const n = Date.now(); if (gTapLast && gTapLast.gi === gi && n - gTapLast.t < 450) { gTapLast = null; gEditName(gi, x); } else gTapLast = { gi: gi, t: n }; }
@@ -1968,7 +1977,8 @@ function qlMatch(name, leaves) {
     if (!gGeo) return; const r = gRows[gi]; if (!r || r.nh || document.querySelector('body > input.gedit')) return;
     const ind = (r.g ? 28 : 30) + (r.lvl || 0) * 12; if (px < ind - 4 || px >= gGeo.LEFT - 4) return;
     let cur, maxl, apply;
-    if (r.gk) { const g = groups.find(x => x.id === r.grp); if (!g) return; cur = g.name; maxl = 40; apply = v => { if (v) g.name = v; }; }
+    if (r.entry) { cur = ''; maxl = 40; apply = v => { if (v) addFlatTask(null, { name: v, end: true, noUndo: true }); }; }
+    else if (r.gk) { const g = groups.find(x => x.id === r.grp); if (!g) return; cur = g.name; maxl = 40; apply = v => { if (v) g.name = v; }; }
     else { const l = byId(r.line); if (!l) return; const t = trade(l.trade);
       if (r.g || r.flat) { cur = t.name; maxl = r.flat ? 40 : 24; apply = v => { if (v) t.name = v; }; }
       else { const o = (l.ov && l.ov[r.locId]) || {}; cur = r.label; maxl = 40; apply = v => { if (!v || v === (gGroup === 'loc' ? t.name : (gAnc(r.locId).A.length ? gAnc(r.locId).leaf : t.name + ', ' + LOCS[tasks(l).find(k => k.locId === r.locId).loc].name))) { if (l.ov && l.ov[r.locId]) delete l.ov[r.locId].name; } else ovOf(l, r.locId).name = v; }; } }
@@ -2165,7 +2175,7 @@ function qlMatch(name, leaves) {
     hintEl.textContent = isG ? GANTT_HINT : FLOW_HINT; if (h1El) h1El.textContent = isG ? 'Gantt' : 'Paikka-aikakaavio';
     gSel.value = gGroup; applyHelp();
   }
-  function setView(v) { if (v === view) return; view = v; saveView(); needRoom = true; applyView(); render(); }
+  function setView(v) { if (v === view) return; view = v; saveView(); needRoom = true; applyView(); render(); gAutoEntry(); }
   vFlow.addEventListener('click', () => setView('flow'));
   vGantt.addEventListener('click', () => setView('gantt'));
   gSel.addEventListener('change', () => { gGroup = gSel.value === 'loc' ? 'loc' : 'trade'; saveView(); gScroll.scrollTop = 0; renderGantt(); refreshLvl(); });
@@ -3164,7 +3174,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '165';
+  const APP_BUILD = '166';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3290,13 +3300,14 @@ function qlMatch(name, leaves) {
     else if (a === 'gendo') {
       const g = n => Math.round(+(document.getElementById(n) || {}).value || 0), nb = clamp(g('wg-b'), 1, 12), nf = clamp(g('wg-f'), 1, 60), nu = clamp(g('wg-u'), 0, 30), bsm = !!(document.getElementById('wg-k') || {}).checked;
       if (genCount() > 400) { wgMsg(); return; }
-      const snap = snapshot(); LT = normTree(genLocs(nb, nf, bsm, nu)); syncLocs(); pushUndo(snap); wlGen = false; welcomeOff = true; welcomeEl.dataset.h = ''; setVis('locs', true); render(); renderWelcome();
+      const snap = snapshot(); LT = normTree(genLocs(nb, nf, bsm, nu)); syncLocs(); pushUndo(snap); wlGen = false; welcomeOff = true; welcomeEl.dataset.h = ''; setVis('locs', true); render(); renderWelcome(); gAutoEntry();
     }
-    else if (a === 'blank') { welcomeOff = true; if (!LOCS.length) setVis('locs', true); renderWelcome(); }
+    else if (a === 'blank') { welcomeOff = true; if (!LOCS.length) setVis('locs', true); renderWelcome(); gAutoEntry(); }
     else if (a === 'example') await newProject('Esimerkkihanke', 'example');
     else if (a === 'open') await openProject(b.dataset.id);
   });
   async function openProject(id) {
+    gEntry = false;
     welcomeOff = false; welcomeEl && (welcomeEl.dataset.h = '');
     const pr = projList.find(x => x.id === id); if (!pr) return;
     newerNote = false; const st = normState(pr.state); if (!st) { setStatus('Projektia ei voi avata'); return; }
@@ -3306,7 +3317,7 @@ function qlMatch(name, leaves) {
     setStatus(newerLock ? 'Vain katselu: projekti on tehty uudemmalla versiolla, muutoksia ei tallenneta' : 'Avattu ' + hhmm(new Date())); renderProj();
   }
   async function newProject(name, kind, st) {
-    newerLock = false;
+    newerLock = false; gEntry = kind !== 'example' && !st;
     welcomeOff = false; welcomeEl && (welcomeEl.dataset.h = '');
     await flushSave();
     suspend = true; impReset();
