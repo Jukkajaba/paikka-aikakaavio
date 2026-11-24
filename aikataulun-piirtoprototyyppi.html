@@ -321,7 +321,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
     <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
-    <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddGrp" type="button" class="gplus small" title="Luo ylätehtävä valitun rivin alapuolelle" aria-label="Lisää ylätehtävä">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
+    <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddGrp" type="button" hidden class="gplus small" title="Luo ylätehtävä valitun rivin alapuolelle" aria-label="Lisää ylätehtävä">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
     <section class="fp" data-p="notes" hidden><div class="fp-bar"><span>Huomiot</span><button type="button" data-close="notes" aria-label="Piilota paneeli Huomiot">×</button></div><div class="fp-body" id="notes"></div></section>
@@ -1345,6 +1345,7 @@ function qlMatch(name, leaves) {
   const GANTT_HINT = 'Gantt: Valitse rivi klikkaamalla. Kaksoisklikkaa rivin nimeä muokataksesi sitä: Enter tallentaa ja siirtyy seuraavalle riville. + Tehtävä ja + Ylätehtävä lisäävät uuden rivin valitun rivin alapuolelle. Ylätehtävä kokoaa tehtäviä yhteen, ja ▸/▾ avaa tai sulkee ryhmän. Siirrä riviä vetämällä sen nimestä, ja pudota se ylätehtävän päälle liittääksesi sen ryhmään. Vedä palkkia siirtääksesi sitä ja palkin oikeaa reunaa muuttaaksesi kestoa. Ylätehtävän oikean reunan veto muuttaa alatehtävien kestoja, kun Tehtävä-paneelissa on päällä Kokonaiskesto ohjaa. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle. Samalla tavalla nuolen vetäminen sivusuunnassa muuttaa viivettä, ja nuolen päätypallon voi vetää toiselle riville. Delete poistaa valitun riippuvuuden. Riippuvuudet näkyvät, kun Riippuvuudet-painike on päällä. Tavoite, Tilanne ja Ennuste näkyvät vain, kun niiden paneeli on auki.';
   const VKEY = 'aik-nakyma-v1';
   let gTxt = false; // janatekstit (rivin nimi palkin perässä) Ganttissa
+  let gEntryGrp = null; // syöttörivin ryhmä: uudet tehtävät syntyvät tämän ylätehtävän alle (sisennys Tabilla)
   let gEntry = false; // Gantin syöttörivi: tyhjä rivi listan lopussa, johon kirjoitettu nimi luo tehtävän
   let view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
@@ -1569,7 +1570,7 @@ function qlMatch(name, leaves) {
         if (!closed) fts.forEach(q => rows.push({ g: false, flat: true, label: trade(q.l.trade).name, s: q.x.s, e: q.x.e, crew: q.x.crew, max: trade(q.l.trade).maxCrew, col: q.l.trade, line: q.l.id, locId: q.x.locId }));
       }
     }
-    if (gGroup === 'trade' && (gEntry || !lines.length)) rows.push({ g: false, entry: true, empty: true, label: 'Uusi tehtävä…', s: 0, e: 0, crew: 0, line: null, lvl: 0, pg: null });
+    if (gGroup === 'trade' && (gEntry || !lines.length)) rows.push({ g: false, entry: true, empty: true, label: 'Uusi tehtävä…', s: 0, e: 0, crew: 0, line: null, lvl: gEntryGrp && groups.some(x => x.id === gEntryGrp) ? 1 : 0, pg: null });
     return rows;
   }
   function renderGantt() {
@@ -1965,6 +1966,26 @@ function qlMatch(name, leaves) {
       if (anc) { const items = itemsOf(null).filter(x => x.o !== g), ix = items.findIndex(x => x.k === anc.k && String(x.id) === String(anc.id)); items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'g', id: g.id, o: g }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; }); } } selGrp = g.id; selId = null; selDep = null; gClosed['K' + g.id] = false; delete gClosed['K' + g.id]; render();
     gScroll.scrollTop = Math.max(0, gRows.findIndex(r => r.grp === g.id) * ROWH[gRowK] - 60);
   });
+  // hierarkia: sisennys (Tab) liittää tehtävän yläpuolisen ylätehtävän alle; yläpuolinen vapaa tehtävä muuttuu ylätehtäväksi; Shift+Tab nostaa ulos
+  function gIndent(lid) {
+    const l = byId(lid); if (!l) return null;
+    if (l.grp) { toast('Tehtävä on jo ylätehtävän alla. Toinen ylätehtävätaso tulee myöhemmin.'); return null; }
+    const items = itemsOf(null), ix = items.findIndex(x => x.k === 'l' && x.id === l.id);
+    if (ix <= 0) { toast('Sisennettävän rivin yläpuolella pitää olla tehtävä tai ylätehtävä.'); return null; }
+    const prev = items[ix - 1];
+    if (prev.k === 'g') { pushUndo(snapshot()); ensureOrd(); l.grp = prev.id; l.ord = 1e9; renumCont(prev.id); renumCont(null); return prev.id; }
+    const P = prev.o; if (!P.flat) { toast('Edellinen rivi on sijaintipohjainen tehtävä, josta ei voi tehdä ylätehtävää. Luo ylätehtävä oikean klikkauksen valikosta.'); return null; }
+    pushUndo(snapshot()); ensureOrd();
+    const G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord }; groups.push(G); gClosed['K' + G.id] = false;
+    deps.forEach(d => { if (!isGref(d.a) && d.a.l === P.id) d.a = { g: G.id }; if (!isGref(d.b) && d.b.l === P.id) d.b = { g: G.id }; });
+    lines = lines.filter(x => x !== P); if (!lines.some(x => x.trade === P.trade)) TRADES = TRADES.filter(x => x.id !== P.trade);
+    l.grp = G.id; l.ord = 10; deps = deps.filter(d => !(isGref(d.a) && isGref(d.b) && d.a.g === d.b.g) && !(isGref(d.a) && d.a.g === G.id && !isGref(d.b) && d.b.l === l.id) && !(isGref(d.b) && d.b.g === G.id && !isGref(d.a) && d.a.l === l.id));
+    renumCont(G.id); renumCont(null); return G.id;
+  }
+  function gOutdent(lid) {
+    const l = byId(lid); if (!l || !l.grp) return false; const g = groups.find(x => x.id === l.grp);
+    pushUndo(snapshot()); ensureOrd(); delete l.grp; l.ord = g ? g.ord + 0.5 : maxOrd() + 10; renumCont(null); if (g) renumCont(g.id); return true;
+  }
   // tyhjässä projektissa Gantin syöttörivin nimikenttä avautuu itsestään: kirjoita nimi, Enter luo tehtävän ja avaa seuraavan
   function gAutoEntry() {
     if (view !== 'gantt' || gGroup !== 'trade' || lines.length || (typeof welcomeEl !== 'undefined' && welcomeEl && welcomeEl.classList.contains('on'))) return;
@@ -1977,7 +1998,7 @@ function qlMatch(name, leaves) {
     if (!gGeo) return; const r = gRows[gi]; if (!r || r.nh || document.querySelector('body > input.gedit')) return;
     const ind = (r.g ? 28 : 30) + (r.lvl || 0) * 12; if (px < ind - 4 || px >= gGeo.LEFT - 4) return;
     let cur, maxl, apply;
-    if (r.entry) { cur = ''; maxl = 40; apply = v => { if (v) addFlatTask(null, { name: v, end: true, noUndo: true }); }; }
+    if (r.entry) { cur = ''; maxl = 40; apply = v => { if (v) addFlatTask(gEntryGrp && groups.some(x => x.id === gEntryGrp) ? gEntryGrp : null, { name: v, end: true, noUndo: true }); }; }
     else if (r.gk) { const g = groups.find(x => x.id === r.grp); if (!g) return; cur = g.name; maxl = 40; apply = v => { if (v) g.name = v; }; }
     else { const l = byId(r.line); if (!l) return; const t = trade(l.trade);
       if (r.g || r.flat) { cur = t.name; maxl = r.flat ? 40 : 24; apply = v => { if (v) t.name = v; }; }
@@ -1987,15 +2008,22 @@ function qlMatch(name, leaves) {
     inp.style.cssText = 'position:fixed;z-index:50;font:500 12px var(--sans);padding:2px 4px;box-sizing:border-box;left:' + (b.left + ind - 4) + 'px;top:' + (b.top + gi * gGeo.rowH - gOy + 2) + 'px;width:' + Math.max(80, gGeo.NAME - ind + 12) + 'px;height:' + (gGeo.rowH - 4) + 'px';
     document.body.appendChild(inp); inp.focus(); inp.select();
     let done = false;
-    const end = (ok, next) => {
+    const end = (ok, next, ind) => {
       if (done) return; done = true; const v = inp.value.trim(); inp.remove();
       if (ok && v !== cur) { pushUndo(snapshot()); apply(v.slice(0, maxl)); render(); }
+      if (ind && !r.gk && !r.nh) { // Tab = sisennä, Shift+Tab = nosta ulos
+        const lid = r.entry ? (v ? selId : null) : r.line;
+        if (ind === 'in') { if (lid != null) { const gid = gIndent(lid); if (r.entry && gid) gEntryGrp = gid; } }
+        else { if (lid != null) gOutdent(lid); if (r.entry) gEntryGrp = null; }
+        render(); const ni = r.entry ? gRows.findIndex(x => x.entry) : gRows.findIndex(x => x.line === lid && (x.g || x.flat));
+        if (ni >= 0) { drawGanttBody(); gEditName(ni, 60); } return;
+      }
       if (next && gi + 1 < gRows.length) {
         const rh = gGeo.rowH, bottom = (gi + 2) * rh; if (bottom > gScroll.scrollTop + gScroll.clientHeight) gScroll.scrollTop = bottom - gScroll.clientHeight + 4;
         gRowClick(gi + 1, 999); drawGanttBody(); gEditName(gi + 1, gGeo.LEFT - 10);
       }
     };
-    inp.addEventListener('keydown', k => { k.stopPropagation(); if (k.key === 'Enter') end(true, true); else if (k.key === 'Escape') end(false); });
+    inp.addEventListener('keydown', k => { k.stopPropagation(); if (k.key === 'Enter') end(true, true); else if (k.key === 'Escape') end(false); else if (k.key === 'Tab') { k.preventDefault(); end(true, false, k.shiftKey ? 'out' : 'in'); } });
     inp.addEventListener('blur', () => end(true));
   }
   gVisEl.addEventListener('change', () => { gVisW = clamp(Math.round(+gVisEl.value) || 26, 4, 260); saveView(); if (view === 'gantt') renderGantt(); else render(); });
@@ -2299,7 +2327,7 @@ function qlMatch(name, leaves) {
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
     ctx.innerHTML = l ? '<div class="ctx-h">' + esc(t.name) + '</div>' +
       '<button type="button" role="menuitem" data-cx="open" data-id="' + l.id + '"' + (u ? '' : ' disabled') + '>Avaa malli</button>' +
-      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (tehtävät säilyvät)</button>' : '') + gt;
+      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (tehtävät säilyvät)</button>' : '') + gt;
     ctx.hidden = false;
     const w = ctx.offsetWidth, h = ctx.offsetHeight;
     ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
@@ -2308,6 +2336,9 @@ function qlMatch(name, leaves) {
   ctx.addEventListener('click', e => {
     const b = e.target.closest('[data-cx]'); if (!b || b.disabled) return; const id = b.dataset.id, a = b.dataset.cx; closeCtx();
     if (a === 'grpdel') act('grpdel', id, {});
+    else if (a === 'grpnew') document.getElementById('gAddGrp').click();
+    else if (a === 'indent') { gIndent(+id); render(); }
+    else if (a === 'outdent') { gOutdent(+id); render(); }
     else if (a === 'gtxt') { gTxt = !gTxt; saveView(); renderGantt(); }
     else if (a === 'open') openMdl(id);
     else if (a === 'edit') { setVis('panel', true); setTimeout(() => { const i = document.getElementById('f-mdl-m'); if (i) { i.scrollIntoView({ block: 'nearest' }); i.focus(); } }, 0); }
@@ -3052,6 +3083,7 @@ function qlMatch(name, leaves) {
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
     if (selDep != null && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('depdel', selDep); selId = null; selGrp = null; render(); return; }
+    if (e.key === 'Tab' && view === 'gantt' && selId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && byId(selId)) { e.preventDefault(); if (e.shiftKey) gOutdent(selId); else gIndent(selId); render(); return; }
     if (selGrp && selId == null && (e.key === 'Delete' || e.key === 'Backspace') && groups.some(x => x.id === selGrp)) { e.preventDefault(); act('grpdel', selGrp); return; } // ylätehtävän poisto: tehtävät säilyvät
     const l = byId(selId); if (!l) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); act('del', l.id); }
@@ -3176,7 +3208,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '167';
+  const APP_BUILD = '168';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3309,7 +3341,7 @@ function qlMatch(name, leaves) {
     else if (a === 'open') await openProject(b.dataset.id);
   });
   async function openProject(id) {
-    gEntry = false;
+    gEntry = false; gEntryGrp = null;
     welcomeOff = false; welcomeEl && (welcomeEl.dataset.h = '');
     const pr = projList.find(x => x.id === id); if (!pr) return;
     newerNote = false; const st = normState(pr.state); if (!st) { setStatus('Projektia ei voi avata'); return; }
@@ -3319,7 +3351,7 @@ function qlMatch(name, leaves) {
     setStatus(newerLock ? 'Vain katselu: projekti on tehty uudemmalla versiolla, muutoksia ei tallenneta' : 'Avattu ' + hhmm(new Date())); renderProj();
   }
   async function newProject(name, kind, st) {
-    newerLock = false; gEntry = kind !== 'example' && !st;
+    newerLock = false; gEntry = kind !== 'example' && !st; gEntryGrp = null;
     welcomeOff = false; welcomeEl && (welcomeEl.dataset.h = '');
     await flushSave();
     suspend = true; impReset();

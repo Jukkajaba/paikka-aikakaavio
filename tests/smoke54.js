@@ -4,7 +4,7 @@ await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://
 await p.click('button:has-text("Projekti")');await p.waitForTimeout(200);
 await p.click('[data-pj="new"]');await p.click('[data-pj="newblank"]');await p.waitForTimeout(400);
 await p.click('#vGantt');await p.waitForTimeout(200);
-await p.click('#gAddTask');await p.click('#gAddTask');await p.click('#gAddGrp');await p.click('[data-act="grpaddtask"]');await p.waitForTimeout(200);
+await p.click('#gAddTask');await p.click('#gAddTask');await p.evaluate(() => document.getElementById('gAddGrp').click());await p.click('[data-act="grpaddtask"]');await p.waitForTimeout(200);
 console.log('rows',await p.evaluate(()=>[...document.querySelectorAll('#gantt text.gt')].map(t=>t.textContent.slice(0,t.textContent.length/2)).join('|')),errs);
 const box=await p.locator('#gantt').boundingBox();
 const bar=await p.locator('#gantt [data-gr="gmove"]').first().boundingBox();

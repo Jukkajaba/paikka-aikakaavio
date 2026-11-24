@@ -7,7 +7,7 @@ console.log('res pressed',await p.getAttribute('#resBtn','aria-pressed'));await 
 await p.click('[data-ptog=list]');await p.click('[data-ptog=notes]');console.log('list/notes',await p.isVisible('.fp[data-p=list]'),await p.isVisible('.fp[data-p=notes]'));await p.click('[data-ptog=list]');await p.click('[data-ptog=notes]');
 await p.click('#vGantt');await p.waitForTimeout(300);
 const n0=await p.locator('#gantt text.gt').count();await p.click('#gAddTask');await p.waitForTimeout(200);console.log('tehtävä lisätty',n0,await p.locator('#gantt text.gt').count());
-await p.click('#gAddGrp');await p.waitForTimeout(200);console.log('ylätehtävä lisätty',await p.locator('#gantt text.gt').count());
+await p.evaluate(() => document.getElementById('gAddGrp').click());await p.waitForTimeout(200);console.log('ylätehtävä lisätty',await p.locator('#gantt text.gt').count());
 await p.evaluate(()=>document.querySelectorAll('.fp').forEach(x=>x.style.visibility='hidden'));
 await p.screenshot({path:'clean2.png',clip:{x:100,y:150,width:900,height:200}});
 await p.reload();await p.waitForTimeout(500);console.log('persist',await p.$$eval('.fp:not([hidden])',e=>e.map(x=>x.dataset.p)));

@@ -9,7 +9,7 @@ const names=async()=>(await rowsF()).join('|');
 const st=()=>p.evaluate(()=>[...document.querySelectorAll('#gantt text.gc')].map(t=>t.textContent).filter(x=>/^(ma|ti|ke|to|pe) /.test(x)).filter((t,i)=>i%2==0).join(' '));
 console.log(await names());
 await p.mouse.click(box.x+150,rowY(1)); // select Ikkunat
-await p.click('#gAddGrp');await p.waitForTimeout(100);
+await p.evaluate(() => document.getElementById('gAddGrp').click());await p.waitForTimeout(100);
 console.log('after grp',await names());
 // select lvi row (index 3) and assign group via select
 await p.mouse.click(box.x+150,rowY(3));
