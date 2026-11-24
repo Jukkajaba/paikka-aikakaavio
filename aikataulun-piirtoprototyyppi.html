@@ -218,7 +218,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #ganttH { overflow-x: auto; overflow-y: hidden; height: 16px; margin-top: 4px; }
 #ganttH[hidden] { display: none; }
 #ganttHi { height: 1px; }
-#ganttScroll { overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; max-height: 560px; }
+#ganttScroll { overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; max-height: 560px; min-height: 360px; }
 #ganttSpacer { position: relative; }
 #gantt { position: absolute; left: 0; display: block; user-select: none; -webkit-user-select: none; }
 #gantt * { pointer-events: none; }
@@ -1342,7 +1342,7 @@ function qlMatch(name, leaves) {
   helpBtn.addEventListener('click', () => { helpOn = !helpOn; try { localStorage.setItem(HKEY, helpOn ? '1' : '0'); } catch (err) { } applyHelp(); });
   const vFlow = document.getElementById('vFlow'), vGantt = document.getElementById('vGantt'), h1El = document.querySelector('.top h1');
   const FLOW_HINT = hintEl.textContent;
-  const GANTT_HINT = 'Gantt: Valitse rivi klikkaamalla. Kaksoisklikkaa rivin nimeä muokataksesi sitä: Enter tallentaa ja siirtyy seuraavalle riville. + Tehtävä ja + Ylätehtävä lisäävät uuden rivin valitun rivin alapuolelle. Ylätehtävä kokoaa tehtäviä yhteen, ja ▸/▾ avaa tai sulkee ryhmän. Siirrä riviä vetämällä sen nimestä, ja pudota se ylätehtävän päälle liittääksesi sen ryhmään. Vedä palkkia siirtääksesi sitä ja palkin oikeaa reunaa muuttaaksesi kestoa. Ylätehtävän oikean reunan veto muuttaa alatehtävien kestoja, kun Tehtävä-paneelissa on päällä Kokonaiskesto ohjaa. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle. Samalla tavalla nuolen vetäminen sivusuunnassa muuttaa viivettä, ja nuolen päätypallon voi vetää toiselle riville. Delete poistaa valitun riippuvuuden. Riippuvuudet näkyvät, kun Riippuvuudet-painike on päällä. Tavoite, Tilanne ja Ennuste näkyvät vain, kun niiden paneeli on auki.';
+  const GANTT_HINT = 'Gantt: Valitse rivi klikkaamalla. Kaksoisklikkaa rivin nimeä muokataksesi sitä: Enter tallentaa nimen ja lisää uuden tehtävän alle (tyhjä Enter tai Esc lopettaa), nuolet ↑↓ siirtävät viereiselle riville, Tab sisentää ja Shift+Tab nostaa ulos. Valitun rivin Enter tai + lisää tehtävän sen alle. Ylätehtävän voi luoda oikean klikkauksen valikosta. Ylätehtävä kokoaa tehtäviä yhteen, ja ▸/▾ avaa tai sulkee ryhmän. Siirrä riviä vetämällä sen nimestä, ja pudota se ylätehtävän päälle liittääksesi sen ryhmään. Vedä palkkia siirtääksesi sitä ja palkin oikeaa reunaa muuttaaksesi kestoa. Ylätehtävän oikean reunan veto muuttaa alatehtävien kestoja, kun Tehtävä-paneelissa on päällä Kokonaiskesto ohjaa. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle. Samalla tavalla nuolen vetäminen sivusuunnassa muuttaa viivettä, ja nuolen päätypallon voi vetää toiselle riville. Delete poistaa valitun riippuvuuden. Riippuvuudet näkyvät, kun Riippuvuudet-painike on päällä. Tavoite, Tilanne ja Ennuste näkyvät vain, kun niiden paneeli on auki.';
   const VKEY = 'aik-nakyma-v1';
   let gTxt = false; // janatekstit (rivin nimi palkin perässä) Ganttissa
   let gEntryGrp = null; // syöttörivin ryhmä: uudet tehtävät syntyvät tämän ylätehtävän alle (sisennys Tabilla)
@@ -1603,7 +1603,7 @@ function qlMatch(name, leaves) {
     if (CAL.ax !== 'wd') hp.push('<text class="ax" x="' + (LEFT + 3) + '" y="11">' + axUnit() + '</text>');
     hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
     gHead.setAttribute('width', W); gHead.setAttribute('height', HEAD); gHead.setAttribute('viewBox', '0 0 ' + W + ' ' + HEAD); gHead.innerHTML = hp.join('');
-    gScroll.style.maxHeight = gFit ? Math.max(260, Math.round(window.innerHeight - (gScroll.getBoundingClientRect().top + window.scrollY) - 52)) + 'px' : '';
+    gScroll.style.maxHeight = Math.max(gFit ? 260 : 420, Math.round(window.innerHeight - (gScroll.getBoundingClientRect().top + window.scrollY) - 52)) + 'px';
     gSpacer.style.height = Math.max(gRows.length, 2) * rowH + 'px';
     drawGanttBody();
   }
@@ -1957,7 +1957,7 @@ function qlMatch(name, leaves) {
     const ri = gRows.findIndex(x => x.line === l.id && x.locId === nl.id); if (ri >= 0) gScroll.scrollTop = Math.max(0, Math.min(gScroll.scrollTop, ri * ROWH[gRowK]), ri * ROWH[gRowK] + ROWH[gRowK] * 2 - (gScroll.clientHeight || 500));
     return true;
   }
-  document.getElementById('gAddTask').addEventListener('click', () => { if (gGroup === 'trade' && addNextLoc()) return; const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); });
+  document.getElementById('gAddTask').addEventListener('click', () => { if (gGroup === 'trade' && addNextLoc()) return; const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); gOpenFresh(); });
   document.getElementById('gAddGrp').addEventListener('click', () => {
     pushUndo(snapshot()); ensureOrd();
     const sel = byId(selId), g = { id: uid('K'), name: 'Uusi ylätehtävä', ord: maxOrd() + 10 };
@@ -1966,6 +1966,15 @@ function qlMatch(name, leaves) {
       if (anc) { const items = itemsOf(null).filter(x => x.o !== g), ix = items.findIndex(x => x.k === anc.k && String(x.id) === String(anc.id)); items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'g', id: g.id, o: g }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; }); } } selGrp = g.id; selId = null; selDep = null; gClosed['K' + g.id] = false; delete gClosed['K' + g.id]; render();
     gScroll.scrollTop = Math.max(0, gRows.findIndex(r => r.grp === g.id) * ROWH[gRowK] - 60);
   });
+  function gDropFresh(lid) { const l = byId(lid); if (!l) return; lines = lines.filter(x => x !== l); if (!lines.some(x => x.trade === l.trade)) TRADES = TRADES.filter(x => x.id !== l.trade); pruneDeps(); if (selId === lid) selId = null; }
+  function gOpenFresh() { // avaa vasta luodun (valitun) tehtävän nimikentän
+    const lid = selId, ri = gRows.findIndex(x => x.line === lid && (x.g || x.flat)); if (lid == null || ri < 0) return;
+    drawGanttBody(); gEditName(ri, 60, { fresh: true, lid: lid });
+  }
+  function gAddBelow(r) { // Enter nimikentässä: uusi tehtävä tämän rivin alle samaan ryhmään
+    if (r.gk) addFlatTask(r.grp); else { selId = r.line; selLoc = null; selGrp = null; addFlatTask(null); }
+    gOpenFresh();
+  }
   // hierarkia: sisennys (Tab) liittää tehtävän yläpuolisen ylätehtävän alle; yläpuolinen vapaa tehtävä muuttuu ylätehtäväksi; Shift+Tab nostaa ulos
   function gIndent(lid) {
     const l = byId(lid); if (!l) return null;
@@ -2005,8 +2014,8 @@ function qlMatch(name, leaves) {
   // nimen muokkaus suoraan Gantt-rivillä (kaksoisklikkaus nimeen)
   let gTapLast = null;
   function gTap(gi, x) { const n = Date.now(); if (gTapLast && gTapLast.gi === gi && n - gTapLast.t < 450) { gTapLast = null; gEditName(gi, x); } else gTapLast = { gi: gi, t: n }; }
-  function gEditName(gi, px) {
-    if (!gGeo) return; const r = gRows[gi]; if (!r || r.nh || document.querySelector('body > input.gedit')) return;
+  function gEditName(gi, px, o) {
+    o = o || {}; if (!gGeo) return; const r = gRows[gi]; if (!r || r.nh || document.querySelector('body > input.gedit')) return;
     const ind = (r.g ? 28 : 30) + (r.lvl || 0) * 12; if (px < ind - 4 || px >= gGeo.LEFT - 4) return;
     let cur, maxl, apply;
     if (r.entry) { cur = ''; maxl = 40; apply = v => { if (v) addFlatTask(gEntryGrp && groups.some(x => x.id === gEntryGrp) ? gEntryGrp : null, { name: v, end: true, noUndo: true }); }; }
@@ -2015,27 +2024,30 @@ function qlMatch(name, leaves) {
       if (r.g || r.flat) { cur = t.name; maxl = r.flat ? 40 : 24; apply = v => { if (v) t.name = v; }; }
       else { const o = (l.ov && l.ov[r.locId]) || {}; cur = r.label; maxl = 40; apply = v => { if (!v || v === (gGroup === 'loc' ? t.name : (gAnc(r.locId).A.length ? gAnc(r.locId).leaf : t.name + ', ' + LOCS[tasks(l).find(k => k.locId === r.locId).loc].name))) { if (l.ov && l.ov[r.locId]) delete l.ov[r.locId].name; } else ovOf(l, r.locId).name = v; }; } }
     const b = gSvg.getBoundingClientRect(), inp = document.createElement('input');
-    inp.type = 'text'; inp.className = 'gedit'; inp.value = cur; inp.maxLength = maxl; inp.setAttribute('aria-label', 'Nimi');
+    if (o.fresh) cur = ''; inp.type = 'text'; inp.className = 'gedit'; inp.value = cur; if (o.fresh) inp.placeholder = 'Tehtävän nimi'; inp.maxLength = maxl; inp.setAttribute('aria-label', 'Nimi');
     inp.style.cssText = 'position:fixed;z-index:50;font:500 12px var(--sans);padding:2px 4px;box-sizing:border-box;left:' + (b.left + ind - 4) + 'px;top:' + (b.top + gi * gGeo.rowH - gOy + 2) + 'px;width:' + Math.max(80, gGeo.NAME - ind + 12) + 'px;height:' + (gGeo.rowH - 4) + 'px';
     document.body.appendChild(inp); inp.focus(); inp.select();
     let done = false;
-    const end = (ok, next, ind) => {
+    const end = (ok, next, ind, mv, blur) => {
       if (done) return; done = true; const v = inp.value.trim(); inp.remove();
+      if (o.fresh && (!ok || (!v && !blur))) { gDropFresh(o.lid); render(); return; } // Esc tai tyhjä Enter poistaa tyhjän uuden rivin; painikkeen/muun klikkaus jättää sen oletusnimellä
       if (ok && v !== cur) { pushUndo(snapshot()); apply(v.slice(0, maxl)); render(); }
       if (ind && !r.gk && !r.nh) { // Tab = sisennä, Shift+Tab = nosta ulos
         const lid = r.entry ? (v ? selId : null) : r.line;
         if (ind === 'in') { if (lid != null) { const gid = gIndent(lid); if (r.entry && gid) gEntryGrp = gid; } }
         else { if (lid != null) gOutdent(lid); if (r.entry) gEntryGrp = null; }
         render(); const ni = r.entry ? gRows.findIndex(x => x.entry) : gRows.findIndex(x => x.line === lid && (x.g || x.flat));
-        if (ni >= 0) { drawGanttBody(); gEditName(ni, 60); } return;
+        if (ni >= 0) { drawGanttBody(); gEditName(ni, 60, o.fresh ? { fresh: true, lid: lid } : null); } return;
       }
+      if (mv) { let j = gi + mv; while (gRows[j] && gRows[j].nh) j += mv; if (gRows[j]) { gRowClick(j, 999); drawGanttBody(); gEditName(j, gGeo.LEFT - 10); } return; }
+      if (next && !r.entry) { gAddBelow(r); return; }
       if (next && gi + 1 < gRows.length) {
         const rh = gGeo.rowH, bottom = (gi + 2) * rh; if (bottom > gScroll.scrollTop + gScroll.clientHeight) gScroll.scrollTop = bottom - gScroll.clientHeight + 4;
         gRowClick(gi + 1, 999); drawGanttBody(); gEditName(gi + 1, gGeo.LEFT - 10);
       }
     };
-    inp.addEventListener('keydown', k => { k.stopPropagation(); if (k.key === 'Enter') end(true, true); else if (k.key === 'Escape') end(false); else if (k.key === 'Tab') { k.preventDefault(); end(true, false, k.shiftKey ? 'out' : 'in'); } });
-    inp.addEventListener('blur', () => end(true));
+    inp.addEventListener('keydown', k => { k.stopPropagation(); if (k.key === 'Enter') end(true, true); else if (k.key === 'Escape') end(false); else if (k.key === 'Tab') { k.preventDefault(); end(true, false, k.shiftKey ? 'out' : 'in'); } else if (k.key === 'ArrowDown' || k.key === 'ArrowUp') { k.preventDefault(); end(true, false, null, k.key === 'ArrowDown' ? 1 : -1); } });
+    inp.addEventListener('blur', () => end(true, false, null, 0, true));
   }
   gVisEl.addEventListener('change', () => { gVisW = clamp(Math.round(+gVisEl.value) || 26, 4, 260); saveView(); if (view === 'gantt') renderGantt(); else render(); });
   // pitää työlajeille aina vapaata aikaa viimeisen tehtävän jälkeen (13 vk, vähintään 52 vk), jotta aikajanalle riittää tilaa
@@ -3094,6 +3106,7 @@ function qlMatch(name, leaves) {
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
     if (selDep != null && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('depdel', selDep); selId = null; selGrp = null; render(); return; }
+    if (e.key === 'Enter' && view === 'gantt' && (selId != null || selGrp) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && !document.querySelector('body > input.gedit')) { e.preventDefault(); const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); gOpenFresh(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && byId(selId)) { e.preventDefault(); if (e.shiftKey) gOutdent(selId); else gIndent(selId); render(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selGrp && selId == null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); toast('Ylätehtävä on jo ylimmällä tasolla. Alempia tasoja ei vielä ole.'); return; }
     if (selGrp && selId == null && (e.key === 'Delete' || e.key === 'Backspace') && groups.some(x => x.id === selGrp)) { e.preventDefault(); act('grpdel', selGrp); return; } // ylätehtävän poisto: tehtävät säilyvät
@@ -3220,7 +3233,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '170';
+  const APP_BUILD = '171';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
