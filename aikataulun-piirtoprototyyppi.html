@@ -1114,7 +1114,7 @@ function qlMatch(name, leaves) {
   });
   document.getElementById('grpBtn').addEventListener('click', () => { const allC = groups.length && groups.every(g => gClosed['K' + g.id]); groups.forEach(g => { if (allC) delete gClosed['K' + g.id]; else gClosed['K' + g.id] = true; }); saveView(); render(); });
   lvlSel.addEventListener('change', () => { const v = lvlSel.value; if (v === 'c') return; lcol.clear(); Object.keys(gClosed).forEach(k => { if (/^L\d+$/.test(k) || k.indexOf('N') >= 0) delete gClosed[k]; }); const k = +v; if (v === 'x') lines.forEach(l => { if (!l.flat) gClosed['L' + l.id] = true; }); else if (k > 0) ltLevels().at(k).forEach(id => lcol.add(id)); saveView(); render(); if (vis.locs) renderLocs(); });
-  function render() { { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { renderResPanel(); } catch (err) { } _tc = new Map(); const _t0 = performance.now(); try { renderInner(); } finally { _tc = null; window.__rms = Math.round(performance.now() - _t0); } try { panel.querySelectorAll('[data-partial]').forEach(x => { x.indeterminate = true; }); } catch (err) { } PH('end'); refreshLvl(); try { renderWelcome(); } catch (err) { } const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
+  function render() { gNormGroups(); { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { renderResPanel(); } catch (err) { } _tc = new Map(); const _t0 = performance.now(); try { renderInner(); } finally { _tc = null; window.__rms = Math.round(performance.now() - _t0); } try { panel.querySelectorAll('[data-partial]').forEach(x => { x.indeterminate = true; }); } catch (err) { } PH('end'); refreshLvl(); try { renderWelcome(); } catch (err) { } const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
   let lcache = new Map();
   function renderInner() {
     if (needRoom) { needRoom = false; gEnsureRoom(); }
@@ -1638,7 +1638,7 @@ function qlMatch(name, leaves) {
       if (gRowSel(r) || (r.gk && r.grp === selGrp && selId == null)) cov.push('<rect x="0" y="' + y + '" width="' + (g.LEFT - 4) + '" height="' + rowH + '" fill="var(--ink)" opacity=".09" pointer-events="none"/>');
       cov.push('<line x1="0" x2="' + (g.LEFT - 4) + '" y1="' + (y + rowH) + '" y2="' + (y + rowH) + '" stroke="var(--grid2)" stroke-width=".5" opacity=".6"/>');
       if (r.nh && selNode && selNode.sid === selId && selNode.sg === selGrp && selNode.nid === r.nid && (selNode.l == null || selNode.l === r.pl)) cov.push('<rect x="0" y="' + y + '" width="' + (g.LEFT - 4) + '" height="' + rowH + '" fill="var(--ink)" opacity=".09" pointer-events="none"/>');
-      if (r.g) cov.push('<text class="gt" x="' + (12 + (r.lvl || 0) * 12) + '" y="' + (mid + 4) + '">' + (r.closed ? '▸' : '▾') + '</text>');
+      if (r.g && !(r.gk && r.empty)) cov.push('<text class="gt" x="' + (12 + (r.lvl || 0) * 12) + '" y="' + (mid + 4) + '">' + (r.closed ? '▸' : '▾') + '</text>');
       cov.push('<text class="gt' + (r.g ? ' gg' : '') + (r.entry ? ' gnew' : '') + '" x="' + ind + '" y="' + (mid + 4) + '">' + esc(lab) + '<title>' + esc(r.label) + '</title></text>');
       const bsp = blRow(r), fsp = fcRow(r);
       if (!g.narrow && !r.empty) g.cols.map(k => gCell(r, k)).concat(stOn() ? [r.pct != null && r.pct > 0 ? String(Math.round(r.pct)) : ''] : []).concat(curBl() ? [bsp ? (r1(bestEndRow(r) - bsp.e) > 0 ? '+' : r1(bestEndRow(r) - bsp.e) < 0 ? '−' : '') + dd(Math.abs(bestEndRow(r) - bsp.e)) : ''] : []).concat(fcOn() ? [fsp ? (r1(fsp.e - r.e) > 0 ? '+' : r1(fsp.e - r.e) < 0 ? '−' : '') + dd(Math.abs(fsp.e - r.e)) : ''] : []).forEach((t, k) => cov.push('<text class="gc' + (k < g.cols.length && gEditable(r, g.cols[k]) ? ' gce' : '') + '" x="' + g.colX[k] + '" y="' + (mid + 4) + '" text-anchor="end"' + ((g.cols[k] === 'crew' && (over || agOver)) || (g.cols[k] === 'extra' && /h$/.test(t)) || ((k === g.blK || k === g.fcK) && String(t).charAt(0) === '+') ? ' style="fill:var(--warn);font-weight:700"' : (k === g.blK && String(t).charAt(0) === '−' ? ' style="fill:#2E9E6B;font-weight:700"' : '')) + '>' + t + (g.cols[k] === 'crew' && (over || agOver) ? '▲' : '') + '</text>'));
@@ -1976,21 +1976,25 @@ function qlMatch(name, leaves) {
     if (prev.k === 'g') { pushUndo(snapshot()); ensureOrd(); l.grp = prev.id; l.ord = 1e9; renumCont(prev.id); renumCont(null); return prev.id; }
     const P = prev.o; if (!P.flat) { toast('Edellinen rivi on sijaintipohjainen tehtävä, josta ei voi tehdä ylätehtävää. Luo ylätehtävä oikean klikkauksen valikosta.'); return null; }
     pushUndo(snapshot()); ensureOrd();
-    const G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord, auto: true }; groups.push(G); gClosed['K' + G.id] = false;
+    const G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord, auto: true, ps: P.start }; groups.push(G); gClosed['K' + G.id] = false;
     deps.forEach(d => { if (!isGref(d.a) && d.a.l === P.id) d.a = { g: G.id }; if (!isGref(d.b) && d.b.l === P.id) d.b = { g: G.id }; });
     lines = lines.filter(x => x !== P); if (!lines.some(x => x.trade === P.trade)) TRADES = TRADES.filter(x => x.id !== P.trade);
     l.grp = G.id; l.ord = 10; deps = deps.filter(d => !(isGref(d.a) && isGref(d.b) && d.a.g === d.b.g) && !(isGref(d.a) && d.a.g === G.id && !isGref(d.b) && d.b.l === l.id) && !(isGref(d.b) && d.b.g === G.id && !isGref(d.a) && d.a.l === l.id));
     renumCont(G.id); renumCont(null); return G.id;
   }
+  function gRevertGroup(g, start) { // sisennyksellä syntynyt ylätehtävä ilman alatehtäviä muuttuu takaisin tavalliseksi tehtäväksi
+    const t = newTrade(); t.name = g.name; t.flat = true;
+    const n = { id: nextId++, trade: t.id, from: null, to: null, start: g.ps != null ? g.ps : (start || 0), dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: g.ord }; fit(n); lines.push(n);
+    deps.forEach(d => { if (isGref(d.a) && d.a.g === g.id) d.a = { l: n.id }; if (isGref(d.b) && d.b.g === g.id) d.b = { l: n.id }; });
+    groups = groups.filter(x => x !== g); delete gClosed['K' + g.id]; if (selGrp === g.id) { selGrp = null; selId = n.id; } return n;
+  }
+  function gNormGroups() { // tyhjä sisennyksellä syntynyt ylätehtävä palaa tehtäväksi kaikissa tilanteissa (poisto, vetäminen, ulosnosto)
+    let ch = false; groups.slice().forEach(g => { if (g.auto && !lines.some(l => l.grp === g.id)) { gRevertGroup(g, 0); ch = true; } }); return ch;
+  }
   function gOutdent(lid) {
     const l = byId(lid); if (!l || !l.grp) return false; const g = groups.find(x => x.id === l.grp);
     pushUndo(snapshot()); ensureOrd(); delete l.grp; l.ord = g ? g.ord + 0.5 : maxOrd() + 10;
-    if (g && g.auto && !itemsOf(g.id).length) { // sisennyksellä syntynyt ylätehtävä ilman alatehtäviä muuttuu takaisin tavalliseksi tehtäväksi
-      const t = newTrade(); t.name = g.name; t.flat = true;
-      const n = { id: nextId++, trade: t.id, from: null, to: null, start: l.start, dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: g.ord }; fit(n); lines.push(n);
-      deps.forEach(d => { if (isGref(d.a) && d.a.g === g.id) d.a = { l: n.id }; if (isGref(d.b) && d.b.g === g.id) d.b = { l: n.id }; });
-      groups = groups.filter(x => x !== g); delete gClosed['K' + g.id];
-    }
+    if (g && g.auto && !itemsOf(g.id).length) gRevertGroup(g, l.start);
     renumCont(null); if (g && groups.includes(g)) renumCont(g.id); return true;
   }
   // tyhjässä projektissa Gantin syöttörivin nimikenttä avautuu itsestään: kirjoita nimi, Enter luo tehtävän ja avaa seuraavan
@@ -3091,6 +3095,7 @@ function qlMatch(name, leaves) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
     if (selDep != null && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('depdel', selDep); selId = null; selGrp = null; render(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && byId(selId)) { e.preventDefault(); if (e.shiftKey) gOutdent(selId); else gIndent(selId); render(); return; }
+    if (e.key === 'Tab' && view === 'gantt' && selGrp && selId == null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); toast('Ylätehtävä on jo ylimmällä tasolla. Alempia tasoja ei vielä ole.'); return; }
     if (selGrp && selId == null && (e.key === 'Delete' || e.key === 'Backspace') && groups.some(x => x.id === selGrp)) { e.preventDefault(); act('grpdel', selGrp); return; } // ylätehtävän poisto: tehtävät säilyvät
     const l = byId(selId); if (!l) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); act('del', l.id); }
@@ -3215,7 +3220,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '169';
+  const APP_BUILD = '170';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

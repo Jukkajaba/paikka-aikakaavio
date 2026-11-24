@@ -26,6 +26,20 @@ const { chromium } = require('playwright');
   await p.locator('#gantt [data-gi="' + gj + '"]').first().click({ position: { x: 60, y: 10 }, force: true }); await p.waitForTimeout(200);
   await p.keyboard.press('Shift+Tab'); await p.waitForTimeout(250); s = await st();
   ok(s.groups.length === 0 && (await p.evaluate(() => __aik().gRows.filter(r => !r.entry).map(r => r.label).join())) === 'Ylempi,Alempi', 'ylätehtävä palasi tavalliseksi tehtäväksi: ' + s.groups.join() + ' | ' + s.lines.join());
+  // alatehtävän poisto Delete-näppäimellä: tyhjä sisennysryhmä palaa tehtäväksi
+  await p.click('#projBtn'); await p.waitForTimeout(200); await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(600);
+  await p.click('[data-wl="blank"]'); await p.waitForTimeout(600);
+  await typ('Sisäseinät', 'Enter'); await typ('Ikkunat', 'Tab'); await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  const gk = await p.evaluate(() => __aik().gRows.findIndex(r => r.label === 'Ikkunat'));
+  await p.locator('#gantt [data-gi="' + gk + '"]').first().click({ position: { x: 60, y: 10 }, force: true }); await p.waitForTimeout(200);
+  await p.keyboard.press('Delete'); await p.waitForTimeout(300); s = await st();
+  ok(s.groups.length === 0 && s.lines.join() === 'Sisäseinät', 'tyhjä sisennysryhmä palasi tehtäväksi: ' + s.groups.join() + ' | ' + s.lines.join());
+  // valittu ylätehtävä + Tab: ei fokushyppyä, ei virhettä; tyhjällä ylätehtävällä ei nuolta
+  await p.evaluate(() => document.getElementById('gAddGrp').click()); await p.waitForTimeout(300);
+  await p.keyboard.press('Tab'); await p.waitForTimeout(200);
+  ok(await p.evaluate(() => document.activeElement === document.body || document.activeElement.tagName !== 'DIV'), 'Tab ei siirtänyt fokusta vierityspalkkiin');
+  const carets = await p.evaluate(() => { const gi = __aik().gRows.findIndex(r => r.gk && r.empty); return [...document.querySelectorAll('#gantt text.gt')].filter(e => /▾|▸/.test(e.textContent)).length + ':' + gi; });
+  ok(/^\d+:\d+$/.test(carets) && !carets.endsWith(':-1'), 'tyhjä ylätehtävärivi löytyi ' + carets);
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
