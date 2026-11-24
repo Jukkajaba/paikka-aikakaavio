@@ -17,6 +17,15 @@ const { chromium } = require('playwright');
   await p.locator('#gantt [data-gi="' + gi + '"]').first().click({ position: { x: 60, y: 10 }, force: true }); await p.waitForTimeout(200);
   await p.keyboard.press('Shift+Tab'); await p.waitForTimeout(250); s = await st(); ok(/^Täytöt$/.test(s.lines[3]), 'Täytöt nostettu ulos: ' + s.lines.join());
   await p.keyboard.press('Tab'); await p.waitForTimeout(250); s = await st(); ok(s.lines[3] === 'Täytöt@Maanrakennus', 'Täytöt sisennetty takaisin: ' + s.lines.join());
+  // sisennys ja heti ulos: ylätehtävä muuttuu takaisin tavalliseksi tehtäväksi
+  await p.click('#projBtn'); await p.waitForTimeout(200); await p.click('[data-pj=new]'); await p.click('[data-pj=newblank]'); await p.waitForTimeout(600);
+  await p.click('[data-wl="blank"]'); await p.waitForTimeout(600);
+  await typ('Ylempi', 'Enter'); await typ('Alempi', 'Tab'); await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  s = await st(); ok(s.groups.length === 1, 'ryhmä syntyi sisennyksellä');
+  const gj = await p.evaluate(() => __aik().gRows.findIndex(r => r.label === 'Alempi'));
+  await p.locator('#gantt [data-gi="' + gj + '"]').first().click({ position: { x: 60, y: 10 }, force: true }); await p.waitForTimeout(200);
+  await p.keyboard.press('Shift+Tab'); await p.waitForTimeout(250); s = await st();
+  ok(s.groups.length === 0 && (await p.evaluate(() => __aik().gRows.filter(r => !r.entry).map(r => r.label).join())) === 'Ylempi,Alempi', 'ylätehtävä palasi tavalliseksi tehtäväksi: ' + s.groups.join() + ' | ' + s.lines.join());
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();

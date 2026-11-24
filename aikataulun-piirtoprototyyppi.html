@@ -1976,7 +1976,7 @@ function qlMatch(name, leaves) {
     if (prev.k === 'g') { pushUndo(snapshot()); ensureOrd(); l.grp = prev.id; l.ord = 1e9; renumCont(prev.id); renumCont(null); return prev.id; }
     const P = prev.o; if (!P.flat) { toast('Edellinen rivi on sijaintipohjainen tehtävä, josta ei voi tehdä ylätehtävää. Luo ylätehtävä oikean klikkauksen valikosta.'); return null; }
     pushUndo(snapshot()); ensureOrd();
-    const G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord }; groups.push(G); gClosed['K' + G.id] = false;
+    const G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord, auto: true }; groups.push(G); gClosed['K' + G.id] = false;
     deps.forEach(d => { if (!isGref(d.a) && d.a.l === P.id) d.a = { g: G.id }; if (!isGref(d.b) && d.b.l === P.id) d.b = { g: G.id }; });
     lines = lines.filter(x => x !== P); if (!lines.some(x => x.trade === P.trade)) TRADES = TRADES.filter(x => x.id !== P.trade);
     l.grp = G.id; l.ord = 10; deps = deps.filter(d => !(isGref(d.a) && isGref(d.b) && d.a.g === d.b.g) && !(isGref(d.a) && d.a.g === G.id && !isGref(d.b) && d.b.l === l.id) && !(isGref(d.b) && d.b.g === G.id && !isGref(d.a) && d.a.l === l.id));
@@ -1984,7 +1984,14 @@ function qlMatch(name, leaves) {
   }
   function gOutdent(lid) {
     const l = byId(lid); if (!l || !l.grp) return false; const g = groups.find(x => x.id === l.grp);
-    pushUndo(snapshot()); ensureOrd(); delete l.grp; l.ord = g ? g.ord + 0.5 : maxOrd() + 10; renumCont(null); if (g) renumCont(g.id); return true;
+    pushUndo(snapshot()); ensureOrd(); delete l.grp; l.ord = g ? g.ord + 0.5 : maxOrd() + 10;
+    if (g && g.auto && !itemsOf(g.id).length) { // sisennyksellä syntynyt ylätehtävä ilman alatehtäviä muuttuu takaisin tavalliseksi tehtäväksi
+      const t = newTrade(); t.name = g.name; t.flat = true;
+      const n = { id: nextId++, trade: t.id, from: null, to: null, start: l.start, dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: g.ord }; fit(n); lines.push(n);
+      deps.forEach(d => { if (isGref(d.a) && d.a.g === g.id) d.a = { l: n.id }; if (isGref(d.b) && d.b.g === g.id) d.b = { l: n.id }; });
+      groups = groups.filter(x => x !== g); delete gClosed['K' + g.id];
+    }
+    renumCont(null); if (g && groups.includes(g)) renumCont(g.id); return true;
   }
   // tyhjässä projektissa Gantin syöttörivin nimikenttä avautuu itsestään: kirjoita nimi, Enter luo tehtävän ja avaa seuraavan
   function gAutoEntry() {
@@ -3208,7 +3215,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '168';
+  const APP_BUILD = '169';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
