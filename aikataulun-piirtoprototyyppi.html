@@ -346,6 +346,18 @@ function setWeeks(w) { N_WEEKS = Math.max(MIN_WEEKS, Math.min(MAX_WEEKS, Math.ro
 let _tc = null; // tehtävälaskennan välimuisti: käytössä vain yhden piirron ajan (viivat eivät muutu kesken)
 let _uid = 100;
 let groups = [];
+const MAX_GD = 4; // ylätehtävätasojen enimmäismäärä
+const gById = id => groups.find(g => g.id === id) || null;
+function gSubIds(gid) { const out = [gid]; for (let i = 0; i < out.length; i++) groups.forEach(g => { if (g.parent === out[i] && out.indexOf(g.id) < 0) out.push(g.id); }); return out; } // ryhmä ja kaikki sen alaryhmät
+function gChain(gid) { const c = []; let g = gid ? gById(gid) : null; while (g && c.length < 20 && c.indexOf(g) < 0) { c.unshift(g); g = g.parent ? gById(g.parent) : null; } return c; } // uloimmasta ryhmään itseensä
+const gDepth = gid => gChain(gid).length;
+const gIsAnc = (a, b) => gChain(b).some(g => g.id === a); // a on b:n esivanhempi tai b itse
+function gFixParents() { // tuntematon tai kehämäinen yläryhmä poistetaan; liian syvät ryhmät nostetaan ylemmäs
+  groups.forEach(g => { if (g.parent && (g.parent === g.id || !gById(g.parent))) delete g.parent; });
+  groups.forEach(g => { const seen = []; let q = g; while (q && q.parent && seen.indexOf(q.id) < 0) { seen.push(q.id); q = gById(q.parent); } if (q && q.parent && seen.indexOf(q.id) >= 0) delete g.parent; });
+  groups.forEach(g => { let guard = 0; while (g.parent && gDepth(g.id) + gHeight(g.id) - 1 > MAX_GD && guard++ < 10) { const p = gById(g.parent); if (p && p.parent) g.parent = p.parent; else delete g.parent; } });
+}
+function gHeight(gid, n) { let h = 1; if ((n || 0) > 8) return h; groups.forEach(g => { if (g.parent === gid) h = Math.max(h, 1 + gHeight(g.id, (n || 0) + 1)); }); return h; }
 const uid = p => p + (++_uid);
 const defaultLocs = () => ['Kerros 1', 'Kerros 2', 'Kerros 3', 'Kerros 4', 'Kerros 5', 'Kerros 6'].map((n, i) => ({ id: 'l' + (i + 1), name: n, share: 1 }));
 const defaultTrades = () => [
@@ -687,7 +699,7 @@ function refLoc(lines, ref, role) {
 }
 // ylätehtävän (ryhmän) viite: { l: null, loc: null, g: ryhmän id }. Edeltäjänä ryhmän loppu (viimeisenä päättyvä tehtävä), seuraajana ryhmän alku (ensimmäisenä alkava).
 const isGref = r => !!r && r.g != null;
-const gKidsOf = (lines, gid) => lines.filter(l => l.grp === gid);
+const gKidsOf = (lines, gid) => { const ids = gSubIds(gid); return lines.filter(l => l.grp && ids.indexOf(l.grp) >= 0); }; // kaikki ylätehtävän alle (myös alaryhmien alle) kuuluvat viivat
 function gSpanOf(lines, gid) {
   let s = Infinity, e = -Infinity;
   gKidsOf(lines, gid).forEach(l => tasks(l).forEach(t => { if (t.s < s) s = t.s; if (t.e > e) e = t.e; }));
@@ -702,9 +714,9 @@ function depViolations(lines, deps) {
 // Saman viivan sisällä seuraaja ei voi olla ennen edeltäjää (ketju etenee sijaintijärjestyksessä).
 function depOrderOk(lines, a, b) {
   if (isGref(a) || isGref(b)) {
-    if (isGref(a) && isGref(b)) return a.g !== b.g;
+    if (isGref(a) && isGref(b)) return a.g !== b.g && !gIsAnc(a.g, b.g) && !gIsAnc(b.g, a.g);
     const gr = isGref(a) ? a : b, ln = isGref(a) ? b : a, l = lines.find(x => String(x.id) === String(ln.l));
-    return !(l && l.grp === gr.g);
+    return !(l && l.grp && gIsAnc(gr.g, l.grp));
   }
   if (String(a.l) !== String(b.l)) return true;
   if (a.loc == null || b.loc == null) return false;
@@ -758,7 +770,8 @@ function wouldCycle(deps, a, b, lns) {
   const anyG = isGref(a) || isGref(b) || deps.some(d => isGref(d.a) || isGref(d.b));
   const coarse = anyG || a.loc == null || b.loc == null || deps.some(d => d.a.loc == null || d.b.loc == null);
   const key = (r, role) => isGref(r) ? (role === 'a' ? 'ge' : 'gs') + r.g : (coarse ? 'l' + r.l : r.l + '|' + r.loc);
-  const kid = []; if (anyG) (lns || []).forEach(l => { if (l.grp) { kid.push(['gs' + l.grp, 'l' + l.id]); kid.push(['l' + l.id, 'ge' + l.grp]); } });
+  const kid = []; if (anyG) groups.forEach(g => { if (g.parent) { kid.push(['gs' + g.parent, 'gs' + g.id]); kid.push(['ge' + g.id, 'ge' + g.parent]); } });
+  if (anyG) (lns || []).forEach(l => { if (l.grp) { kid.push(['gs' + l.grp, 'l' + l.id]); kid.push(['l' + l.id, 'ge' + l.grp]); } });
   const goal = key(a, 'a'), seen = {}, stack = [key(b, 'b')];
   while (stack.length) {
     const k = stack.pop(); if (k === goal) return true; if (seen[k]) continue; seen[k] = 1;
@@ -985,7 +998,7 @@ function qlMatch(name, leaves) {
   function depEnd(ref, role) { // riippuvuuden pää paikka-aikakaaviossa: {t: tehtävä, sg: viivasegmentti, grp}; ylätehtäväviite → ryhmän viimeinen (a) tai ensimmäinen (b) tehtävä
     if (isGref(ref)) {
       let best = null;
-      lines.forEach(l => { if (l.flat || l.grp !== ref.g) return; const r = repOf(l); r.ts.forEach((x, i) => { if (!r.segs[i]) return; if (!best || (role === 'a' ? x.e > best.t.e : x.s < best.t.s)) best = { t: x, sg: r.segs[i], grp: r.grp || null }; }); });
+      const sub = gSubIds(ref.g); lines.forEach(l => { if (l.flat || !l.grp || sub.indexOf(l.grp) < 0) return; const r = repOf(l); r.ts.forEach((x, i) => { if (!r.segs[i]) return; if (!best || (role === 'a' ? x.e > best.t.e : x.s < best.t.s)) best = { t: x, sg: r.segs[i], grp: r.grp || null }; }); });
       return best;
     }
     const l = byId(ref.l); if (!l || l.flat) return null; const r = repOf(l), lc = refLoc(lines, ref, role), i = r.ts.findIndex(x => x.locId === lc);
@@ -997,16 +1010,16 @@ function qlMatch(name, leaves) {
     return { ax: A.sg.x1, ay: A.sg.y1, bx: B.sg.x0, by: B.sg.y0, viol: B.t.s < A.t.e, slack: B.t.s - (A.t.e + (d.lag || 0)) };
   }
   // suljettu ylätehtävä (Ganttin ▸/▾) näkyy paikka-aikakaaviossa yhtenä yhteenvetoviivana
-  const grpClosedOf = l => { const g = !l.flat && l.grp ? groups.find(q => q.id === l.grp) : null; return g && gClosed['K' + g.id] ? g : null; };
+  const grpClosedOf = l => { if (l.flat || !l.grp) return null; return gChain(l.grp).find(g => gClosed['K' + g.id]) || null; }; // uloin suljettu ylätehtävä, jonka alle viiva kuuluu
   function grpSummary(g) {
     const ck = _tc ? 'G' + g.id : null; if (ck && _tc.has(ck)) return _tc.get(ck);
     const m = new Map(); let asc = true, first = true;
-    lines.forEach(l => { if (l.flat || l.grp !== g.id) return; if (first) { asc = range(l).dir >= 0; first = false; } tasks(l).forEach(t => { const o = m.get(t.locId); if (!o) m.set(t.locId, { loc: t.loc, locId: t.locId, s: t.s, e: t.e, name: '' }); else { o.s = Math.min(o.s, t.s); o.e = Math.max(o.e, t.e); } }); });
+    const sub = gSubIds(g.id); lines.forEach(l => { if (l.flat || !l.grp || sub.indexOf(l.grp) < 0) return; if (first) { asc = range(l).dir >= 0; first = false; } tasks(l).forEach(t => { const o = m.get(t.locId); if (!o) m.set(t.locId, { loc: t.loc, locId: t.locId, s: t.s, e: t.e, name: '' }); else { o.s = Math.min(o.s, t.s); o.e = Math.max(o.e, t.e); } }); });
     const ts = [...m.values()].sort((a, b) => asc ? a.loc - b.loc : b.loc - a.loc), r = { g: g, ts: ts, asc: asc, s: ts.reduce((q, x) => Math.min(q, x.s), Infinity), e: ts.reduce((q, x) => Math.max(q, x.e), 0) };
     if (ck) _tc.set(ck, r); return r;
   }
   const repOf = l => { const g = grpClosedOf(l); if (g) { const s = grpSummary(g), sg = grpSeg(s); return { ts: s.ts.map(x => ({ loc: x.loc, locId: x.locId, s: s.s, e: s.e })), segs: s.ts.map(() => sg), grp: g }; } return { ts: tasks(l), segs: segsOf(l), grp: null }; };
-  const gvl = () => groups.filter(g => gClosed['K' + g.id]).map(grpSummary).filter(s => s.ts.length && (!G || !G.rm || s.ts.some(t => G.rm[t.loc] >= 0)) && lines.some(l => !l.flat && l.grp === s.g.id));
+  const gvl = () => groups.filter(g => gClosed['K' + g.id] && !(g.parent && gChain(g.parent).some(a => gClosed['K' + a.id]))).map(grpSummary).filter(s => s.ts.length && (!G || !G.rm || s.ts.some(t => G.rm[t.loc] >= 0)) && gKidsOf(lines, s.g.id).some(l => !l.flat));
   const vlines = () => (G && G.rm ? lines.filter(l => !l.flat && tasks(l).some(t => G.rm[t.loc] >= 0)) : lines.filter(l => !l.flat)).filter(l => !grpClosedOf(l));
   function nearestTask(P, maxD) {
     let best = null;
@@ -1202,7 +1215,7 @@ function qlMatch(name, leaves) {
     lcache = ncache;
     gvl().forEach(s => {
       const sq = grpSeg(s); if (!sq) return;
-      const d = 'M' + sq.x0.toFixed(1) + ' ' + sq.y0.toFixed(1) + 'L' + sq.x1.toFixed(1) + ' ' + sq.y1.toFixed(1), selG = selGrp === s.g.id && selId == null, n = lines.filter(l => !l.flat && l.grp === s.g.id).length;
+      const d = 'M' + sq.x0.toFixed(1) + ' ' + sq.y0.toFixed(1) + 'L' + sq.x1.toFixed(1) + ' ' + sq.y1.toFixed(1), selG = selGrp === s.g.id && selId == null, n = gKidsOf(lines, s.g.id).filter(l => !l.flat).length;
       if (selG) p.push('<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/>');
       p.push('<path d="' + d + '" fill="none" stroke="#8d99a6" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>');
       p.push('<path d="' + d + '" fill="none" stroke="transparent" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" data-role="gbody" data-grp="' + esc(s.g.id) + '" style="cursor:pointer"><title>' + esc(s.g.name + ' (ylätehtävä, ' + n + ' tehtävää)\nKaksoisklikkaa avataksesi tehtävät') + '</title></path>');
@@ -1364,7 +1377,7 @@ function qlMatch(name, leaves) {
   // rivin tehtävät {l, k}: lehti = yksi tehtävä, työlaji/ryhmä/sijaintiotsikko = kaikki sen alle kuuluvat
   function rowTasks(r) {
     const out = [], add = l => { if (l) tasks(l).forEach(k => out.push({ l: l, k: k })); };
-    if (r.gk) { lines.filter(l => l.grp === r.grp).forEach(add); return out; }
+    if (r.gk) { gKidsOf(lines, r.grp).forEach(add); return out; }
     if (r.nh) {
       const i0 = LT.findIndex(n => n.id === r.nid); if (i0 < 0) return out;
       const j0 = ltEnd(i0), set = new Set(), leafIds = new Set(LOCS.map(x => x.id)); for (let q = i0; q < j0; q++) if (leafIds.has(LT[q].id)) set.add(LT[q].id);
@@ -1389,7 +1402,7 @@ function qlMatch(name, leaves) {
   function blRow(r) {
     if (!curBl()) return null;
     if (r.nh) { const sp = rowTasks(r).map(q => blTask(q.l.id, q.k.locId)).filter(Boolean); return sp.length ? { s: Math.min.apply(null, sp.map(x => x.s)), e: Math.max.apply(null, sp.map(x => x.e)) } : null; }
-    if (r.gk) { const sp = lines.filter(l => l.grp === r.grp).map(l => blSpan(l.id)).filter(Boolean); return sp.length ? { s: Math.min.apply(null, sp.map(x => x.s)), e: Math.max.apply(null, sp.map(x => x.e)) } : null; }
+    if (r.gk) { const sp = gKidsOf(lines, r.grp).map(l => blSpan(l.id)).filter(Boolean); return sp.length ? { s: Math.min.apply(null, sp.map(x => x.s)), e: Math.max.apply(null, sp.map(x => x.e)) } : null; }
     if (r.line == null) return null;
     return (r.g || r.flat) ? blSpan(r.line) : blTask(r.line, r.locId);
   }
@@ -1406,18 +1419,18 @@ function qlMatch(name, leaves) {
   // kontin (null = ylätaso, muuten ryhmän id) kohteet järjestyksessä: { k: 'l' | 'g', id, o: kohde }
   function itemsOf(cont) {
     const it = [];
-    if (cont == null) { lines.forEach(l => { if (!grpOf(l)) it.push({ k: 'l', id: l.id, o: l }); }); groups.forEach(g => it.push({ k: 'g', id: g.id, o: g })); }
-    else lines.forEach(l => { if (l.grp === cont) it.push({ k: 'l', id: l.id, o: l }); });
+    if (cont == null) { lines.forEach(l => { if (!grpOf(l)) it.push({ k: 'l', id: l.id, o: l }); }); groups.forEach(g => { if (!g.parent || !gById(g.parent)) it.push({ k: 'g', id: g.id, o: g }); }); }
+    else { lines.forEach(l => { if (l.grp === cont) it.push({ k: 'l', id: l.id, o: l }); }); groups.forEach(g => { if (g.parent === cont) it.push({ k: 'g', id: g.id, o: g }); }); }
     return it.sort((a, b) => ((a.o.ord || 0) - (b.o.ord || 0)) || (a.k === b.k ? (a.k === 'l' ? a.id - b.id : 0) : (a.k === 'g' ? -1 : 1)));
   }
   const renumCont = cont => itemsOf(cont).forEach((x, i) => { x.o.ord = (i + 1) * 10; });
   // siirtää kohteen (viiva tai ryhmä) kontin cont paikkaan: tgt = { kind: 'before'|'into', grp, before: {k,id}|null }
   function moveItem(kind, id, tgt) {
     const it = kind === 'group' ? groups.find(g => g.id === id) : byId(id); if (!it) return false;
-    if (kind === 'group' && tgt.grp) return false;
+    if (kind === 'group' && tgt.grp && (gIsAnc(id, tgt.grp) || gDepth(tgt.grp) + gHeight(id) > MAX_GD)) return false; // ei omaan alaryhmään eikä yli syvyysrajan
     if (tgt.before && tgt.before.k === (kind === 'group' ? 'g' : 'l') && String(tgt.before.id) === String(id)) return false;
     const before = snapshot(), cont = tgt.grp || null;
-    if (kind === 'line') { if (cont) it.grp = cont; else delete it.grp; }
+    if (kind === 'line') { if (cont) it.grp = cont; else delete it.grp; } else { if (cont) it.parent = cont; else delete it.parent; }
     const items = itemsOf(cont).filter(x => x.o !== it); let at = items.length;
     if (tgt.kind !== 'into' && tgt.before) { const ix = items.findIndex(x => x.k === tgt.before.k && String(x.id) === String(tgt.before.id)); if (ix >= 0) at = ix; }
     items.splice(at, 0, { k: kind === 'group' ? 'g' : 'l', id: id, o: it });
@@ -1442,7 +1455,7 @@ function qlMatch(name, leaves) {
     if (key === 'extra') { const h = !l ? null : (isGrp || r.flat) ? extraH(l) : k ? extraH(l, k) : null; return h == null ? '' : h > 0.05 ? Math.round(h) + ' h' : '–'; }
     return '';
   }
-  function gEditable(r, key) { if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && lines.some(l => l.grp === r.grp); if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (!isGrp && r.locId == null) return false; if (key === 'agreed') return isGrp || !!r.flat; if (key === 'extra') return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
+  function gEditable(r, key) { if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && gKidsOf(lines, r.grp).length > 0; if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (!isGrp && r.locId == null) return false; if (key === 'agreed') return isGrp || !!r.flat; if (key === 'extra') return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
   function parseDay(txt, refIdx) { // "4.1.", "4.1.2027" tai "2027-01-04" → iso
     const s = String(txt).trim(); let y, mo, d, m;
     if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
@@ -1458,7 +1471,7 @@ function qlMatch(name, leaves) {
     return l.flat ? Object.assign(base, { g: false, flat: true, locId: ts[0] && ts[0].locId }) : Object.assign(base, { g: true, lineRow: true });
   }
   function gApplyGrp(r, key, txt) { // ylätehtävän (yhteenvetorivin) kesto, alku tai loppu: jäsenviivat venytetään tai siirretään suhteessa
-    const ms = lines.filter(l => l.grp === r.grp); if (!ms.length) return false;
+    const ms = gKidsOf(lines, r.grp); if (!ms.length) return false;
     const gS = ms.reduce((m, l) => Math.min(m, l.start), Infinity), gE = ms.reduce((m, l) => Math.max(m, lineEnd(l)), 0), W0 = gE - gS; if (!(W0 > 0)) return false;
     const snap0 = snapshot();
     if (key === 'start') {
@@ -1527,21 +1540,21 @@ function qlMatch(name, leaves) {
       rows.push({ g: false, label: x.name || (gAnc(x.locId).leaf || LOCS[x.loc].name), s: x.s, e: x.e, crew: x.crew, max: mx, col: l.trade, line: l.id, locId: x.locId, lvl: base + A.length, pg: pg, pct: actOf(l, x).pct, act: actOf(l, x) });
     });
   }
-  function pushGroupRows(rows, g) {
-    const kids = itemsOf(g.id).map(x => x.o), key = 'K' + g.id, closed = !!gClosed[key];
+  function pushGroupRows(rows, g, lvl, pg) {
+    const kids = gKidsOf(lines, g.id), key = 'K' + g.id, closed = !!gClosed[key];
     const all = [], items = []; kids.forEach(l => tasks(l).forEach(x => { if (locHid.size && !l.flat && locHid.has(x.locId)) return; all.push(x); items.push({ l: l, k: x }); }));
-    const row = { g: true, gk: true, grp: g.id, key: key, closed: closed, label: g.name, col: null, line: null, lvl: 0, pg: null, empty: !all.length, s: 0, e: 0, crew: 0, max: null, pct: pctOfTasks(items) };
+    const row = { g: true, gk: true, grp: g.id, key: key, closed: closed, label: g.name, col: null, line: null, lvl: lvl, pg: pg, empty: !all.length, s: 0, e: 0, crew: 0, max: null, pct: pctOfTasks(items) };
     if (all.length) {
       row.s = Math.min.apply(null, all.map(x => x.s)); row.e = Math.max.apply(null, all.map(x => x.e));
       all.forEach(a => { const c = all.reduce((m, b) => m + (b.s <= a.s + 1e-9 && b.e > a.s + 1e-9 ? b.crew : 0), 0); if (c > row.crew) row.crew = c; });
     }
     rows.push(row);
-    if (!closed) kids.forEach(l => pushLineRows(rows, l, 1, g.id));
+    if (!closed) itemsOf(g.id).forEach(x => { if (x.k === 'g') pushGroupRows(rows, x.o, lvl + 1, g.id); else pushLineRows(rows, x.o, lvl + 1, g.id); });
   }
   function buildGanttRows() {
     const rows = [];
     if (gGroup === 'trade') {
-      ensureOrd(); itemsOf(null).forEach(x => { if (x.k === 'g') pushGroupRows(rows, x.o); else pushLineRows(rows, x.o, 0, null); });
+      ensureOrd(); itemsOf(null).forEach(x => { if (x.k === 'g') pushGroupRows(rows, x.o, 0, null); else pushLineRows(rows, x.o, 0, null); });
     } else {
       const by = LOCS.map(() => []);
       lines.filter(l => !l.flat).forEach(l => tasks(l).forEach(x => { if (!locHid.has(x.locId)) by[x.loc].push({ l: l, x: x }); }));
@@ -1570,7 +1583,7 @@ function qlMatch(name, leaves) {
         if (!closed) fts.forEach(q => rows.push({ g: false, flat: true, label: trade(q.l.trade).name, s: q.x.s, e: q.x.e, crew: q.x.crew, max: trade(q.l.trade).maxCrew, col: q.l.trade, line: q.l.id, locId: q.x.locId }));
       }
     }
-    if (gGroup === 'trade' && (gEntry || !lines.length)) rows.push({ g: false, entry: true, empty: true, label: 'Uusi tehtävä…', s: 0, e: 0, crew: 0, line: null, lvl: gEntryGrp && groups.some(x => x.id === gEntryGrp) ? 1 : 0, pg: null });
+    if (gGroup === 'trade' && (gEntry || !lines.length)) rows.push({ g: false, entry: true, empty: true, label: 'Uusi tehtävä…', s: 0, e: 0, crew: 0, line: null, lvl: gEntryGrp && groups.some(x => x.id === gEntryGrp) ? gDepth(gEntryGrp) : 0, pg: null });
     return rows;
   }
   function renderGantt() {
@@ -1795,7 +1808,7 @@ function qlMatch(name, leaves) {
   function addFlatTask(gid, o) {
     o = o || {}; if (!o.noUndo) pushUndo(snapshot()); ensureOrd(); if (o.end) { gEntry = true; selId = null; selGrp = null; selLoc = null; }
     const t = newTrade(); t.name = o.name || 'Uusi tehtävä'; t.flat = true;
-    const sel = byId(selId), g = gid ? groups.find(x => x.id === gid) : null, kids = g ? itemsOf(g.id).map(x => x.o) : [];
+    const sel = byId(selId), g = gid ? groups.find(x => x.id === gid) : null, kids = g ? gKidsOf(lines, g.id) : [];
     { const st = sel && trade(sel.trade); if (st && st.col) t.col = st.col; } // uusi tehtävä saa valitun tehtävän värin
     const st0 = sel ? sel.start : (kids.length ? Math.min.apply(null, kids.map(k => k.start)) : 0);
     const l = { id: nextId++, trade: t.id, from: null, to: null, start: st0, dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: maxOrd() + 10 };
@@ -1962,7 +1975,7 @@ function qlMatch(name, leaves) {
     pushUndo(snapshot()); ensureOrd();
     const sel = byId(selId), g = { id: uid('K'), name: 'Uusi ylätehtävä', ord: maxOrd() + 10 };
     groups.push(g);
-    { const anc = sel ? (grpOf(sel) ? { k: 'g', id: grpOf(sel).id } : { k: 'l', id: sel.id }) : (selGrp ? { k: 'g', id: selGrp } : null);
+    { const anc = sel ? (grpOf(sel) ? { k: 'g', id: gChain(grpOf(sel).id)[0].id } : { k: 'l', id: sel.id }) : (selGrp && gById(selGrp) ? { k: 'g', id: gChain(selGrp)[0].id } : null);
       if (anc) { const items = itemsOf(null).filter(x => x.o !== g), ix = items.findIndex(x => x.k === anc.k && String(x.id) === String(anc.id)); items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'g', id: g.id, o: g }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; }); } } selGrp = g.id; selId = null; selDep = null; gClosed['K' + g.id] = false; delete gClosed['K' + g.id]; render();
     gScroll.scrollTop = Math.max(0, gRows.findIndex(r => r.grp === g.id) * ROWH[gRowK] - 60);
   });
@@ -1976,35 +1989,49 @@ function qlMatch(name, leaves) {
     gOpenFresh();
   }
   // hierarkia: sisennys (Tab) liittää tehtävän yläpuolisen ylätehtävän alle; yläpuolinen vapaa tehtävä muuttuu ylätehtäväksi; Shift+Tab nostaa ulos
-  function gIndent(lid) {
-    const l = byId(lid); if (!l) return null;
-    if (l.grp) { toast('Tehtävä on jo ylätehtävän alla. Toinen ylätehtävätaso tulee myöhemmin.'); return null; }
-    const items = itemsOf(null), ix = items.findIndex(x => x.k === 'l' && x.id === l.id);
+  function gIndent(lid, kind) { // kind: 'line' (oletus) tai 'group'
+    const isG = kind === 'group', it = isG ? gById(lid) : byId(lid); if (!it) return null;
+    const cont = (isG ? it.parent : it.grp) || null, items = itemsOf(cont), ix = items.findIndex(x => x.k === (isG ? 'g' : 'l') && String(x.id) === String(lid));
     if (ix <= 0) { toast('Sisennettävän rivin yläpuolella pitää olla tehtävä tai ylätehtävä.'); return null; }
-    const prev = items[ix - 1];
-    if (prev.k === 'g') { pushUndo(snapshot()); ensureOrd(); l.grp = prev.id; l.ord = 1e9; renumCont(prev.id); renumCont(null); return prev.id; }
-    const P = prev.o; if (!P.flat) { toast('Edellinen rivi on sijaintipohjainen tehtävä, josta ei voi tehdä ylätehtävää. Luo ylätehtävä oikean klikkauksen valikosta.'); return null; }
-    pushUndo(snapshot()); ensureOrd();
-    const G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord, auto: true, ps: P.start }; groups.push(G); gClosed['K' + G.id] = false;
-    deps.forEach(d => { if (!isGref(d.a) && d.a.l === P.id) d.a = { g: G.id }; if (!isGref(d.b) && d.b.l === P.id) d.b = { g: G.id }; });
-    lines = lines.filter(x => x !== P); if (!lines.some(x => x.trade === P.trade)) TRADES = TRADES.filter(x => x.id !== P.trade);
-    l.grp = G.id; l.ord = 10; deps = deps.filter(d => !(isGref(d.a) && isGref(d.b) && d.a.g === d.b.g) && !(isGref(d.a) && d.a.g === G.id && !isGref(d.b) && d.b.l === l.id) && !(isGref(d.b) && d.b.g === G.id && !isGref(d.a) && d.a.l === l.id));
-    renumCont(G.id); renumCont(null); return G.id;
+    const prev = items[ix - 1], h = isG ? gHeight(it.id) : 0;
+    const inItem = ref => isGref(ref) ? gIsAnc(it.id, ref.g) : (isG ? (() => { const q = byId(ref.l); return !!(q && q.grp && gIsAnc(it.id, q.grp)); })() : String(ref.l) === String(it.id));
+    const tooDeep = '— ylätehtäviä voi olla enintään ' + MAX_GD + ' tasoa sisäkkäin.';
+    let target, G = null;
+    if (prev.k === 'g') {
+      if (gDepth(prev.id) + h > MAX_GD) { toast('Ei voi sisentää ' + tooDeep); return null; }
+      target = prev.id;
+    } else {
+      const P = prev.o; if (!P.flat) { toast('Edellinen rivi on sijaintipohjainen tehtävä, josta ei voi tehdä ylätehtävää. Luo ylätehtävä oikean klikkauksen valikosta.'); return null; }
+      if ((cont ? gDepth(cont) : 0) + 1 + h > MAX_GD) { toast('Ei voi sisentää ' + tooDeep); return null; }
+      pushUndo(snapshot()); ensureOrd();
+      G = { id: uid('K'), name: (trade(P.trade) || {}).name || 'Ylätehtävä', ord: P.ord, auto: true, ps: P.start }; if (cont) G.parent = cont; groups.push(G); gClosed['K' + G.id] = false;
+      deps.forEach(d => { if (!isGref(d.a) && d.a.l === P.id) d.a = { g: G.id }; if (!isGref(d.b) && d.b.l === P.id) d.b = { g: G.id }; });
+      lines = lines.filter(x => x !== P); if (!lines.some(x => x.trade === P.trade)) TRADES = TRADES.filter(x => x.id !== P.trade);
+      target = G.id;
+    }
+    if (!G) { pushUndo(snapshot()); ensureOrd(); }
+    if (isG) it.parent = target; else it.grp = target; it.ord = G ? 10 : 1e9;
+    const anc = gChain(target).map(g => g.id); // ylätehtävän ja sen jäsenen välinen riippuvuus ei ole mielekäs
+    deps = deps.filter(d => !(isGref(d.a) && isGref(d.b) && d.a.g === d.b.g) && !(isGref(d.a) && anc.indexOf(d.a.g) >= 0 && inItem(d.b)) && !(isGref(d.b) && anc.indexOf(d.b.g) >= 0 && inItem(d.a)));
+    renumCont(target); renumCont(cont); return target;
   }
   function gRevertGroup(g, start) { // sisennyksellä syntynyt ylätehtävä ilman alatehtäviä muuttuu takaisin tavalliseksi tehtäväksi
     const t = newTrade(); t.name = g.name; t.flat = true;
-    const n = { id: nextId++, trade: t.id, from: null, to: null, start: g.ps != null ? g.ps : (start || 0), dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: g.ord }; fit(n); lines.push(n);
+    const n = { id: nextId++, trade: t.id, from: null, to: null, start: g.ps != null ? g.ps : (start || 0), dur: 5, gap: 0, qty: t.qty, prod: t.prod, ov: {}, flat: true, ord: g.ord }; if (g.parent && gById(g.parent)) n.grp = g.parent; fit(n); lines.push(n);
     deps.forEach(d => { if (isGref(d.a) && d.a.g === g.id) d.a = { l: n.id }; if (isGref(d.b) && d.b.g === g.id) d.b = { l: n.id }; });
     groups = groups.filter(x => x !== g); delete gClosed['K' + g.id]; if (selGrp === g.id) { selGrp = null; selId = n.id; } return n;
   }
   function gNormGroups() { // tyhjä sisennyksellä syntynyt ylätehtävä palaa tehtäväksi kaikissa tilanteissa (poisto, vetäminen, ulosnosto)
-    let ch = false; groups.slice().forEach(g => { if (g.auto && !lines.some(l => l.grp === g.id)) { gRevertGroup(g, 0); ch = true; } }); return ch;
+    let ch = false; groups.slice().forEach(g => { if (g.auto && groups.includes(g) && !lines.some(l => l.grp === g.id) && !groups.some(x => x.parent === g.id)) { gRevertGroup(g, 0); ch = true; } }); return ch;
   }
-  function gOutdent(lid) {
-    const l = byId(lid); if (!l || !l.grp) return false; const g = groups.find(x => x.id === l.grp);
-    pushUndo(snapshot()); ensureOrd(); delete l.grp; l.ord = g ? g.ord + 0.5 : maxOrd() + 10;
-    if (g && g.auto && !itemsOf(g.id).length) gRevertGroup(g, l.start);
-    renumCont(null); if (g && groups.includes(g)) renumCont(g.id); return true;
+  function gOutdent(lid, kind) {
+    const isG = kind === 'group', it = isG ? gById(lid) : byId(lid); if (!it) return false;
+    const gid = isG ? it.parent : it.grp; if (!gid) return false; const g = gById(gid), up = g && g.parent && gById(g.parent) ? g.parent : null;
+    pushUndo(snapshot()); ensureOrd();
+    if (isG) { if (up) it.parent = up; else delete it.parent; } else { if (up) it.grp = up; else delete it.grp; }
+    it.ord = g ? g.ord + 0.5 : maxOrd() + 10;
+    if (g && g.auto && !itemsOf(g.id).length) gRevertGroup(g, it.start || 0);
+    renumCont(up); if (g && groups.includes(g)) renumCont(g.id); return true;
   }
   // tyhjässä projektissa Gantin syöttörivin nimikenttä avautuu itsestään: kirjoita nimi, Enter luo tehtävän ja avaa seuraavan
   function gAutoEntry() {
@@ -2032,6 +2059,10 @@ function qlMatch(name, leaves) {
       if (done) return; done = true; const v = inp.value.trim(); inp.remove();
       if (o.fresh && (!ok || (!v && !blur))) { gDropFresh(o.lid); render(); return; } // Esc tai tyhjä Enter poistaa tyhjän uuden rivin; painikkeen/muun klikkaus jättää sen oletusnimellä
       if (ok && v !== cur) { pushUndo(snapshot()); apply(v.slice(0, maxl)); render(); }
+      if (ind && r.gk) { // ylätehtävärivi: Tab sisentää ylätehtävän edellisen ylätehtävän/tehtävän alle, Shift+Tab nostaa ulos
+        if (ind === 'in') gIndent(r.grp, 'group'); else gOutdent(r.grp, 'group');
+        render(); const nj = gRows.findIndex(x => x.gk && x.grp === r.grp); if (nj >= 0) { drawGanttBody(); gEditName(nj, 60); } return;
+      }
       if (ind && !r.gk && !r.nh) { // Tab = sisennä, Shift+Tab = nosta ulos
         const lid = r.entry ? (v ? selId : null) : r.line;
         if (ind === 'in') { if (lid != null) { const gid = gIndent(lid); if (r.entry && gid) gEntryGrp = gid; } }
@@ -2104,9 +2135,10 @@ function qlMatch(name, leaves) {
     const rh = gGeo ? gGeo.rowH : 26, c = [];
     gRows.forEach((r, i) => {
       if (r.nh || !(r.g || r.flat)) return;
-      if (dg.kind === 'group' && r.pg) return;
+      const gOk = q => !(dg.kind === 'group' && q && (gIsAnc(dg.id, q) || gDepth(q) + gHeight(dg.id) > MAX_GD)); // ryhmää ei voi viedä omaan alaryhmäänsä eikä yli syvyysrajan
+      if (!gOk(r.pg)) return;
       c.push({ y: i * rh, kind: 'before', row: i, grp: r.pg || null, before: r.gk ? { k: 'g', id: r.grp } : { k: 'l', id: r.line } });
-      if (r.gk && dg.kind !== 'group') c.push({ y: i * rh + rh / 2, kind: 'into', row: i, grp: r.grp, before: null });
+      if (r.gk && gOk(r.grp)) c.push({ y: i * rh + rh / 2, kind: 'into', row: i, grp: r.grp, before: null });
     });
     c.push({ y: gRows.length * rh, kind: 'before', row: gRows.length, grp: null, before: null });
     let best = c[0]; c.forEach(q => { if (Math.abs(q.y - y) < Math.abs(best.y - y)) best = q; });
@@ -2160,7 +2192,7 @@ function qlMatch(name, leaves) {
       if (row && gGeo) { const P = gPt(e); if (P.x >= gGeo.LEFT) { drag = { type: 'gpan', x0: e.clientX, off0: gOff, gi: +row.dataset.gi, moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); return; } }
     }
     if (grole === 'ggmove' && !ctrl) {
-      const rr = gRows[+gel.dataset.gi], kids = rr ? itemsOf(rr.grp).map(x => x.id) : [];
+      const rr = gRows[+gel.dataset.gi], kids = rr ? gKidsOf(lines, rr.grp).map(x => x.id) : [];
       if (rr && kids.length) { gEnsureRoom(); selGrp = rr.grp; selId = null; selDep = null; drag = { type: 'ggmove', id: rr.grp, kids: kids, x0: e.clientX, snap: snapshot(), base: JSON.parse(JSON.stringify(lines)) }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
     }
     if (grole === 'glmove' && !ctrl) {
@@ -2350,7 +2382,7 @@ function qlMatch(name, leaves) {
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
     ctx.innerHTML = l ? '<div class="ctx-h">' + esc(t.name) + '</div>' +
       '<button type="button" role="menuitem" data-cx="open" data-id="' + l.id + '"' + (u ? '' : ' disabled') + '>Avaa malli</button>' +
-      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (tehtävät säilyvät)</button>' : '') + gt;
+      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpin" data-id="' + esc(opts.grp) + '">Sisennä ylätehtävän alle (Tab)</button>' + (gById(opts.grp) && gById(opts.grp).parent ? '<button type="button" role="menuitem" data-cx="grpout" data-id="' + esc(opts.grp) + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (sisältö säilyy)</button>' : '') + gt;
     ctx.hidden = false;
     const w = ctx.offsetWidth, h = ctx.offsetHeight;
     ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
@@ -2388,7 +2420,7 @@ function qlMatch(name, leaves) {
     if (l) selGrp = null;
     const gp = !l && selGrp ? groups.find(x => x.id === selGrp) : null;
     if (gp) {
-      const kids = itemsOf(gp.id).map(x => x.o), all = []; kids.forEach(k => tasks(k).forEach(x => all.push(x)));
+      const kids = gKidsOf(lines, gp.id), all = []; kids.forEach(k => tasks(k).forEach(x => all.push(x)));
       const s0 = all.length ? Math.min.apply(null, all.map(x => x.s)) : 0, e0 = all.length ? Math.max.apply(null, all.map(x => x.e)) : 0;
       panel.innerHTML = '<div class="ph"><h2>' + esc(gp.name) + '</h2></div>' +
         '<p class="meta">Ylätehtävä · ' + kids.length + ' tehtävää' + (all.length ? '<br>' + fmt(s0) + ' – ' + fmtE(e0) + ' (vk ' + weekOf(s0) + '–' + weekOf(e0 - 1) + ')' : '') + '</p>' +
@@ -2549,7 +2581,7 @@ function qlMatch(name, leaves) {
   function fcRow(r) {
     if (!FC) return null;
     const span = arr => arr.length ? { s: Math.min.apply(null, arr.map(x => x.s)), e: Math.max.apply(null, arr.map(x => x.e)) } : null;
-    if (r.gk) { const a = []; lines.filter(l => l.grp === r.grp).forEach(l => (FC.get(l.id) || []).forEach(x => a.push(x))); return span(a); }
+    if (r.gk) { const a = []; gKidsOf(lines, r.grp).forEach(l => (FC.get(l.id) || []).forEach(x => a.push(x))); return span(a); }
     if (r.line == null) return null; const a = FC.get(r.line); if (!a || !a.length) return null;
     if (r.g || r.flat) return span(a);
     const q = a.find(x => x.locId === r.locId); return q ? { s: q.s, e: q.e } : null;
@@ -2596,7 +2628,7 @@ function qlMatch(name, leaves) {
       sel += '<div class="lab2" style="margin:0 0 2px">Toteuma: ' + esc(t.name) + ' · ' + Math.round(pctOfTasks(ts.map(k => ({ l: l, k: k })))) + ' %</div>';
       ts.forEach(k => { sel += '<div class="task"><div class="tmeta" style="margin-bottom:4px">' + (l.flat ? 'Suunniteltu ' : esc(LOCS[k.loc].name) + ' · suunniteltu ') + fmt(k.s) + '–' + fmtE(k.e) + '</div>' + actBlock(l, k) + '</div>'; });
     } else if (gp) {
-      const kids = itemsOf(gp.id).map(x => x.o);
+      const kids = gKidsOf(lines, gp.id);
       sel += '<div class="lab2" style="margin:0 0 2px">Ylätehtävä: ' + esc(gp.name) + '</div>' + (kids.length ? kids.map(k => '<div class="tmeta">' + esc(trade(k.trade).name) + ' · ' + Math.round(pctOfTasks(tasks(k).map(x => ({ l: k, k: x })))) + ' %</div>').join('') : '') + '<p class="ok" style="margin:6px 0 0">Valitse viiva tai tehtävä syöttääksesi toteuman.</p>';
     } else h += '<p class="ok hlp" style="margin:6px 0 0">Valitse viiva tai tehtävä syöttääksesi sen toteuman (valmiusaste, alkoi, päättyi).</p>';
     const selKey = String(selId) + '|' + (selLoc ? selLoc.loc : '') + '|' + selGrp + '|' + (sn ? sn.nid : ''), keepTop = stCard.dataset.sel !== selKey; stCard.dataset.sel = selKey;
@@ -2973,12 +3005,13 @@ function qlMatch(name, leaves) {
       pushUndo(snapshot()); t.col = ds.col;
       render(); return;
     }
+    if (a === 'grpin' || a === 'grpout') { if (a === 'grpin') gIndent(id, 'group'); else gOutdent(id, 'group'); render(); return; }
     if (a.indexOf('grp') === 0) {
       const g = groups.find(x => x.id === id); if (!g) return;
       if (a === 'grpaddtask') { addFlatTask(g.id); return; }
       pushUndo(snapshot()); ensureOrd();
-      if (a === 'grpdel') { itemsOf(g.id).forEach((x, i) => { delete x.o.grp; x.o.ord = g.ord + (i + 1) * 0.01; }); groups = groups.filter(x => x !== g); deps = deps.filter(d => !(isGref(d.a) && d.a.g === g.id) && !(isGref(d.b) && d.b.g === g.id)); renumCont(null); selGrp = null; selDep = null; }
-      else if (a === 'grpshift+' || a === 'grpshift-') { const kids = itemsOf(g.id).map(x => x.o), dl = a === 'grpshift+' ? 5 : -5; let lo = -Infinity, hi = Infinity; kids.forEach(k => { lo = Math.max(lo, -k.start); hi = Math.min(hi, N_DAYS - lineEnd(k)); }); const d = clamp(dl, lo, Math.max(lo, hi)); kids.forEach(k => { k.start += d; fit(k); }); }
+      if (a === 'grpdel') { const up = g.parent && gById(g.parent) ? g.parent : null; itemsOf(g.id).forEach((x, i) => { const k = x.k === 'g' ? 'parent' : 'grp'; if (up) x.o[k] = up; else delete x.o[k]; x.o.ord = g.ord + (i + 1) * 0.01; }); groups = groups.filter(x => x !== g); deps = deps.filter(d => !(isGref(d.a) && d.a.g === g.id) && !(isGref(d.b) && d.b.g === g.id)); renumCont(up); selGrp = null; selDep = null; }
+      else if (a === 'grpshift+' || a === 'grpshift-') { const kids = gKidsOf(lines, g.id), dl = a === 'grpshift+' ? 5 : -5; let lo = -Infinity, hi = Infinity; kids.forEach(k => { lo = Math.max(lo, -k.start); hi = Math.min(hi, N_DAYS - lineEnd(k)); }); const d = clamp(dl, lo, Math.max(lo, hi)); kids.forEach(k => { k.start += d; fit(k); }); }
       render(); return;
     }
     const l = byId(id); if (!l) return;
@@ -3108,7 +3141,7 @@ function qlMatch(name, leaves) {
     if (selDep != null && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('depdel', selDep); selId = null; selGrp = null; render(); return; }
     if (e.key === 'Enter' && view === 'gantt' && (selId != null || selGrp) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && !document.querySelector('body > input.gedit')) { e.preventDefault(); const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); gOpenFresh(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && byId(selId)) { e.preventDefault(); if (e.shiftKey) gOutdent(selId); else gIndent(selId); render(); return; }
-    if (e.key === 'Tab' && view === 'gantt' && selGrp && selId == null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); toast('Ylätehtävä on jo ylimmällä tasolla. Alempia tasoja ei vielä ole.'); return; }
+    if (e.key === 'Tab' && view === 'gantt' && selGrp && selId == null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); if (e.shiftKey) gOutdent(selGrp, 'group'); else gIndent(selGrp, 'group'); render(); return; }
     if (selGrp && selId == null && (e.key === 'Delete' || e.key === 'Backspace') && groups.some(x => x.id === selGrp)) { e.preventDefault(); act('grpdel', selGrp); return; } // ylätehtävän poisto: tehtävät säilyvät
     const l = byId(selId); if (!l) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); act('del', l.id); }
@@ -3219,7 +3252,7 @@ function qlMatch(name, leaves) {
     setCal(st.cal); setWeeks(st.weeks || 26);
     LT = ltFrom(st); syncLocs(); TRADES = st.trades;
     lines = st.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
-    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
+    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
     nextId = Math.max(parseInt(st.nextId, 10) || 1, maxNum(lines) + 1);
     nextDepId = Math.max(parseInt(st.nextDepId, 10) || 1, maxNum(deps) + 1);
     _uid = Math.max(_uid, maxNum(LOCS), maxNum(LT), maxNum(TRADES), maxNum(groups), maxNum(baselines));
@@ -3233,7 +3266,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '172';
+  const APP_BUILD = '173';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
