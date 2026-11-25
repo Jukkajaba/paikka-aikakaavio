@@ -96,6 +96,10 @@ h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
 #ctxMenu { position: fixed; z-index: 1000; min-width: 190px; background: var(--panel); color: var(--ink); border: 1px solid var(--grid2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.22); padding: 4px; font-size: 13px; }
 #ctxMenu[hidden], #toast[hidden] { display: none; }
 #ctxMenu .ctx-h { padding: 4px 8px 6px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--grid); margin-bottom: 4px; }
+#ctxMenu .ctx-sub { position: relative; }
+#ctxMenu .ctx-subm { display: none; position: absolute; left: 100%; top: -5px; min-width: 210px; background: var(--panel); border: 1px solid var(--grid2); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.22); padding: 4px; }
+#ctxMenu .ctx-sub:hover > .ctx-subm, #ctxMenu .ctx-sub.open > .ctx-subm { display: block; }
+#ctxMenu.flip .ctx-subm { left: auto; right: 100%; }
 #ctxMenu .ctx-n { padding: 2px 8px 4px; color: var(--muted); font-size: 12px; }
 #ctxMenu button { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 5px; padding: 6px 8px; font: inherit; color: inherit; cursor: pointer; }
 #ctxMenu button:hover:not(:disabled), #ctxMenu button:focus-visible { background: var(--band); outline: none; }
@@ -2386,18 +2390,18 @@ function qlMatch(name, leaves) {
   function openCtx(x, y, lid, opts) {
     const l = lid == null ? null : byId(lid), t = l && trade(l.trade); if (lid != null && (!l || !t)) return;
     let u = null; if (l) { selId = l.id; selGrp = null; selDep = null; render(); u = mdlUrl(l); }
-    const tk = '<button type="button" role="menuitem" data-cx="taskadd" data-id="">Uusi tehtävä valitun alle (Enter)</button><button type="button" role="menuitem" data-cx="tasksub" data-id="">Uusi alatehtävä</button>';
+    const tk = '<div class="ctx-sub"><button type="button" role="menuitem" aria-haspopup="true" data-cx="addtoggle" data-id="">Lisää <span style="float:right">▸</span></button><div class="ctx-subm"><button type="button" role="menuitem" data-cx="taskadd" data-id="">Uusi tehtävä valitun alle (Enter)</button><button type="button" role="menuitem" data-cx="tasksub" data-id="">Uusi alatehtävä</button><button type="button" role="menuitem" data-cx="grpnew" data-id="">Uusi ylätehtävä</button></div></div>';
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
     ctx.innerHTML = l ? '<div class="ctx-h">' + esc(t.name) + '</div>' +
       '<button type="button" role="menuitem" data-cx="open" data-id="' + l.id + '"' + (u ? '' : ' disabled') + '>Avaa malli</button>' +
-      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + tk + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + tk + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpin" data-id="' + esc(opts.grp) + '">Sisennä ylätehtävän alle (Tab)</button>' + (gById(opts.grp) && gById(opts.grp).parent ? '<button type="button" role="menuitem" data-cx="grpout" data-id="' + esc(opts.grp) + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (sisältö säilyy)</button>' : '') + gt;
+      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + tk + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + tk + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpin" data-id="' + esc(opts.grp) + '">Sisennä ylätehtävän alle (Tab)</button>' + (gById(opts.grp) && gById(opts.grp).parent ? '<button type="button" role="menuitem" data-cx="grpout" data-id="' + esc(opts.grp) + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (sisältö säilyy)</button>' : '') + gt;
     ctx.hidden = false;
     const w = ctx.offsetWidth, h = ctx.offsetHeight;
-    ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
+    ctx.classList.toggle('flip', x + w + 230 > window.innerWidth); ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
     const b = ctx.querySelector('button:not(:disabled)'); if (b) b.focus();
   }
   ctx.addEventListener('click', e => {
-    const b = e.target.closest('[data-cx]'); if (!b || b.disabled) return; const id = b.dataset.id, a = b.dataset.cx; closeCtx();
+    const b = e.target.closest('[data-cx]'); if (!b || b.disabled) return; const id = b.dataset.id, a = b.dataset.cx; if (a === 'addtoggle') { b.parentNode.classList.toggle('open'); return; } closeCtx();
     if (a === 'grpdel') act('grpdel', id, {});
     else if (a === 'grpnew') document.getElementById('gAddGrp').click();
     else if (a === 'taskadd') document.getElementById('gAddTask').click();
@@ -2411,7 +2415,7 @@ function qlMatch(name, leaves) {
   ctx.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closeCtx(); return; }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return; e.preventDefault();
-    const bs = [...ctx.querySelectorAll('button:not(:disabled)')], i = bs.indexOf(document.activeElement); if (!bs.length) return;
+    const bs = [...ctx.querySelectorAll('button:not(:disabled)')].filter(q => q.offsetParent), i = bs.indexOf(document.activeElement); if (!bs.length) return;
     bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
   });
   document.addEventListener('pointerdown', e => { if (!ctx.hidden && !ctx.contains(e.target)) closeCtx(); }, true);
@@ -3276,7 +3280,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '176';
+  const APP_BUILD = '177';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

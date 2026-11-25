@@ -25,7 +25,7 @@ const { chromium } = require('playwright');
   await p.locator('#gantt [data-gi="' + gi + '"]').first().click({ position: { x: 60, y: 10 }, force: true, button: 'right' }); await p.waitForTimeout(300);
   const items = await p.evaluate(() => [...document.querySelectorAll('[data-cx]')].map(x => x.dataset.cx).join());
   ok(/taskadd/.test(items) && /tasksub/.test(items) && /grpnew/.test(items), 'valikon kohdat: ' + items);
-  await p.click('[data-cx=taskadd]'); await p.waitForTimeout(300); await p.keyboard.type('Uusi'); await p.keyboard.press('Enter'); await p.waitForTimeout(250); await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  await p.hover('.ctx-sub > button'); await p.click('[data-cx=taskadd]'); await p.waitForTimeout(300); await p.keyboard.type('Uusi'); await p.keyboard.press('Enter'); await p.waitForTimeout(250); await p.keyboard.press('Escape'); await p.waitForTimeout(250);
   r = await rows(); ok(/Pinnat:0,Uusi:0$/.test(r), 'valikosta uusi tehtävä: ' + r);
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
