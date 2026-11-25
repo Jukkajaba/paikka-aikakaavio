@@ -1976,7 +1976,12 @@ function qlMatch(name, leaves) {
   }
   function gRemoveLoc(l, locId) { // poistaa yhden sijainnin tehtävältä (muut sijainnit ja tehtävä säilyvät)
     const ids = tasks(l).map(t => t.locId); if (ids.indexOf(locId) < 0) return false;
-    if (ids.length < 2) { toast('Tehtävällä pitää olla vähintään yksi sijainti. Poista koko tehtävä valitsemalla tehtävän ylärivi ja painamalla Delete.'); return false; }
+    if (ids.length < 2) { // viimeinen sijainti: tehtävästä tulee tehtävä ilman sijaintia (alku ja kesto säilyvät)
+      const k = tasks(l)[0]; if (!k) return false; pushUndo(snapshot());
+      l.flat = true; l.start = k.s; l.dur = Math.max(MIN_D, r1(k.d)); l.qty = k.qty; l.from = null; l.to = null; l.ov = {}; l.total = null; l.gap = 0; delete l.skip;
+      deps.forEach(d => { if (d.a.l === l.id) d.a = { l: l.id, loc: null }; if (d.b.l === l.id) d.b = { l: l.id, loc: null }; });
+      const tt = trade(l.trade); if (tt) tt.flat = true; fit(l); selLoc = null; selGrp = null; selDep = null; render(); toast('Tehtävästä tuli tehtävä ilman sijaintia. Kumoa (Ctrl+Z) palauttaa sijainnin.'); return true;
+    }
     pushUndo(snapshot()); const i0 = ids.indexOf(locId); l.total = null; if (l.ov) delete l.ov[locId]; setLocSel(l, new Set(ids.filter(x => x !== locId)));
     pruneDeps(); const nx = ids[i0 + 1] != null ? ids[i0 + 1] : ids[i0 - 1]; selLoc = { l: l.id, loc: nx }; selGrp = null; selDep = null; render(); return true;
   }
@@ -3287,7 +3292,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '178';
+  const APP_BUILD = '179';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
