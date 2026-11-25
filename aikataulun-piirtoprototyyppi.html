@@ -1736,7 +1736,7 @@ function qlMatch(name, leaves) {
     let set = msActive() ? msel.slice() : (gCurKey() ? [gCurKey()] : []);
     if (mode === 'toggle') { const i = set.indexOf(k); if (i >= 0) set.splice(i, 1); else set.push(k); msAnchor = k; }
     else {
-      const a = msAnchor || gCurKey() || k, ai = gRows.findIndex(q => gRowKey(q) === a), lo = Math.min(ai < 0 ? gi : ai, gi), hi = Math.max(ai < 0 ? gi : ai, gi);
+      const a = msAnchor || gCurKey() || k; msAnchor = a; const ai = gRows.findIndex(q => gRowKey(q) === a), lo = Math.min(ai < 0 ? gi : ai, gi), hi = Math.max(ai < 0 ? gi : ai, gi);
       set = []; for (let q = lo; q <= hi; q++) { const kk = gRowKey(gRows[q]); if (kk && set.indexOf(kk) < 0) set.push(kk); }
     }
     set.sort((x, y) => gRows.findIndex(q => gRowKey(q) === x) - gRows.findIndex(q => gRowKey(q) === y));
@@ -1755,6 +1755,17 @@ function qlMatch(name, leaves) {
     if (undoStack.length > n0 + 1) undoStack.splice(n0 + 1); // yksi kumoaminen koko toiminnolle
     if (okN) { const t = document.getElementById('toast'); if (t) t.hidden = true; }
     msAfter(); render();
+  }
+  function gMultiGroup() { // valituista tehtävistä (ja ylätehtävistä) uusi ylätehtävä ensimmäisen valitun paikalle
+    const it = msItems(); if (!it.length) return; const fo = it[0].kind === 'group' ? gById(it[0].id) : byId(it[0].id), cont = (it[0].kind === 'group' ? fo.parent : fo.grp) || null;
+    const h = Math.max.apply(null, it.map(x => (x.kind === 'group' ? gHeight(x.id) : 0)));
+    if ((cont ? gDepth(cont) : 0) + 1 + h > MAX_GD) { toast('Ylätehtäviä voi olla enintään ' + MAX_GD + ' tasoa sisäkkäin.'); return; }
+    pushUndo(snapshot()); ensureOrd();
+    const G = { id: uid('K'), name: 'Ylätehtävä', ord: fo.ord - 0.5 }; if (cont) G.parent = cont; groups.push(G); gClosed['K' + G.id] = false;
+    it.forEach((x, i) => { const o = x.kind === 'group' ? gById(x.id) : byId(x.id); if (x.kind === 'group') o.parent = G.id; else o.grp = G.id; o.ord = (i + 1) * 10; });
+    deps = deps.filter(d => !(isGref(d.a) && d.a.g === G.id) && !(isGref(d.b) && d.b.g === G.id));
+    renumCont(G.id); renumCont(cont); selGrp = G.id; selId = null; selLoc = null; msel = []; render();
+    const gi = gRows.findIndex(r => r.gk && r.grp === G.id); if (gi >= 0) gEditName(gi, 60);
   }
   function gMultiDelete() {
     const keys = msel.slice(); if (!keys.length) return; pushUndo(snapshot()); ensureOrd();
@@ -2226,7 +2237,14 @@ function qlMatch(name, leaves) {
     if (e.button !== 0) return;
     { const ae = document.activeElement; if (ae && ae !== document.body && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ae.tagName)) ae.blur(); } // painikkeen fokus pois, jotta Enter/Tab/Delete toimivat valitulla rivillä
     const ctrl = e.ctrlKey || e.metaKey, gel = e.target.closest('[data-gr]'), grole = gel ? gel.dataset.gr : null;
-    if (grole === 'gorder' && (e.shiftKey || ctrl) && view === 'gantt') { gMultiClick(+gel.dataset.gi, e.shiftKey ? 'range' : 'toggle'); e.preventDefault(); return; }
+    if (grole === 'gorder' && (e.shiftKey || ctrl) && view === 'gantt') {
+      const gi0 = +gel.dataset.gi; gMultiClick(gi0, e.shiftKey ? 'range' : 'toggle'); e.preventDefault();
+      if (e.shiftKey) { // Shift + vedä: maalaa rivit alueeksi
+        let lastGi = gi0, started = false; const mv = ev => { const gi = Math.floor(gPt(ev).y / (gGeo ? gGeo.rowH : 26)); if (gi !== lastGi && gi >= 0 && gi < gRows.length && gRowKey(gRows[gi])) { if (!started) { started = true; msAnchor = gRowKey(gRows[gi0]); } /* vedon alku on painettu rivi */ lastGi = gi; gMultiClick(gi, 'range'); } };
+        const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+      }
+      return;
+    }
     if (grole === 'gorder' && !ctrl) {
       const rr = gRows[+gel.dataset.gi], l0 = rr && rr.line != null ? byId(rr.line) : null;
       if (rr && rr.gk) { selGrp = rr.grp; selId = null; selDep = null; drag = { type: 'gorder', kind: 'group', id: rr.grp, px: gPt(e).x, row: +gel.dataset.gi, y0: e.clientY, cur: gPt(e), moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
@@ -2441,6 +2459,11 @@ function qlMatch(name, leaves) {
   const closeCtx = () => { ctx.hidden = true; };
   function openCtx(x, y, lid, opts) {
     const l = lid == null ? null : byId(lid), t = l && trade(l.trade); if (lid != null && (!l || !t)) return;
+    if (opts && opts.multi && msActive()) {
+      ctx.innerHTML = '<div class="ctx-h">' + msel.length + ' riviä valittuna</div><button type="button" role="menuitem" data-cx="mi" data-id="">Sisennä (Tab)</button><button type="button" role="menuitem" data-cx="mo" data-id="">Nosta ulos (Shift+Tab)</button><button type="button" role="menuitem" data-cx="mg" data-id="">Luo niistä ylätehtävä</button><button type="button" role="menuitem" data-cx="md" data-id="">Poista valitut (Delete)</button>';
+      ctx.hidden = false; const w0 = ctx.offsetWidth, h0 = ctx.offsetHeight; ctx.classList.remove('flip'); ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w0 - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h0 - 8)) + 'px';
+      const b0 = ctx.querySelector('button:not(:disabled)'); if (b0) b0.focus(); return;
+    }
     let u = null; if (l) { selId = l.id; selGrp = null; selDep = null; render(); u = mdlUrl(l); }
     const tk = '<div class="ctx-sub"><button type="button" role="menuitem" aria-haspopup="true" data-cx="addtoggle" data-id="">Lisää <span style="float:right">▸</span></button><div class="ctx-subm"><button type="button" role="menuitem" data-cx="taskadd" data-id="">Uusi tehtävä valitun alle (Enter)</button><button type="button" role="menuitem" data-cx="tasksub" data-id="">Uusi alatehtävä</button><button type="button" role="menuitem" data-cx="grpnew" data-id="">Uusi ylätehtävä</button></div></div>';
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
@@ -2454,7 +2477,10 @@ function qlMatch(name, leaves) {
   }
   ctx.addEventListener('click', e => {
     const b = e.target.closest('[data-cx]'); if (!b || b.disabled) return; const id = b.dataset.id, a = b.dataset.cx; if (a === 'addtoggle') { b.parentNode.classList.toggle('open'); return; } closeCtx();
-    if (a === 'grpdel') act('grpdel', id, {});
+    if (a === 'mi' || a === 'mo') gMultiIndent(a === 'mo');
+    else if (a === 'md') gMultiDelete();
+    else if (a === 'mg') gMultiGroup();
+    else if (a === 'grpdel') act('grpdel', id, {});
     else if (a === 'grpnew') document.getElementById('gAddGrp').click();
     else if (a === 'taskadd') document.getElementById('gAddTask').click();
     else if (a === 'tasksub') document.getElementById('gAddSub').click();
@@ -3232,7 +3258,8 @@ function qlMatch(name, leaves) {
   });
   gSvg.addEventListener('contextmenu', e => {
     if (drag) return; const rw = gRows[Math.floor(gPt(e).y / (gGeo ? gGeo.rowH : 26))];
-    e.preventDefault(); if (rw && rw.gk && groups.some(x => x.id === rw.grp)) { selGrp = rw.grp; selId = null; selLoc = null; selDep = null; render(); } openCtx(e.clientX, e.clientY, rw && rw.line != null && byId(rw.line) ? rw.line : null, { gantt: true, grp: rw && rw.gk ? rw.grp : null });
+    e.preventDefault(); if (rw && msActive() && msel.indexOf(gRowKey(rw)) >= 0) { openCtx(e.clientX, e.clientY, null, { multi: true }); return; }
+    if (rw && rw.gk && groups.some(x => x.id === rw.grp)) { selGrp = rw.grp; selId = null; selLoc = null; selDep = null; render(); } openCtx(e.clientX, e.clientY, rw && rw.line != null && byId(rw.line) ? rw.line : null, { gantt: true, grp: rw && rw.gk ? rw.grp : null });
   });
 
   // leijuvat paneelit: näkyvyys ja sijainti (muistetaan selaimessa, jos mahdollista)
@@ -3338,7 +3365,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '180';
+  const APP_BUILD = '181';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
