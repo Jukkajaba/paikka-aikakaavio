@@ -321,7 +321,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
     <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
-    <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddGrp" type="button" hidden class="gplus small" title="Luo ylätehtävä valitun rivin alapuolelle" aria-label="Lisää ylätehtävä">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
+    <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddSub" type="button" class="gplus small" title="Lisää alatehtävä valitun rivin alle" aria-label="Lisää alatehtävä">+</button><button id="gAddGrp" type="button" style="display:none" aria-hidden="true" tabindex="-1" title="Luo ylätehtävä valitun rivin alapuolelle">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
     <section class="fp" data-p="notes" hidden><div class="fp-bar"><span>Huomiot</span><button type="button" data-close="notes" aria-label="Piilota paneeli Huomiot">×</button></div><div class="fp-body" id="notes"></div></section>
@@ -1971,6 +1971,13 @@ function qlMatch(name, leaves) {
     return true;
   }
   document.getElementById('gAddTask').addEventListener('click', () => { if (gGroup === 'trade' && addNextLoc()) return; const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : null); /* valitun tehtävän alle samaan ryhmään (addFlatTask hoitaa) */ gOpenFresh(); });
+  document.getElementById('gAddSub').addEventListener('click', () => { // alatehtävä: valitun ylätehtävän sisään, tai valitun tehtävän alle sisennettynä (tehtävästä tulee ylätehtävä)
+    const sel = byId(selId);
+    if (!sel) { if (selGrp && gById(selGrp)) { addFlatTask(selGrp); gOpenFresh(); } else toast('Valitse ensin rivi, jonka alle alatehtävä tulee.'); return; }
+    if (!sel.flat) { toast('Sijaintipohjaisella tehtävällä ei voi olla alatehtäviä. Luo ylätehtävä oikean klikkauksen valikosta ja vedä tehtävät sen alle.'); return; }
+    if ((sel.grp ? gDepth(sel.grp) : 0) + 1 > MAX_GD) { toast('Ylätehtäviä voi olla enintään ' + MAX_GD + ' tasoa sisäkkäin.'); return; }
+    addFlatTask(null); const nid = selId; if (gIndent(nid) == null) { gDropFresh(nid); render(); return; } render(); gOpenFresh();
+  });
   document.getElementById('gAddGrp').addEventListener('click', () => {
     pushUndo(snapshot()); ensureOrd();
     const sel = byId(selId), g = { id: uid('K'), name: 'Uusi ylätehtävä', ord: maxOrd() + 10 };
@@ -2379,10 +2386,11 @@ function qlMatch(name, leaves) {
   function openCtx(x, y, lid, opts) {
     const l = lid == null ? null : byId(lid), t = l && trade(l.trade); if (lid != null && (!l || !t)) return;
     let u = null; if (l) { selId = l.id; selGrp = null; selDep = null; render(); u = mdlUrl(l); }
+    const tk = '<button type="button" role="menuitem" data-cx="taskadd" data-id="">Uusi tehtävä valitun alle (Enter)</button><button type="button" role="menuitem" data-cx="tasksub" data-id="">Uusi alatehtävä</button>';
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
     ctx.innerHTML = l ? '<div class="ctx-h">' + esc(t.name) + '</div>' +
       '<button type="button" role="menuitem" data-cx="open" data-id="' + l.id + '"' + (u ? '' : ' disabled') + '>Avaa malli</button>' +
-      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpin" data-id="' + esc(opts.grp) + '">Sisennä ylätehtävän alle (Tab)</button>' + (gById(opts.grp) && gById(opts.grp).parent ? '<button type="button" role="menuitem" data-cx="grpout" data-id="' + esc(opts.grp) + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (sisältö säilyy)</button>' : '') + gt;
+      '<button type="button" role="menuitem" data-cx="edit" data-id="' + l.id + '">Muokkaa mallilinkkiä…</button>' + (u ? '' : '<div class="ctx-n">Ei mallilinkkiä</div>') + (opts && opts.gantt ? '<button type="button" role="menuitem" data-cx="indent" data-id="' + l.id + '">Sisennä ylätehtävän alle (Tab)</button>' + (l.grp ? '<button type="button" role="menuitem" data-cx="outdent" data-id="' + l.id + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + tk + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + gt : '') : '<div class="ctx-h">' + (opts && opts.grp ? 'Ylätehtävä' : 'Gantt') + '</div>' + tk + '<button type="button" role="menuitem" data-cx="grpnew" data-id="">Luo ylätehtävä</button>' + (opts && opts.grp ? '<button type="button" role="menuitem" data-cx="grpin" data-id="' + esc(opts.grp) + '">Sisennä ylätehtävän alle (Tab)</button>' + (gById(opts.grp) && gById(opts.grp).parent ? '<button type="button" role="menuitem" data-cx="grpout" data-id="' + esc(opts.grp) + '">Nosta ylätehtävästä ulos (Shift+Tab)</button>' : '') + '<button type="button" role="menuitem" data-cx="grpdel" data-id="' + esc(opts.grp) + '">Poista ylätehtävä (sisältö säilyy)</button>' : '') + gt;
     ctx.hidden = false;
     const w = ctx.offsetWidth, h = ctx.offsetHeight;
     ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
@@ -2392,6 +2400,8 @@ function qlMatch(name, leaves) {
     const b = e.target.closest('[data-cx]'); if (!b || b.disabled) return; const id = b.dataset.id, a = b.dataset.cx; closeCtx();
     if (a === 'grpdel') act('grpdel', id, {});
     else if (a === 'grpnew') document.getElementById('gAddGrp').click();
+    else if (a === 'taskadd') document.getElementById('gAddTask').click();
+    else if (a === 'tasksub') document.getElementById('gAddSub').click();
     else if (a === 'indent') { gIndent(+id); render(); }
     else if (a === 'outdent') { gOutdent(+id); render(); }
     else if (a === 'gtxt') { gTxt = !gTxt; saveView(); renderGantt(); }
@@ -3266,7 +3276,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '175';
+  const APP_BUILD = '176';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
