@@ -1732,28 +1732,33 @@ function qlMatch(name, leaves) {
   function gRowSel(r) { if (r.line == null || r.line !== selId) return false; if (r.g && selLoc && selLoc.l === r.line) return false; /* yksittäinen sijainti valittu: yhteenvetorivi ei korostu */ if (r.g || r.flat || r.locId == null) return true; return !!(selLoc && selLoc.l === r.line && selLoc.loc === r.locId); }
   // ── usean rivin valinta Ganttissa (Shift = väli, Ctrl = lisää/poista): vain Delete, Tab ja Shift+Tab käyttävät sitä ──
   let msel = [], msSel = null, msAnchor = null; // msel: ['l12','gK3'] näyttöjärjestyksessä; msSel: yksittäisvalinta, jonka kanssa monivalinta on voimassa
-  const gRowKey = r => r ? (r.gk ? 'g' + r.grp : (r.line != null && !r.nh && !r.entry && (r.g || r.flat) ? 'l' + r.line : null)) : null;
-  const gCurKey = () => (selId != null && byId(selId) ? 'l' + selId : (selGrp && gById(selGrp) ? 'g' + selGrp : null));
-  const msActive = () => { if (view !== 'gantt' || msel.length < 2 || !msSel || msSel.id !== selId || msSel.grp !== selGrp) return false; return true; };
+  const gRowKey = r => r ? (r.gk ? 'g' + r.grp : (r.line != null && !r.nh && !r.entry && (r.g || r.flat) ? 'l' + r.line : (r.line != null && r.locId != null && !r.g && !r.flat && !r.nh && !r.entry ? 'o' + r.line + ':' + r.locId : null))) : null;
+  const gCurKey = () => (selId != null && byId(selId) ? (selLoc && selLoc.l === selId && !byId(selId).flat ? 'o' + selId + ':' + selLoc.loc : 'l' + selId) : (selGrp && gById(selGrp) ? 'g' + selGrp : null));
+  const msActive = () => { if (view !== 'gantt' || msel.length < 2 || !msSel || msSel.id !== selId || msSel.grp !== selGrp) return false; if (msel[0][0] === 'o' && !(selLoc && String(selLoc.loc) === String(msSel.loc))) return false; return true; };
   const msHas = r => msActive() && msel.indexOf(gRowKey(r)) >= 0;
   function gMultiClick(gi, mode) {
     const r = gRows[gi], k = gRowKey(r); if (!k) return;
-    let set = msActive() ? msel.slice() : (gCurKey() ? [gCurKey()] : []);
+    const isO = k[0] === 'o', ln = isO ? k.slice(1).split(':')[0] : null, cur = gCurKey();
+    const sameO = q => q && q[0] === 'o' && q.slice(1).split(':')[0] === ln; // sijaintivalinta rajautuu yhden tehtävän sijainteihin
+    let set = msActive() ? msel.slice() : (cur ? [cur] : []);
+    set = set.filter(q => isO ? sameO(q) : q[0] !== 'o');
     if (mode === 'toggle') { const i = set.indexOf(k); if (i >= 0) set.splice(i, 1); else set.push(k); msAnchor = k; }
     else {
-      const a = msAnchor || gCurKey() || k; msAnchor = a; const ai = gRows.findIndex(q => gRowKey(q) === a), lo = Math.min(ai < 0 ? gi : ai, gi), hi = Math.max(ai < 0 ? gi : ai, gi);
-      set = []; for (let q = lo; q <= hi; q++) { const kk = gRowKey(gRows[q]); if (kk && set.indexOf(kk) < 0) set.push(kk); }
+      const ok = q => q && (isO ? sameO(q) : q[0] !== 'o'), a = ok(msAnchor) ? msAnchor : (ok(cur) ? cur : k); msAnchor = a; const ai = gRows.findIndex(q => gRowKey(q) === a), lo = Math.min(ai < 0 ? gi : ai, gi), hi = Math.max(ai < 0 ? gi : ai, gi);
+      set = []; for (let q = lo; q <= hi; q++) { const kk = gRowKey(gRows[q]); if (kk && (isO ? sameO(kk) : kk[0] !== 'o') && set.indexOf(kk) < 0) set.push(kk); }
     }
     set.sort((x, y) => gRows.findIndex(q => gRowKey(q) === x) - gRows.findIndex(q => gRowKey(q) === y));
-    msel = set; const last = k[0] === 'g' ? { id: null, grp: k.slice(1) } : { id: +k.slice(1), grp: null };
-    selId = last.id; selGrp = last.grp; selLoc = null; selDep = null; msSel = { id: selId, grp: selGrp }; render();
+    msel = set; selLoc = null; selDep = null;
+    if (isO) { selId = +ln; selGrp = null; selLoc = { l: +ln, loc: r.locId }; }
+    else { const last = k[0] === 'g' ? { id: null, grp: k.slice(1) } : { id: +k.slice(1), grp: null }; selId = last.id; selGrp = last.grp; }
+    msSel = { id: selId, grp: selGrp, loc: selLoc ? selLoc.loc : null }; render();
   }
   function msItems() { // monivalinnan uloimmat kohteet näyttöjärjestyksessä: [{kind, id}]
     const gids = msel.filter(k => k[0] === 'g').map(k => k.slice(1)).filter(id => gById(id));
     return msel.filter(k => { if (k[0] === 'g') { const id = k.slice(1); return gById(id) && !gids.some(g => g !== id && gIsAnc(g, id)); } const l = byId(+k.slice(1)); return !!l && !(l.grp && gids.some(g => gIsAnc(g, l.grp))); })
       .map(k => (k[0] === 'g' ? { kind: 'group', id: k.slice(1) } : { kind: 'line', id: +k.slice(1) }));
   }
-  function msAfter() { msel = msel.filter(k => k[0] === 'g' ? !!gById(k.slice(1)) : !!byId(+k.slice(1))); const c = gCurKey(); if (!c || msel.indexOf(c) < 0) { msel = []; } else msSel = { id: selId, grp: selGrp }; }
+  function msAfter() { msel = msel.filter(k => k[0] === 'g' ? !!gById(k.slice(1)) : !!byId(parseInt(k.slice(1), 10))); const c = gCurKey(); if (!c || msel.indexOf(c) < 0) { msel = []; } else msSel = { id: selId, grp: selGrp }; }
   function gMultiIndent(out) {
     const it = msItems(); if (!it.length) return; const n0 = undoStack.length; let okN = 0;
     (out ? it.slice().reverse() : it).forEach(x => { const r = out ? gOutdent(x.id, x.kind) : gIndent(x.id, x.kind); if (r) okN++; });
@@ -1773,7 +1778,9 @@ function qlMatch(name, leaves) {
     const gi = gRows.findIndex(r => r.gk && r.grp === G.id); if (gi >= 0) gEditName(gi, 60);
   }
   function gMultiDelete() {
-    const keys = msel.slice(); if (!keys.length) return; pushUndo(snapshot()); ensureOrd();
+    const keys = msel.slice(); if (!keys.length) return;
+    if (keys[0][0] === 'o') { const l = byId(parseInt(keys[0].slice(1), 10)); if (!l) return; const n0 = undoStack.length; keys.forEach(k => { const lc = gRows.find(q => gRowKey(q) === k); const cl = byId(l.id); if (cl && !cl.flat && lc) gRemoveLoc(cl, lc.locId); }); if (undoStack.length > n0 + 1) undoStack.splice(n0 + 1); msel = []; render(); return; } /* sijaintien poisto: yksi kumoaminen */
+    pushUndo(snapshot()); ensureOrd();
     keys.filter(k => k[0] === 'l').forEach(k => { const l = byId(+k.slice(1)); if (!l) return; lines = lines.filter(x => x !== l); if (!lines.some(x => x.trade === l.trade)) TRADES = TRADES.filter(x => x.id !== l.trade); });
     keys.filter(k => k[0] === 'g').forEach(k => { const g = gById(k.slice(1)); if (!g) return; const up = g.parent && gById(g.parent) ? g.parent : null;
       itemsOf(g.id).forEach((x, i) => { const kk = x.k === 'g' ? 'parent' : 'grp'; if (up) x.o[kk] = up; else delete x.o[kk]; x.o.ord = g.ord + (i + 1) * 0.01; });
@@ -2243,8 +2250,9 @@ function qlMatch(name, leaves) {
     if (e.button !== 0) return;
     { const ae = document.activeElement; if (ae && ae !== document.body && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ae.tagName)) ae.blur(); } // painikkeen fokus pois, jotta Enter/Tab/Delete toimivat valitulla rivillä
     const ctrl = e.ctrlKey || e.metaKey, gel = e.target.closest('[data-gr]'), grole = gel ? gel.dataset.gr : null;
-    if (grole === 'gorder' && (e.shiftKey || ctrl) && view === 'gantt') {
-      const gi0 = +gel.dataset.gi; gMultiClick(gi0, e.shiftKey ? 'range' : 'toggle'); e.preventDefault();
+    let locGi = -1; if ((e.shiftKey || ctrl) && view === 'gantt' && gGroup === 'trade' && grole !== 'gorder' && gGeo) { const pt0 = gPt(e), gi1 = Math.floor(pt0.y / gGeo.rowH), k1 = gRowKey(gRows[gi1]); if (k1 && k1[0] === 'o' && pt0.x > 20 && pt0.x < gGeo.NAME) locGi = gi1; } // sijaintirivi: Shift/Ctrl-valinta ja maalaus
+    if (((grole === 'gorder' && gel) || locGi >= 0) && (e.shiftKey || ctrl) && view === 'gantt') {
+      const gi0 = locGi >= 0 ? locGi : +gel.dataset.gi; gMultiClick(gi0, e.shiftKey ? 'range' : 'toggle'); e.preventDefault();
       if (e.shiftKey) { // Shift + vedä: maalaa rivit alueeksi
         let lastGi = gi0, started = false; const mv = ev => { const gi = Math.floor(gPt(ev).y / (gGeo ? gGeo.rowH : 26)); if (gi !== lastGi && gi >= 0 && gi < gRows.length && gRowKey(gRows[gi])) { if (!started) { started = true; msAnchor = gRowKey(gRows[gi0]); } /* vedon alku on painettu rivi */ lastGi = gi; gMultiClick(gi, 'range'); } };
         const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
@@ -2466,7 +2474,7 @@ function qlMatch(name, leaves) {
   function openCtx(x, y, lid, opts) {
     const l = lid == null ? null : byId(lid), t = l && trade(l.trade); if (lid != null && (!l || !t)) return;
     if (opts && opts.multi && msActive()) {
-      ctx.innerHTML = '<div class="ctx-h">' + msel.length + ' riviä valittuna</div><button type="button" role="menuitem" data-cx="mi" data-id="">Sisennä (Tab)</button><button type="button" role="menuitem" data-cx="mo" data-id="">Nosta ulos (Shift+Tab)</button><button type="button" role="menuitem" data-cx="mg" data-id="">Luo niistä ylätehtävä</button><button type="button" role="menuitem" data-cx="md" data-id="">Poista valitut (Delete)</button>';
+      ctx.innerHTML = msel[0][0] === 'o' ? '<div class="ctx-h">' + msel.length + ' sijaintia valittuna</div><button type="button" role="menuitem" data-cx="md" data-id="">Poista valitut sijainnit (Delete)</button>' : '<div class="ctx-h">' + msel.length + ' riviä valittuna</div><button type="button" role="menuitem" data-cx="mi" data-id="">Sisennä (Tab)</button><button type="button" role="menuitem" data-cx="mo" data-id="">Nosta ulos (Shift+Tab)</button><button type="button" role="menuitem" data-cx="mg" data-id="">Luo niistä ylätehtävä</button><button type="button" role="menuitem" data-cx="md" data-id="">Poista valitut (Delete)</button>';
       ctx.hidden = false; const w0 = ctx.offsetWidth, h0 = ctx.offsetHeight; ctx.classList.remove('flip'); ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - w0 - 8)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - h0 - 8)) + 'px';
       const b0 = ctx.querySelector('button:not(:disabled)'); if (b0) b0.focus(); return;
     }
@@ -3265,7 +3273,9 @@ function qlMatch(name, leaves) {
   gSvg.addEventListener('contextmenu', e => {
     if (drag) return; const rw = gRows[Math.floor(gPt(e).y / (gGeo ? gGeo.rowH : 26))];
     e.preventDefault(); if (rw && msActive() && msel.indexOf(gRowKey(rw)) >= 0) { openCtx(e.clientX, e.clientY, null, { multi: true }); return; }
-    if (rw && rw.gk && groups.some(x => x.id === rw.grp)) { selGrp = rw.grp; selId = null; selLoc = null; selDep = null; render(); } openCtx(e.clientX, e.clientY, rw && rw.line != null && byId(rw.line) ? rw.line : null, { gantt: true, grp: rw && rw.gk ? rw.grp : null });
+    if (rw && rw.gk && groups.some(x => x.id === rw.grp)) { selGrp = rw.grp; selId = null; selLoc = null; selDep = null; render(); }
+    if (rw && !rw.gk && rw.line != null && byId(rw.line)) { msel = []; selLoc = (!rw.g && !rw.flat && rw.locId != null) ? { l: rw.line, loc: rw.locId } : null; } /* oikea klikkaus valitsee rivin (harmaa) */
+    openCtx(e.clientX, e.clientY, rw && rw.line != null && byId(rw.line) ? rw.line : null, { gantt: true, grp: rw && rw.gk ? rw.grp : null });
   });
 
   // leijuvat paneelit: näkyvyys ja sijainti (muistetaan selaimessa, jos mahdollista)
@@ -3371,7 +3381,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '183';
+  const APP_BUILD = '184';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
