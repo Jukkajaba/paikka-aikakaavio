@@ -1970,7 +1970,7 @@ function qlMatch(name, leaves) {
     const ri = gRows.findIndex(x => x.line === l.id && x.locId === nl.id); if (ri >= 0) gScroll.scrollTop = Math.max(0, Math.min(gScroll.scrollTop, ri * ROWH[gRowK]), ri * ROWH[gRowK] + ROWH[gRowK] * 2 - (gScroll.clientHeight || 500));
     return true;
   }
-  document.getElementById('gAddTask').addEventListener('click', () => { if (gGroup === 'trade' && addNextLoc()) return; const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); gOpenFresh(); });
+  document.getElementById('gAddTask').addEventListener('click', () => { if (gGroup === 'trade' && addNextLoc()) return; const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : null); /* valitun tehtävän alle samaan ryhmään (addFlatTask hoitaa) */ gOpenFresh(); });
   document.getElementById('gAddGrp').addEventListener('click', () => {
     pushUndo(snapshot()); ensureOrd();
     const sel = byId(selId), g = { id: uid('K'), name: 'Uusi ylätehtävä', ord: maxOrd() + 10 };
@@ -3139,7 +3139,7 @@ function qlMatch(name, leaves) {
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
     if (selDep != null && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); act('depdel', selDep); selId = null; selGrp = null; render(); return; }
-    if (e.key === 'Enter' && view === 'gantt' && (selId != null || selGrp) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && !document.querySelector('body > input.gedit')) { e.preventDefault(); const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : (sel && sel.grp) || null); gOpenFresh(); return; }
+    if (e.key === 'Enter' && view === 'gantt' && (selId != null || selGrp) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && !document.querySelector('body > input.gedit')) { e.preventDefault(); const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : null); /* valitun tehtävän alle samaan ryhmään (addFlatTask hoitaa) */ gOpenFresh(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && byId(selId)) { e.preventDefault(); if (e.shiftKey) gOutdent(selId); else gIndent(selId); render(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selGrp && selId == null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); if (e.shiftKey) gOutdent(selGrp, 'group'); else gIndent(selGrp, 'group'); render(); return; }
     if (selGrp && selId == null && (e.key === 'Delete' || e.key === 'Backspace') && groups.some(x => x.id === selGrp)) { e.preventDefault(); act('grpdel', selGrp); return; } // ylätehtävän poisto: tehtävät säilyvät
@@ -3266,7 +3266,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '174';
+  const APP_BUILD = '175';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
