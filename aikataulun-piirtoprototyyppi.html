@@ -1443,8 +1443,8 @@ function qlMatch(name, leaves) {
   }
   // tehtävärivien rakennus: yksi viiva (ylärivi + sijaintirivit), lvl = sisennystaso
   // Gantt-taulukon sarakkeet: valittavissa ja muokattavissa
-  const litOf = c => String(c == null ? '' : c).replace(/\D/g, '').slice(0, 2); // littera: koodin kaksi ensimmäistä numeroa
-  const COLDEF = { lit: { l: 'Littera', w: 52 }, dur: { l: 'Kesto', w: 48 }, start: { l: 'Alku', w: 58 }, end: { l: 'Loppu', w: 58 }, qty: { l: 'Määrä', w: 86 }, crew: { l: 'Resurssi', w: 68 }, agreed: { l: 'Sovittu', w: 58 }, extra: { l: 'Lisätunnit', w: 70 }, prod: { l: 'Tuott.', w: 56 } };
+  const litOf = (c, n) => String(c == null ? '' : c).replace(/\D/g, '').slice(0, n || 4); // littera: suoritteella kaikki (enintään 4) numerot, rakenneosalla (ylätehtävä) kaksi ensimmäistä
+  const COLDEF = { lit: { l: 'Littera', w: 56 }, dur: { l: 'Kesto', w: 48 }, start: { l: 'Alku', w: 58 }, end: { l: 'Loppu', w: 58 }, qty: { l: 'Määrä', w: 86 }, crew: { l: 'Resurssi', w: 68 }, agreed: { l: 'Sovittu', w: 58 }, extra: { l: 'Lisätunnit', w: 70 }, prod: { l: 'Tuott.', w: 56 } };
   const COLORDER = ['lit', 'dur', 'start', 'end', 'qty', 'crew', 'agreed', 'extra', 'prod'], COLDEFAULT = ['dur', 'start', 'end', 'qty', 'crew'];
   const vCols = () => COLORDER.filter(k => gCols.indexOf(k) >= 0);
   function gCell(r, key) { // solun teksti
@@ -1946,7 +1946,7 @@ function qlMatch(name, leaves) {
       else if (ids.length) { const ix = ids.map(k => leaves[k]), a = Math.min.apply(null, ix), b = Math.max.apply(null, ix); l.from = LOCS[a].id; l.to = LOCS[b].id; ids.forEach(k => { l.ov[k] = { q: mapped[k] }; }); { const sk = []; for (let q = a; q <= b; q++) if (!mapped[LOCS[q].id]) sk.push(LOCS[q].id); if (sk.length) l.skip = sk; } l.qty = total / ids.length; l.lockC = crew; }
       else { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.lockQ = total; l.lockC = crew; }
       l.agreed = crew; // annettu henkilömäärä = sovittu työryhmä
-      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; if (litOf(it.rakCode)) g.lit = litOf(it.rakCode); groups.push(g); } gmap[it.rak] = g; l.grp = g.id; if (IMP.cg) gClosed['K' + g.id] = true; }
+      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; if (litOf(it.rakCode, 2)) g.lit = litOf(it.rakCode, 2); groups.push(g); } gmap[it.rak] = g; l.grp = g.id; if (IMP.cg) gClosed['K' + g.id] = true; }
       lines.push(l); nl++;
     });
     impSaved = { txt: impBox.querySelector('#impTxt').value, roles: IMP.roles.slice(), lm: IMP.lm, locMap: Object.assign({}, IMP.locMap), inc: Object.assign({}, IMP.inc), prod: Object.assign({}, IMP.prod), crew: Object.assign({}, IMP.crew), trade: Object.assign({}, IMP.trade), dProd: IMP.dProd, dCrew: IMP.dCrew, cg: IMP.cg };
@@ -3371,7 +3371,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '182';
+  const APP_BUILD = '183';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
