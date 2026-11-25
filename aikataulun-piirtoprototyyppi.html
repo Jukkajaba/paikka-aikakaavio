@@ -1443,12 +1443,15 @@ function qlMatch(name, leaves) {
   }
   // tehtävärivien rakennus: yksi viiva (ylärivi + sijaintirivit), lvl = sisennystaso
   // Gantt-taulukon sarakkeet: valittavissa ja muokattavissa
-  const COLDEF = { dur: { l: 'Kesto', w: 48 }, start: { l: 'Alku', w: 58 }, end: { l: 'Loppu', w: 58 }, qty: { l: 'Määrä', w: 86 }, crew: { l: 'Resurssi', w: 68 }, agreed: { l: 'Sovittu', w: 58 }, extra: { l: 'Lisätunnit', w: 70 }, prod: { l: 'Tuott.', w: 56 } };
-  const COLORDER = ['dur', 'start', 'end', 'qty', 'crew', 'agreed', 'extra', 'prod'], COLDEFAULT = ['dur', 'start', 'end', 'qty', 'crew'];
+  const litOf = c => String(c == null ? '' : c).replace(/\D/g, '').slice(0, 2); // littera: koodin kaksi ensimmäistä numeroa
+  const COLDEF = { lit: { l: 'Littera', w: 52 }, dur: { l: 'Kesto', w: 48 }, start: { l: 'Alku', w: 58 }, end: { l: 'Loppu', w: 58 }, qty: { l: 'Määrä', w: 86 }, crew: { l: 'Resurssi', w: 68 }, agreed: { l: 'Sovittu', w: 58 }, extra: { l: 'Lisätunnit', w: 70 }, prod: { l: 'Tuott.', w: 56 } };
+  const COLORDER = ['lit', 'dur', 'start', 'end', 'qty', 'crew', 'agreed', 'extra', 'prod'], COLDEFAULT = ['dur', 'start', 'end', 'qty', 'crew'];
   const vCols = () => COLORDER.filter(k => gCols.indexOf(k) >= 0);
   function gCell(r, key) { // solun teksti
+    if (key === 'lit' && r.gk) return (gById(r.grp) || {}).lit || '';
     if (r.empty) return '';
     const l = r.line != null ? byId(r.line) : null, isGrp = !!(l && r.g && !r.nh && !r.gk), k = l && !r.g && r.locId != null ? tasks(l).find(x => x.locId === r.locId) : null;
+    if (key === 'lit') return l && (isGrp || r.flat) ? ((trade(l.trade) || {}).lit || '') : '';
     if (key === 'dur') return dd(r.e - r.s);
     if (key === 'start') return dateOnly(fmt(r.s));
     if (key === 'end') return dateOnly(fmtE(r.e));
@@ -1459,7 +1462,7 @@ function qlMatch(name, leaves) {
     if (key === 'extra') { const h = !l ? null : (isGrp || r.flat) ? extraH(l) : k ? extraH(l, k) : null; return h == null ? '' : h > 0.05 ? Math.round(h) + ' h' : '–'; }
     return '';
   }
-  function gEditable(r, key) { if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && gKidsOf(lines, r.grp).length > 0; if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (!isGrp && r.locId == null) return false; if (key === 'agreed') return isGrp || !!r.flat; if (key === 'extra') return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
+  function gEditable(r, key) { if (key === 'lit' && r && r.gk) return true; if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && gKidsOf(lines, r.grp).length > 0; if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (key === 'lit') return isGrp || !!r.flat; if (!isGrp && r.locId == null) return false; if (key === 'agreed') return isGrp || !!r.flat; if (key === 'extra') return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
   function parseDay(txt, refIdx) { // "4.1.", "4.1.2027" tai "2027-01-04" → iso
     const s = String(txt).trim(); let y, mo, d, m;
     if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
@@ -1491,7 +1494,9 @@ function qlMatch(name, leaves) {
     ms.forEach(l => fit(l)); pushUndo(snap0); ms.forEach(l => absorbSlack(l.id)); return true;
   }
   function gApplyRow(r, key, txt) { // solun arvon muutos → malliin; false jos arvo ei kelvannut
-    if (!gEditable(r, key)) return false; if (r.gk) return gApplyGrp(r, key, txt); const l = byId(r.line); if (!l) return false;
+    if (!gEditable(r, key)) return false;
+    if (key === 'lit') { const v = String(txt).trim().slice(0, 12), pu = snapshot(); if (r.gk) { const g = gById(r.grp); if (!g) return false; if (v) g.lit = v; else delete g.lit; } else { const l0 = byId(r.line), t0 = l0 && trade(l0.trade); if (!t0) return false; if (v) t0.lit = v; else delete t0.lit; } pushUndo(pu); return true; }
+    if (r.gk) return gApplyGrp(r, key, txt); const l = byId(r.line); if (!l) return false;
     if (key === 'crew' && l.lockD) { toast('Kesto on lukittu, joten työryhmää ei voi asettaa. Avaa lukitus Tehtävä-paneelista tai muuta kestoa.'); return true; }
     const isGrp = !!r.g, ts = tasks(l), idx = isGrp ? -1 : ts.findIndex(x => x.locId === r.locId), k = idx >= 0 ? ts[idx] : null; if (!isGrp && !k) return false;
     const num = parseFloat(String(txt).replace(',', '.')), t0 = isGrp ? l.start : k.s;
@@ -1935,12 +1940,13 @@ function qlMatch(name, leaves) {
       const total = ids.length ? ids.reduce((x, k) => x + mapped[k], 0) : it.total;
       const flat = !ids.length && (impLM() === 'koko' || !LOCS.length);
       if (!t) { t = newTrade(); t.name = it.name.slice(0, flat ? 40 : 24); t.unit = it.unit || 'kpl'; t.prod = prod; t.qty = total || 1; t.maxCrew = Math.max(8, crew); if (flat) t.flat = true; }
+      if (it.code && !t.lit && litOf(it.code)) t.lit = litOf(it.code);
       const l = { id: nextId++, trade: t.id, from: null, to: null, start: nl * 5, dur: 5, gap: 0, qty: total || 1, prod: t.prod, ov: {}, ord: (ord += 10) };
       if (flat) { l.flat = true; l.lockC = crew; }
       else if (ids.length) { const ix = ids.map(k => leaves[k]), a = Math.min.apply(null, ix), b = Math.max.apply(null, ix); l.from = LOCS[a].id; l.to = LOCS[b].id; ids.forEach(k => { l.ov[k] = { q: mapped[k] }; }); { const sk = []; for (let q = a; q <= b; q++) if (!mapped[LOCS[q].id]) sk.push(LOCS[q].id); if (sk.length) l.skip = sk; } l.qty = total / ids.length; l.lockC = crew; }
       else { l.from = LOCS[0].id; l.to = LOCS[LOCS.length - 1].id; l.lockQ = total; l.lockC = crew; }
       l.agreed = crew; // annettu henkilömäärä = sovittu työryhmä
-      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; groups.push(g); } gmap[it.rak] = g; l.grp = g.id; if (IMP.cg) gClosed['K' + g.id] = true; }
+      if (it.rak) { let g = gmap[it.rak] || groups.find(x => x.name === it.rak); if (!g) { g = { id: uid('K'), name: it.rak, ord: (ord += 10) }; if (litOf(it.rakCode)) g.lit = litOf(it.rakCode); groups.push(g); } gmap[it.rak] = g; l.grp = g.id; if (IMP.cg) gClosed['K' + g.id] = true; }
       lines.push(l); nl++;
     });
     impSaved = { txt: impBox.querySelector('#impTxt').value, roles: IMP.roles.slice(), lm: IMP.lm, locMap: Object.assign({}, IMP.locMap), inc: Object.assign({}, IMP.inc), prod: Object.assign({}, IMP.prod), crew: Object.assign({}, IMP.crew), trade: Object.assign({}, IMP.trade), dProd: IMP.dProd, dCrew: IMP.dCrew, cg: IMP.cg };
@@ -3365,7 +3371,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '181';
+  const APP_BUILD = '182';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
