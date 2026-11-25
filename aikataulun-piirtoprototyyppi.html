@@ -2068,7 +2068,7 @@ function qlMatch(name, leaves) {
         if (ind === 'in') { if (lid != null) { const gid = gIndent(lid); if (r.entry && gid) gEntryGrp = gid; } }
         else { if (lid != null) gOutdent(lid); if (r.entry) gEntryGrp = null; }
         render(); const ni = r.entry ? gRows.findIndex(x => x.entry) : gRows.findIndex(x => x.line === lid && (x.g || x.flat));
-        if (ni >= 0) { drawGanttBody(); gEditName(ni, 60, o.fresh ? { fresh: true, lid: lid } : null); } return;
+        if (ni >= 0) { drawGanttBody(); gEditName(ni, 60, null); } return; // nimi on jo annettu: Esc ei poista riviä
       }
       if (mv) { let j = gi + mv; while (gRows[j] && gRows[j].nh) j += mv; if (gRows[j]) { gRowClick(j, 999); drawGanttBody(); gEditName(j, gGeo.LEFT - 10); } return; }
       if (next && !r.entry) { gAddBelow(r); return; }
@@ -2162,7 +2162,7 @@ function qlMatch(name, leaves) {
   }
   gSvg.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
-    { const ae = document.activeElement; if (ae && ae !== document.body && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) ae.blur(); }
+    { const ae = document.activeElement; if (ae && ae !== document.body && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ae.tagName)) ae.blur(); } // painikkeen fokus pois, jotta Enter/Tab/Delete toimivat valitulla rivillä
     const ctrl = e.ctrlKey || e.metaKey, gel = e.target.closest('[data-gr]'), grole = gel ? gel.dataset.gr : null;
     if (grole === 'gorder' && !ctrl) {
       const rr = gRows[+gel.dataset.gi], l0 = rr && rr.line != null ? byId(rr.line) : null;
@@ -3266,7 +3266,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '173';
+  const APP_BUILD = '174';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
