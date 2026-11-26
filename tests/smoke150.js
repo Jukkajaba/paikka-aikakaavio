@@ -25,6 +25,9 @@ const { chromium } = require('playwright');
   ok(fd.length > fn.length, 'paikka-aika: riippuvuudet/huomiot vain valinnalla: ' + fd.length + ' > ' + fn.length);
   ok(await p.evaluate(() => document.querySelectorAll('#chart path[data-role="body"]').length) > 0, 'kaavio palautuu tulostuksen jälkeen');
   await pdfPages(fn, 'prt_flow2');
+  const fb = await p.evaluate(() => __aik().prtDoc('A4', false, { bot: true })), fnb = await p.evaluate(() => __aik().prtDoc('A4', false, {}));
+  const axN = h => (h.match(/class="ax"/g) || []).length; ok(axN(fb) > axN(fnb), 'alakalenteri lisää akselitekstejä: ' + axN(fb) + ' > ' + axN(fnb));
+  await pdfPages(fb, 'prt_flow3');
   // valinta ja piirtotila eivät muutu tulostuksesta
   ok(await p.evaluate(() => __aik().selId) == null || true, 'ok');
   ok(errs.length === 0, 'virheet ' + errs.join('|'));

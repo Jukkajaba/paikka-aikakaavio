@@ -308,7 +308,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <label class="tgt">Näkyvillä vk <input id="gVis" type="number" min="4" max="260" step="1" value="26" style="width:56px"></label>
       <span class="tgt" title="Zoomaa aikaa (myös Ctrl + rullaus)"><button id="zOut" type="button" aria-label="Zoomaa ulos">−</button> <button id="zIn" type="button" aria-label="Zoomaa sisään">+</button> <button id="zFit" type="button" title="Näytä koko projekti">Koko</button></span>
       <label class="tgt">Rivit <select id="rowSel"><option value="c">Tiivis</option><option value="n">Normaali</option><option value="w">Väljä</option></select></label>
-      <span class="fltwrap" id="prtWrap"><button id="prtBtn" type="button" class="chip" aria-haspopup="true" aria-expanded="false" aria-controls="prtPop" title="Tulosta nykyinen näkymä">Tulosta ▾</button><div id="prtPop" class="fltpop" role="dialog" aria-label="Tulostus" hidden style="width:290px"><div class="row" style="border-top:0;padding-top:0"><label for="prtPaper">Paperi</label><select id="prtPaper"><option value="A4">A4 vaaka</option><option value="A3">A3 vaaka</option></select></div><div class="row" style="border-top:0;padding-top:0"><label for="prtDeps" style="flex:1">Riippuvuusnuolet</label><input id="prtDeps" type="checkbox"></div><div class="row" style="border-top:0;padding-top:0"><label for="prtWarn" style="flex:1">Huomiot (työjärjestys)</label><input id="prtWarn" type="checkbox"></div><p class="ok hlp" id="prtHint" style="margin:6px 0"></p><div class="fltact"><button id="prtGo" type="button">Tulosta</button><button id="prtDl" type="button">Lataa tiedostona</button></div></div></span>
+      <span class="fltwrap" id="prtWrap"><button id="prtBtn" type="button" class="chip" aria-haspopup="true" aria-expanded="false" aria-controls="prtPop" title="Tulosta nykyinen näkymä">Tulosta ▾</button><div id="prtPop" class="fltpop" role="dialog" aria-label="Tulostus" hidden style="width:290px"><div class="row" style="border-top:0;padding-top:0"><label for="prtPaper">Paperi</label><select id="prtPaper"><option value="A4">A4 vaaka</option><option value="A3">A3 vaaka</option></select></div><div class="row" style="border-top:0;padding-top:0"><label for="prtBot" style="flex:1">Alakalenteri (Paikka-aika)</label><input id="prtBot" type="checkbox" checked></div><div class="row" style="border-top:0;padding-top:0"><label for="prtDeps" style="flex:1">Riippuvuusnuolet</label><input id="prtDeps" type="checkbox"></div><div class="row" style="border-top:0;padding-top:0"><label for="prtWarn" style="flex:1">Huomiot (työjärjestys)</label><input id="prtWarn" type="checkbox"></div><p class="ok hlp" id="prtHint" style="margin:6px 0"></p><div class="fltact"><button id="prtGo" type="button">Tulosta</button><button id="prtDl" type="button">Lataa tiedostona</button></div></div></span>
       <button id="helpBtn" type="button" class="chip" aria-pressed="false" title="Näytä tai piilota ohjetekstit">Ohje</button>
       <button id="fitBtn" type="button" class="chip" aria-pressed="false" title="Sovita näkymä koko näytön kokoiseksi: leveä asettelu ja kaavion korkeus ikkunan mukaan">Sovita näyttöön</button>
       <button id="depToggle" type="button" class="chip" aria-pressed="true">Riippuvuudet</button>
@@ -1167,7 +1167,7 @@ function qlMatch(name, leaves) {
     if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     const hist = histogram(lines, hRes), histN = hist.reduce((q, x) => q + x.length, 0), hr = resById(hRes);
     resOn = resMode === 'on' || (resMode === 'auto' && histN <= 15000); // hyvin isoissa aikatauluissa resurssit ovat oletuksena piilossa
-    const avail = gFit ? Math.max(330, window.innerHeight - (wrap.getBoundingClientRect().top + window.scrollY) - 30 - 12 - 52 - (resOn ? 88 : 0)) : 330, rowH = clamp(Math.floor(avail / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round((gFit ? 90 : 46) * ROWF[gRowK])), hy = CAL.ax === 'wd' ? 12 : 0, TOP = 30 + hy, bodyH = L * rowH, histTop = TOP + bodyH + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
+    const avail = gFit ? Math.max(330, window.innerHeight - (wrap.getBoundingClientRect().top + window.scrollY) - 30 - 12 - 52 - (resOn ? 88 : 0)) : 330, rowH = clamp(Math.floor(avail / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round((gFit ? 90 : 46) * ROWF[gRowK])), hy = CAL.ax === 'wd' ? 12 : 0, TOP = 30 + hy, bodyH = L * rowH, histTop = TOP + bodyH + (prtBot ? (hy ? 42 : 20) : 0) + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
     G = { LEFT: LEFT, dayW: dayW, rowH: rowH, TOP: TOP, bodyH: bodyH, L: L, rm: RM, rows: VR ? VR.rows : null, W: W, visD: visD, RIGHT: RIGHT };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
     { const need = visD < calLen(); fH.hidden = !need; if (need) { const cw = fH.clientWidth || W; fHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(fH.scrollLeft - sl) > 1) { fSyncing = true; fH.scrollLeft = sl; } } }
@@ -1186,6 +1186,12 @@ function qlMatch(name, leaves) {
       if (major && wc < cl) p.push('<text class="ax" x="' + (x + 3) + '" y="' + (18 + hy) + '">' + axLabel(w) + '</text>');
     }
     p.push(axDays(XC, gOff, gOff + visD, dayW, 28 + hy)); p.push(axMonths(XC, gOff, gOff + visD, 10));
+    if (prtBot) { // alakalenteri (tulostus): sama kalenteri kuin yläreunassa, sijaintialueen alla
+      const by = TOP + bodyH, wy = by + (hy ? 25 : 14);
+      lab.push('<text class="ax" x="' + (LEFT - 8) + '" y="' + wy + '" text-anchor="end">' + axUnit() + '</text>');
+      for (let w = 0, cl = calLen(); w <= Math.ceil(cl / calVpw()) + 2; w++) { const wc = calWeekC(w); if (wc < gOff - calVpw()) continue; if (wc > gOff + visD + calVpw()) break; if (w % step === 0 && wc < cl) p.push('<text class="ax" x="' + (XC(wc) + 3) + '" y="' + wy + '">' + axLabel(w) + '</text>'); }
+      if (hy) { p.push(axDays(XC, gOff, gOff + visD, dayW, by + 13)); p.push(axMonths(XC, gOff, gOff + visD, by + 37)); }
+    }
     const maxc = narrow ? 7 : Math.floor((LEFT - 18) / 6.4);
     for (let i = 0; i < L; i++) {
       const y = Yrow(i), rw = VR ? VR.rows[i] : null, nm = rw ? rw.name : LL0[i];
@@ -1385,7 +1391,7 @@ function qlMatch(name, leaves) {
   let gTxt = false; // janatekstit (rivin nimi palkin perässä) Ganttissa
   let gEntryGrp = null; // syöttörivin ryhmä: uudet tehtävät syntyvät tämän ylätehtävän alle (sisennys Tabilla)
   let gEntry = false; // Gantin syöttörivi: tyhjä rivi listan lopussa, johon kirjoitettu nimi luo tehtävän
-  let gPrint = null, view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
+  let gPrint = null, prtBot = false, view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
   let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
@@ -1637,21 +1643,21 @@ function qlMatch(name, leaves) {
     } else {
       const sd0 = showDeps, keep = { a: selId, b: selGrp, c: selLoc, d: selDep, e: msel }; let c;
       selId = null; selGrp = null; selLoc = null; selDep = null; msel = []; showDeps = !!o.deps;
-      try { render(); c = prtClean(svg); } finally { showDeps = sd0; selId = keep.a; selGrp = keep.b; selLoc = keep.c; selDep = keep.d; msel = keep.e; render(); }
+      prtBot = !!o.bot; try { render(); c = prtClean(svg); } finally { prtBot = false; showDeps = sd0; selId = keep.a; selGrp = keep.b; selLoc = keep.c; selDep = keep.d; msel = keep.e; render(); }
       if (!o.warn) c.querySelectorAll('path[fill="var(--warn)"]').forEach(n => n.remove());
       c.querySelectorAll('rect[fill="var(--band)"]').forEach(n => n.remove());
       const W = +c.getAttribute('width'), H = +c.getAttribute('height'), k = Math.min(bw / W, avail / H);
       pages.push(prtSvg(c, W * k, H * k));
     }
     const vname = view === 'gantt' ? 'Aikataulu (Gantt)' : 'Paikka-aikakaavio', today = new Date().toLocaleDateString('fi-FI'), st = stOn() && statusDay != null ? ' · Tilanne ' + fmtE(statusDay) : '';
-    const css = [].map.call(document.querySelectorAll('style'), x => x.textContent).join('\n'), rm = css.match(/:root\s*\{([^}]*)\}/), light = rm ? 'html:root, html:root[data-theme]{' + rm[1] + '}html:root,html:root[data-theme]{--muted:#2F3B40;--grid:#DCE3E6}svg text.ax,svg text.gc,svg text.gce{fill:#1B2529}' : '';
+    const css = [].map.call(document.querySelectorAll('style'), x => x.textContent).join('\n'), rm = css.match(/:root\s*\{([^}]*)\}/), light = rm ? 'html:root, html:root[data-theme]{' + rm[1] + '}html:root,html:root[data-theme]{--muted:#2F3B40;--grid:#DCE3E6}svg text.ax,svg text.gce{fill:#1B2529}svg text.loc,svg text.gc{fill:#000}svg text.loc{font-weight:700}' : '';
     const body = pages.map((p, i) => '<section class="pg"><div class="ph"><b>' + esc(projName) + '</b><span>' + vname + st + '</span></div>' + p + legend + '<div class="pf"><span>Tulostettu ' + today + '</span><span>Sivu ' + (i + 1) + ' / ' + pages.length + '</span></div></section>').join('');
     const pcss = '@page{size:' + pk + ' landscape;margin:' + M + 'mm}html,body{background:#fff!important;color:#1B2529;margin:0;padding:0;min-height:0}body{font:12px/1.3 system-ui,sans-serif;display:block}.pg{box-sizing:border-box;height:' + bh + 'mm;width:' + bw + 'mm;display:flex;flex-direction:column;break-after:page;page-break-after:always;overflow:hidden}.pg:last-of-type{break-after:auto;page-break-after:auto}.pg>*{flex-shrink:0}.pg svg{display:block;max-height:none}.ph{display:flex;justify-content:space-between;font-size:13px;border-bottom:.3mm solid #8a959a;padding-bottom:1.5mm;margin-bottom:2mm;height:7mm;box-sizing:content-box}.pf{margin-top:auto;display:flex;justify-content:space-between;font-size:10px;color:#555;height:6mm}.leg{display:flex;flex-wrap:wrap;gap:1mm 4mm;font-size:10px;margin-top:2mm;height:9mm;overflow:hidden;align-content:flex-start}.leg i{display:inline-block;width:3mm;height:3mm;margin-right:1mm;vertical-align:-.5mm;border-radius:.5mm}.noprint{padding:6px 10px}@media print{.noprint{display:none}}@media screen{html,body{background:#e9eef0!important}.pg{background:#fff;margin:8mm auto;padding:' + M + 'mm;width:' + pw + 'mm;height:' + ph + 'mm;box-shadow:0 1px 6px rgba(0,0,0,.25)}}';
     return '<!DOCTYPE html><html lang="fi"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>' + esc(projName) + ' – ' + vname + '</title><style>' + css + '\n' + light + '\n' + pcss + '</style></head><body>' + (interactive ? '<div class="noprint"><button onclick="window.print()">Tulosta</button> <span>Valitse tulostimeksi "Tallenna PDF:ksi", jos haluat PDF-tiedoston.</span></div>' : '') + body + '</body></html>';
   }
   const prtPop = document.getElementById('prtPop'), prtBtn = document.getElementById('prtBtn');
   const prtOpen = o => { prtPop.hidden = !o; prtBtn.setAttribute('aria-expanded', String(o)); if (o) document.getElementById('prtHint').textContent = view === 'gantt' ? 'Tulostaa koko Gantt-aikataulun, rivit jaetaan sivuille. Aikaväli on se, joka näkyy ruudulla (Näkyvillä vk).' : 'Tulostaa Paikka-aika-kaavion siltä aikaväliltä, joka näkyy ruudulla (säädä Zoomaa-napeilla tai Sovita näyttöön).'; };
-  const prtOpts = () => ({ deps: document.getElementById('prtDeps').checked, warn: document.getElementById('prtWarn').checked });
+  const prtOpts = () => ({ deps: document.getElementById('prtDeps').checked, warn: document.getElementById('prtWarn').checked, bot: document.getElementById('prtBot').checked });
   prtBtn.addEventListener('click', () => prtOpen(prtPop.hidden));
   document.addEventListener('pointerdown', e => { if (!prtPop.hidden && !e.target.closest('#prtWrap')) prtOpen(false); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !prtPop.hidden) { prtOpen(false); prtBtn.focus(); } });
@@ -3458,7 +3464,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '189';
+  const APP_BUILD = '190';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
