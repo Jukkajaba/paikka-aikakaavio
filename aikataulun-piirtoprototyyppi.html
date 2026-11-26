@@ -839,7 +839,12 @@ function calWeekCal(w) { const dow = (new Date(cc().s0).getUTCDay() + 6) % 7; re
 function calWeekC(w) { return c2u(calWeekCal(w)); } // viikon w alku kalenteripäivinä (viikko 0 = alkupäivän viikko)
 function calShadeRuns(u0, u1) { const C = cc(), out = [], a = Math.max(0, Math.floor(u2c(u0)) - 1), b = Math.min(C.isW.length, Math.ceil(u2c(u1)) + 1); for (let c = a; c < b; c++) { if (C.isW[c] || C.vcum[c + 1] === C.vcum[c]) continue; const s = C.vcum[c], l = out[out.length - 1]; if (l && l[1] === s) l[1] = s + 1; else out.push([s, s + 1]); } return out; }
 // aikajanan otsikot: ax = 'wk' viikkonumerot, 'dt' viikon alkupäivä, 'wd' viikkonumerot + päivänumerot (kun tilaa riittää)
-function axLabel(w) { if (CAL.ax !== 'dt') return String(w + 1); const t = new Date(cc().s0 + calWeekCal(w) * DAY_MS); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
+// projektin suhteellinen viikko n (1 = alkuviikko) -> kalenterin (ISO) viikkonumero
+function wkNo(n) {
+  const t = new Date(cc().s0 + (n <= 1 ? 0 : calWeekCal(n - 1)) * DAY_MS), dow = (t.getUTCDay() + 6) % 7, th = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + 3 - dow)), j4 = new Date(Date.UTC(th.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((th - j4) / DAY_MS - 3 + ((j4.getUTCDay() + 6) % 7)) / 7);
+}
+function axLabel(w) { if (CAL.ax !== 'dt') return String(wkNo(w + 1)); const t = new Date(cc().s0 + calWeekCal(w) * DAY_MS); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.'; }
 const axUnit = () => CAL.ax === 'dt' ? 'pvm' : 'vk';
 function axDays(xc, u0, u1, dayW, y) { if (CAL.ax !== 'wd' || dayW < 15) return ''; const C = cc(), o = []; for (let u = Math.max(0, Math.floor(u0)); u < Math.min(C.vis.length, Math.ceil(u1)); u++) { const c = C.vis[u]; o.push('<text class="ax" x="' + (xc(u) + dayW / 2).toFixed(1) + '" y="' + y + '" text-anchor="middle"' + (C.isW[c] ? '' : ' opacity=".45"') + '>' + new Date(C.s0 + c * DAY_MS).getUTCDate() + '</text>'); } return o.join(''); }
 function axMonths(xc, u0, u1, y) { // kuukausirivi: kuukauden nimi sen ensimmäisen näkyvän päivän kohdalla
@@ -866,6 +871,7 @@ function actOf(l, k) { // k = tasks()-rivi
 }
 function pctOfTasks(items) { let d = 0, w = 0; items.forEach(q => { d += q.k.d; w += q.k.d * actOf(q.l, q.k).pct; }); return d ? w / d : 0; }
 const dateOnly = t => t.replace(/^(ma|ti|ke|to|pe) /, '');
+const wkShow = d => wkNo(weekOf(d));
 const weekOf = d => { const c = wdOff(Math.max(0, Math.floor(d + 1e-9))), w1 = calWeekCal(1); return c < w1 ? 1 : 2 + Math.floor((c - w1) / 7); };
 // ---- määräluettelon tuonti: puhdas logiikka ----
 // Taulukko (liitetty Excelistä) -> sarakeroolit -> suoritteet (rakenne = ylätehtävä, suorite = viiva).
@@ -1178,7 +1184,7 @@ function qlMatch(name, leaves) {
     p.push('<line x1="' + LEFT + '" x2="' + (W - RIGHT) + '" y1="' + (TOP + bodyH) + '" y2="' + (TOP + bodyH) + '" stroke="var(--grid2)" stroke-width=".8"/>');
     const tx = XC(calWeekC(target));
     p.push('<line x1="' + tx + '" x2="' + tx + '" y1="' + (22 + hy) + '" y2="' + (histTop + HH) + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4"/>');
-    p.push('<text class="tgtl" x="' + (tx - 5) + '" y="' + (TOP + 12) + '" text-anchor="end">Tavoite vk ' + target + '</text>');
+    p.push('<text class="tgtl" x="' + (tx - 5) + '" y="' + (TOP + 12) + '" text-anchor="end">Tavoite vk ' + wkNo(target) + '</text>');
     if (stOn() && statusDay != null) { const sx = X(statusDay); p.push('<line x1="' + sx.toFixed(1) + '" x2="' + sx.toFixed(1) + '" y1="' + (22 + hy) + '" y2="' + (histTop + HH) + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"/>'); p.push('<text class="tgtl" x="' + (sx + 5) + '" y="' + (TOP + 12) + '" style="fill:#b86a0c">Tilanne ' + esc(fmtE(statusDay)) + '</text>'); }
     p.push('<rect x="' + LEFT + '" y="' + TOP + '" width="' + (W - LEFT - RIGHT) + '" height="' + bodyH + '" fill="transparent" data-role="bg"/>');
 
@@ -1341,7 +1347,7 @@ function qlMatch(name, leaves) {
     else {
       const endD = Math.max.apply(null, lines.map(lineEnd)), endW = weekOf(endD - 1), diff = target - endW;
       const tgtTxt = diff > 0 ? diff + ' vk ennen tavoitetta' : diff === 0 ? 'osuu tavoitteeseen' : '<span class="bad">' + (-diff) + ' vk yli tavoitteen</span>';
-      summary.innerHTML = '<span>Valmis <b>vk ' + endW + '</b> (' + tgtTxt + ')</span><span>Huippuväki <b>' + peakP + ' ' + esc(RES[0].unit) + '</b></span><span>' + (bad ? '<span class="bad">' + bad + ' työjärjestyshuomiota</span>' : 'Ei työjärjestyshuomioita') + '</span>';
+      summary.innerHTML = '<span>Valmis <b>vk ' + wkNo(endW) + '</b> (' + tgtTxt + ')</span><span>Huippuväki <b>' + peakP + ' ' + esc(RES[0].unit) + '</b></span><span>' + (bad ? '<span class="bad">' + bad + ' työjärjestyshuomiota</span>' : 'Ei työjärjestyshuomioita') + '</span>';
     }
     PH('summary'); if (drag) { renderPanel(); PH('panel'); renderGantt(); PH('gantt'); } // vedon aikana vain välttämätön; muut paneelit päivittyvät vedon päätyttyä
     else { renderPanel(); renderList(); renderNotes(vio, dvio); renderLocs(); renderBl(); renderSt(); renderFc(); renderGantt(); }
@@ -2529,7 +2535,7 @@ function qlMatch(name, leaves) {
       const kids = gKidsOf(lines, gp.id), all = []; kids.forEach(k => tasks(k).forEach(x => all.push(x)));
       const s0 = all.length ? Math.min.apply(null, all.map(x => x.s)) : 0, e0 = all.length ? Math.max.apply(null, all.map(x => x.e)) : 0;
       panel.innerHTML = '<div class="ph"><h2>' + esc(gp.name) + '</h2></div>' +
-        '<p class="meta">Ylätehtävä · ' + kids.length + ' tehtävää' + (all.length ? '<br>' + fmt(s0) + ' – ' + fmtE(e0) + ' (vk ' + weekOf(s0) + '–' + weekOf(e0 - 1) + ')' : '') + '</p>' +
+        '<p class="meta">Ylätehtävä · ' + kids.length + ' tehtävää' + (all.length ? '<br>' + fmt(s0) + ' – ' + fmtE(e0) + ' (vk ' + wkShow(s0) + '–' + wkShow(e0 - 1) + ')' : '') + '</p>' +
         '<div class="row"><label for="f-gname">Nimi</label><input id="f-gname" class="txt" style="max-width:170px" type="text" maxlength="40" value="' + esc(gp.name) + '" data-field="grpname" data-id="' + gp.id + '"></div>' +
         '<p class="ok hlp" style="margin:6px 0">Vedä palkkia siirtääksesi kaikkia ryhmän tehtäviä. Siirrä tehtäviä ryhmään vetämällä rivejä tai valitsemalla Ylätehtävä tehtävän paneelista.</p>' +
         '<div class="btns"><button type="button" data-act="grpaddtask" data-id="' + gp.id + '">+ Tehtävä ryhmään</button>' + (kids.length ? '<button type="button" data-act="grpshift-" data-id="' + gp.id + '">◀ viikko</button><button type="button" data-act="grpshift+" data-id="' + gp.id + '">viikko ▶</button>' : '') + '<button type="button" data-act="grpdel" data-id="' + gp.id + '">Poista ylätehtävä</button></div>' +
@@ -2550,7 +2556,7 @@ function qlMatch(name, leaves) {
     let th = '<details' + (tasksOpen ? ' open' : '') + '><summary>Tehtävät (' + ts.length + ')</summary>';
     (l.flat ? [] : ts).forEach((k, i) => {
       const dn = t.name + ' · ' + LOCS[k.loc].name;
-      if (slk && k.locId === slk) selTxt = '<p class="meta" style="background:var(--band);padding:4px 6px;border-radius:4px"><b>Valittu: ' + esc(k.name || dn) + '</b><br>' + fmt(k.s) + ' – ' + fmtE(k.e) + ' (vk ' + weekOf(k.s) + '–' + weekOf(k.e - 1) + ') · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</p>';
+      if (slk && k.locId === slk) selTxt = '<p class="meta" style="background:var(--band);padding:4px 6px;border-radius:4px"><b>Valittu: ' + esc(k.name || dn) + '</b><br>' + fmt(k.s) + ' – ' + fmtE(k.e) + ' (vk ' + wkShow(k.s) + '–' + wkShow(k.e - 1) + ') · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' hlö</p>';
       th += '<div class="task' + (slk && k.locId === slk ? ' sel' : '') + '" style="' + (slk && k.locId === slk ? 'background:var(--band);outline:1px solid var(--ink);border-radius:4px' : '') + '"><input class="txt" type="text" maxlength="40" placeholder="' + esc(dn) + '" value="' + esc(k.name) + '" aria-label="Tehtävän nimi" data-field="tname" data-id="' + l.id + '" data-loc="' + k.locId + '">' +
         '<div class="tmeta">' + esc(LOCS[k.loc].name) + ' · ' + fmt(k.s) + '–' + fmtE(k.e) + ' · ' + r2(k.qty) + ' ' + esc(t.unit) + ' · ' + k.crew + ' ' + esc(resUnit(t)) + '</div>' +
         '<div class="trow"><span class="lab">Määrä</span><input class="num" type="number" min="0.01" step="any" style="width:70px" value="' + r2(k.qty) + '" data-field="tq-v" data-id="' + l.id + '" data-loc="' + k.locId + '" aria-label="Sijainnin määrä"> ' + esc(t.unit) + ((l.ov && l.ov[k.locId] && l.ov[k.locId].q != null) ? ' <button type="button" data-act="tqreset" data-id="' + l.id + '" data-loc="' + k.locId + '" title="Palauta osuuksien mukainen määrä">Palauta</button>' : '') + '</div>' +
@@ -2568,7 +2574,7 @@ function qlMatch(name, leaves) {
     if (l.flat) {
       panel.innerHTML =
         '<div class="ph"><span class="dot" style="background:' + colorOf(l.trade) + '"></span><h2>' + esc(t.name) + '</h2></div>' +
-        '<p class="meta">Tehtävä ilman sijaintia<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + ')</p>' +
+        '<p class="meta">Tehtävä ilman sijaintia<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + wkShow(l.start) + '–' + wkShow(en - 1) + ')</p>' +
         '<p class="ok hlp" style="margin:0 0 6px">Ilman sijaintia tehtävä näkyy vain Ganttissa. Valitsemalla sijainnin (alku ja loppu) tehtävä tulee myös paikka-aikakaavioon. Kesto, työryhmä, määrä ja tuottavuus vaikuttavat toisiinsa: kun muutat kestoa, työryhmä muuttuu. Kun muutat määrää tai tuottavuutta, työryhmä pysyy ja kesto muuttuu. Lukitse kesto (takaraja), niin työryhmä muuttuu.</p>' +
         '<div class="row"><label for="f-tname">Nimi</label><input id="f-tname" class="txt" style="max-width:170px" type="text" maxlength="40" value="' + esc(t.name) + '" data-field="tr-name" data-id="' + t.id + '"></div>' + grpSelect(l) + locSelect(l) +
         '<div class="row"><label>Kesto (pv)</label><span class="qrow">' + lockBtn('dlock', l.id, !!l.lockD, 'Poista keston lukitus', 'Lukitse kesto', 'Lukittu: kesto pysyy samana, kun määrä tai tuottavuus muuttuu. Työryhmä lasketaan.', 'Lukitse kesto (takaraja)') + stepper('dur', l.id, '', null, r1(perLoc(l)), MIN_D) + '</span></div>' +
@@ -2582,7 +2588,7 @@ function qlMatch(name, leaves) {
     }
     panel.innerHTML =
       '<div class="ph"><span class="dot" style="background:' + colorOf(l.trade) + '"></span><h2>' + esc(t.name) + '</h2></div>' +
-      '<p class="meta">' + esc(LOCS[ts[0].loc].name) + ' → ' + esc(LOCS[ts[ts.length - 1].loc].name) + '<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + weekOf(l.start) + '–' + weekOf(en - 1) + ')</p>' + selTxt +
+      '<p class="meta">' + esc(LOCS[ts[0].loc].name) + ' → ' + esc(LOCS[ts[ts.length - 1].loc].name) + '<br>' + fmt(l.start) + ' – ' + fmtE(en) + ' (vk ' + wkShow(l.start) + '–' + wkShow(en - 1) + ')</p>' + selTxt +
       '<p class="ok hlp" style="margin:0 0 6px">Viivan ajoitus ja koko: kokonaiskesto, aika sijainnissa, viive sijaintien välillä, työryhmä ja määrä vaikuttavat toisiinsa. Kun muutat kestoa, työryhmä muuttuu. Kun muutat määrää tai tuottavuutta, työryhmä pysyy ja kesto muuttuu. Kestolukko (takaraja) pitää keston paikallaan, ja silloin työryhmä muuttuu. Tehtävät-osiossa voi muuttaa yksittäisen sijainnin kestoa ja viivettä. Työlajin nimi, yksikkö ja tuottavuus koskevat koko työlajia.</p>' +
       '' + grpSelect(l) + locSelect(l) +
       '<div class="row"><label for="f-tname" title="Nimi muuttuu kaikilla tämän työlajin viivoilla">Työlajin nimi</label><input id="f-tname" class="txt" style="max-width:170px" type="text" maxlength="24" value="' + esc(t.name) + '" data-field="tr-name" data-id="' + t.id + '"></div>' +
@@ -3381,7 +3387,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '184';
+  const APP_BUILD = '185';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3561,7 +3567,7 @@ function qlMatch(name, leaves) {
       '<div class="row" style="border-top:0;padding-top:0"><input id="pj-exf" type="date" class="txt" style="max-width:120px"><input id="pj-ext" type="date" class="txt" style="max-width:120px"><select id="pj-exw"><option value="0">vapaa</option><option value="1">työ</option></select><input id="pj-exn" class="txt" style="max-width:80px" maxlength="24" placeholder="nimi"><button type="button" data-cal="exadd">Lisää poikkeus</button></div>' +
       '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Aikajana näyttää oletuksena vain työviikon päivät. Pyhät ja poikkeukset näkyvät harmaina, eikä työ etene vapaina päivinä.</p>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-weeks">Kesto (vk)</label><input id="pj-weeks" class="num" type="number" min="4" max="260" value="' + N_WEEKS + '" data-pjweeks="1"></div>' +
-      '<div class="row" style="border-top:0;padding-top:0"><label for="pj-target">Tavoite (vk)</label><input id="pj-target" class="num" type="number" min="1" max="' + N_WEEKS + '" value="' + target + '" data-pjtarget="1"></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label for="pj-target">Tavoite (projektin vk)</label><input id="pj-target" class="num" type="number" min="1" max="' + N_WEEKS + '" value="' + target + '" data-pjtarget="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-tpl" title="Mallilinkkien osoitepohja">Mallin osoitepohja</label><input id="pj-tpl" class="txt" style="max-width:170px" type="text" maxlength="500" value="' + esc(mdlTpl) + '" data-pjtpl="1" placeholder="https://…{model}…{ids}"></div>' +
       '<p class="ok hlp" style="margin:0 0 4px">Osoitepohja muodostaa mallilinkit viivoille. Käytettävät paikkamerkit: {model} (mallin tunniste), {ids} (rakenneosat), {task} (työlajin nimi) ja {id} (viivan numero). Arvot koodataan osoitteeseen sopiviksi. Suora osoite viivalla ohittaa pohjan.</p>' +
       '<p class="ok hlp" style="margin:0 0 8px">Muutokset tallentuvat automaattisesti. Uusi projekti voi olla tyhjä tai sisältää oletustyölajit ja sijainnit. Vie tiedostoon -toiminto tekee varmuuskopion, ja Tuo tiedostosta palauttaa sen.</p>' +
