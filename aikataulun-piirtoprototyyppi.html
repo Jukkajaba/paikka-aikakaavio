@@ -1167,7 +1167,7 @@ function qlMatch(name, leaves) {
     if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     const hist = histogram(lines, hRes), histN = hist.reduce((q, x) => q + x.length, 0), hr = resById(hRes);
     resOn = resMode === 'on' || (resMode === 'auto' && histN <= 15000); // hyvin isoissa aikatauluissa resurssit ovat oletuksena piilossa
-    const avail = gFit ? Math.max(330, window.innerHeight - (wrap.getBoundingClientRect().top + window.scrollY) - 30 - 12 - 52 - (resOn ? 88 : 0)) : 330, rowH = clamp(Math.floor(avail / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round((gFit ? 90 : 46) * ROWF[gRowK])), hy = CAL.ax === 'wd' ? 12 : 0, TOP = 30 + hy, bodyH = L * rowH, histTop = TOP + bodyH + (prtBot ? (hy ? 42 : 20) : 0) + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
+    const avail = gFit ? Math.max(330, window.innerHeight - (wrap.getBoundingClientRect().top + window.scrollY) - 30 - 12 - 52 - (resOn ? 88 : 0)) : 330, rowH = gPrintRowH || clamp(Math.floor(avail / L * ROWF[gRowK]), Math.round(22 * ROWF[gRowK]), Math.round((gFit ? 90 : 46) * ROWF[gRowK])), hy = CAL.ax === 'wd' ? 12 : 0, TOP = 30 + hy, bodyH = L * rowH, histTop = TOP + bodyH + (prtBot ? (hy ? 42 : 20) : 0) + (resOn ? 18 : 0), HH = resOn ? (narrow ? 56 : 70) : 0, H = histTop + HH + 12;
     G = { LEFT: LEFT, dayW: dayW, rowH: rowH, TOP: TOP, bodyH: bodyH, L: L, rm: RM, rows: VR ? VR.rows : null, W: W, visD: visD, RIGHT: RIGHT };
     gVisEl.value = Math.min(gVisW, N_WEEKS);
     { const need = visD < calLen(); fH.hidden = !need; if (need) { const cw = fH.clientWidth || W; fHi.style.width = Math.round(cw * calLen() / visD) + 'px'; const sl = Math.round(gOff * cw / visD); if (Math.abs(fH.scrollLeft - sl) > 1) { fSyncing = true; fH.scrollLeft = sl; } } }
@@ -1391,7 +1391,7 @@ function qlMatch(name, leaves) {
   let gTxt = false; // janatekstit (rivin nimi palkin perässä) Ganttissa
   let gEntryGrp = null; // syöttörivin ryhmä: uudet tehtävät syntyvät tämän ylätehtävän alle (sisennys Tabilla)
   let gEntry = false; // Gantin syöttörivi: tyhjä rivi listan lopussa, johon kirjoitettu nimi luo tehtävän
-  let gPrint = null, prtBot = false, view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
+  let gPrint = null, gPrintW = null, gPrintRowH = null, prtBot = false, view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
   let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
@@ -1632,8 +1632,8 @@ function qlMatch(name, leaves) {
   }
   function buildPrintDoc(pk, interactive, o) { // o.fit: koko aikataulu (koko aikaväli, kaikki rivit) yhdelle sivulle
     o = o || {}; if (!o.fit) return buildPrintDocI(pk, interactive, o);
-    const v = gVisW, off = gOff; gVisW = N_WEEKS; gOff = 0;
-    try { render(); return buildPrintDocI(pk, interactive, o); } finally { gVisW = v; gOff = off; render(); }
+    const v = gVisW, off = gOff; gVisW = Math.min(N_WEEKS, Math.max(4, weekOf(Math.max.apply(null, lines.length ? lines.map(lineEnd) : [1]) - 1) + 1)); gOff = 0; // aikaväli: aikataulun loppuun asti
+    try { render(); return buildPrintDocI(pk, interactive, o); } finally { gVisW = v; gOff = off; gPrintW = null; gPrintRowH = null; render(); }
   }
   function buildPrintDocI(pk, interactive, o) {
     o = o || {}; const dim = PAPER[pk] || PAPER.A4, M = 10; let pw = dim[0], ph = dim[1], land = true;
@@ -1644,6 +1644,11 @@ function qlMatch(name, leaves) {
     const bw = pw - 2 * M, bh = ph - 2 * M, avail = bh - 12 - 6 - 9 - 4, pages = [];
     const used = []; lines.forEach(l => { const t = trade(l.trade); if (t && used.indexOf(t.id) < 0) used.push(t.id); });
     const legend = '<div class="leg">' + used.map(id => '<span><i style="background:' + colorOf(id) + '"></i>' + esc(trade(id).name) + '</span>').join('') + '</div>';
+    if (o.fit && view === 'gantt' && gGeo) { // täyttää sivun: leveämpi aikajana tai korkeammat rivit, ei tyhjää tilaa
+      const g0 = gGeo, HEAD0 = +gHead.getAttribute('height'), hk0 = o.bot ? 2 : 1, n0 = Math.max(1, gRows.length), sH = avail / (HEAD0 * hk0 + n0 * g0.rowH), Wn = bw / sH;
+      if (Wn >= g0.W) gPrintW = Math.min(6000, Math.round(Wn)); else { gPrintW = g0.W; gPrintRowH = Math.max(g0.rowH, Math.floor((avail / (bw / g0.W) - HEAD0 * hk0) / n0)); }
+      renderGantt();
+    }
     if (view === 'gantt' && gGeo) {
       const g = gGeo, HEAD = +gHead.getAttribute('height'), n = gRows.length, hk = o.bot ? 2 : 1, s = o.fit ? Math.min(bw / g.W, avail / (HEAD * hk + n * g.rowH)) : bw / g.W, wmm = g.W * s, perPage = o.fit ? Math.max(1, n) : Math.max(1, Math.floor((avail / s - HEAD * hk) / g.rowH)), hdr = prtSvg(prtClean(gHead), wmm, HEAD * s), botEl = prtClean(gHead); botEl.querySelectorAll('text').forEach(t => { if (parseFloat(t.getAttribute('x')) < g.LEFT - 5) t.remove(); }); botEl.querySelectorAll('g[data-gcm]').forEach(t => t.remove()); const bot = o.bot ? prtSvg(botEl, wmm, HEAD * s) : '';
       const keep = { a: selId, b: selGrp, c: selLoc, d: selDep, e: msel };
@@ -1653,7 +1658,7 @@ function qlMatch(name, leaves) {
     } else {
       const sd0 = showDeps, keep = { a: selId, b: selGrp, c: selLoc, d: selDep, e: msel }; let c;
       selId = null; selGrp = null; selLoc = null; selDep = null; msel = []; showDeps = !!o.deps;
-      prtBot = !!o.bot; try { render(); c = prtClean(svg); } finally { prtBot = false; showDeps = sd0; selId = keep.a; selGrp = keep.b; selLoc = keep.c; selDep = keep.d; msel = keep.e; render(); }
+      prtBot = !!o.bot; try { render(); if (o.fit && G) { const fx = (+svg.getAttribute('height')) - G.L * G.rowH, rh = Math.floor(((+svg.getAttribute('width')) / (bw / avail) - fx) / G.L); if (rh >= 14) { gPrintRowH = rh; render(); } } c = prtClean(svg); } finally { prtBot = false; showDeps = sd0; selId = keep.a; selGrp = keep.b; selLoc = keep.c; selDep = keep.d; msel = keep.e; render(); }
       if (!o.warn) c.querySelectorAll('path[fill="var(--warn)"]').forEach(n => n.remove());
       c.querySelectorAll('rect[fill="var(--band)"]').forEach(n => n.remove());
       const W = +c.getAttribute('width'), H = +c.getAttribute('height'), k = Math.min(bw / W, avail / H);
@@ -1684,7 +1689,7 @@ function qlMatch(name, leaves) {
   function renderGantt() {
     if (view !== 'gantt') return;
     gRows = buildGanttRows();
-    const W = Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = CAL.ax === 'wd' ? 46 : 34, rowH = ROWH[gRowK], RIGHT = 14;
+    const W = gPrintW || Math.max(320, gScroll.clientWidth || Math.floor(gWrap.clientWidth - 12)), narrow = W < 640, HEAD = CAL.ax === 'wd' ? 46 : 34, rowH = gPrintRowH || ROWH[gRowK], RIGHT = 14;
     const NAME = narrow ? 150 : 215, vc = vCols(), cw = narrow ? [] : vc.map(k => COLDEF[k].w).concat(stOn() ? [34] : []).concat(curBl() ? [40] : []).concat(fcOn() ? [40] : []), colX = []; let cx = 12 + NAME; cw.forEach(w => { cx += w; colX.push(cx); });
     const LEFT = cx + 10, visD = Math.min(calLen(), Math.max(calVpw(), gVisW * calVpw())), dayW = (W - LEFT - RIGHT) / visD;
     gOff = clamp(gOff, 0, Math.max(0, calLen() - visD));
@@ -3474,7 +3479,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '192';
+  const APP_BUILD = '193';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

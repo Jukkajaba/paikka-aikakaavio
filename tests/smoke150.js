@@ -36,6 +36,9 @@ const { chromium } = require('playwright');
   ok(await pdfPages(gf, 'prt_fit') === 1, 'sovitettu gantt yksi PDF-sivu');
   ok(await p.evaluate(() => document.getElementById('gVis').value) === '26' || true, 'ok');
   const vis0 = await p.evaluate(() => document.getElementById('gVis').value); await p.evaluate(() => __aik().prtDoc('A4', false, { fit: true })); ok(await p.evaluate(() => document.getElementById('gVis').value) === vis0, 'ruudun aikaväli palautuu');
+  const ff = await p.evaluate(() => { document.getElementById('vFlow').click(); return new Promise(r => setTimeout(() => r(__aik().prtDoc('A4', false, { fit: true, bot: true })), 400)); });
+  ok((ff.match(/<section class="pg"/g) || []).length === 1, 'sovita sivulle: paikka-aika yksi sivu'); await pdfPages(ff, 'prt_fit_flow');
+  ok(await p.evaluate(() => document.querySelectorAll('#chart path[data-role="body"]').length) > 0, 'kaavio palautuu fit-tulostuksen jälkeen');
   // valinta ja piirtotila eivät muutu tulostuksesta
   ok(await p.evaluate(() => __aik().selId) == null || true, 'ok');
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
