@@ -278,6 +278,13 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   #welcome .rc{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--grid2);font-size:13px}
   #impBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
   #impBox.on{display:flex}
+  #schBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
+  #schBox.on{display:flex}
+  #schBox .imp{background:var(--bg,#fff);color:inherit;border:1px solid #888;border-radius:8px;max-width:1100px;width:100%;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  #schBox h2{margin:0 0 6px;font-size:16px}#schBox h3{margin:12px 0 4px;font-size:13px}
+  #schBox textarea{width:100%;height:100px;font:12px monospace;box-sizing:border-box}
+  #schBox table{border-collapse:collapse;font-size:12px;width:100%}#schBox td,#schBox th{border:1px solid #bbb;padding:2px 5px;text-align:left}
+  #schBox .w{color:#b45309}#schBox .row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:4px 0}
   #bugBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:91;display:none;align-items:flex-start;justify-content:center;padding:40px 12px;overflow:auto}
   #bugBox.on{display:flex}
   #bugBox .imp{background:var(--bg,#fff);color:inherit;border:1px solid #888;border-radius:8px;max-width:600px;width:100%;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
@@ -316,6 +323,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
       <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määrät</button>
+      <button id="schBtn" type="button" title="Tuo aikataulu Excelistä/CSV:stä tai vie aikataulu taulukkona">Tuo/vie aikataulu</button>
       <button id="undo" type="button">Kumoa</button>
       <button id="bugBtn" type="button" title="Ilmoita ongelma tai virhe">Ilmoita ongelma</button>
     </div>
@@ -967,6 +975,40 @@ const qlNorm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 function qlMatch(name, leaves) {
   const n = qlNorm(name); let m = leaves.filter(x => qlNorm(x.name) === n); if (m.length) return m.map(x => x.id);
   m = leaves.filter(x => qlNorm(x.own) === n); return m.map(x => x.id);
+}
+// ---- aikataulun tuonti/vienti taulukkona (liittäminen, CSV) ----
+const SCH_ROLES = [['skip', '–'], ['name', 'Tehtävä'], ['code', 'Littera'], ['grp', 'Ylätehtävä'], ['start', 'Alku'], ['end', 'Loppu'], ['dur', 'Kesto (pv)'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['crew', 'Työryhmä'], ['lfrom', 'Sijainti alku'], ['lto', 'Sijainti loppu'], ['loc', 'Sijainti']];
+function schParseDate(s, y0) { // d.m.yyyy, d.m.yy, d.m. (vuosi = y0), yyyy-mm-dd, d/m/yyyy -> ISO tai null
+  s = String(s == null ? '' : s).trim().replace(/^(ma|ti|ke|to|pe|la|su)\.? */i, ''); let m;
+  const iso = (y, mo, d) => { y = +y; mo = +mo; d = +d; if (y < 100) y += 2000; if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null; const t = new Date(Date.UTC(y, mo - 1, d)); return t.getUTCMonth() === mo - 1 ? t.toISOString().slice(0, 10) : null; };
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return iso(m[1], m[2], m[3]);
+  if ((m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/))) return iso(m[3], m[2], m[1]);
+  if ((m = s.match(/^(\d{1,2})\.(\d{1,2})\.?$/)) && y0) return iso(y0, m[2], m[1]);
+  return null;
+}
+function schGuess(grid) {
+  const n = grid.reduce((m, r) => Math.max(m, r.length), 0), first = grid[0] || [], H = [
+    ['lfrom', /^(sijainti ?alku|alkusijainti|alku ?sijainti|from|mistä|alkukerros)$/i], ['lto', /^(sijainti ?loppu|loppusijainti|loppu ?sijainti|to|mihin|loppukerros)$/i],
+    ['code', /^(littera|tunnus|koodi|code|wbs|nro|nr\.?)$/i], ['grp', /^(ylätehtävä|ylatehtava|vaihe|ryhmä|ryhma|group|rakenne|parent|summary)$/i],
+    ['start', /^(alku|alkupvm|alkaa|aloitus|aloitus ?pvm|start|alkupäivä|begin|alkamispäivä)$/i], ['end', /^(loppu|loppupvm|päättyy|valmis|valmistuu|finish|end|loppupäivä|päättymispäivä)$/i],
+    ['dur', /^(kesto|duration|työpäivää|työpäivät|pv|days|kesto \(?pv\)?)$/i], ['qty', /^(määrä|maara|quantity|qty|yhteensä)$/i], ['unit', /^(yksikkö|yks\.?|unit)$/i],
+    ['crew', /^(hlö|henkilöä|työryhmä|crew|miehitys|ryhmä ?koko|henkilömäärä)$/i], ['loc', /^(sijainti|kerros|alue|location|zone|tila|osa-alue)$/i], ['name', /(tehtävä|tehtava|nimi|name|task|suorite|toiminto|kuvaus|activity)/i]];
+  const head = first.some(c => c && H.some(h => h[1].test(String(c).trim()))) ? 0 : -1, roles = [], used = {};
+  for (let j = 0; j < n; j++) { roles[j] = 'skip'; const h = head >= 0 ? String(first[j] || '').trim() : ''; const m = h && H.find(x => x[1].test(h)); if (m && !used[m[0]]) { roles[j] = m[0]; used[m[0]] = true; } }
+  if (head < 0) { const j = (grid[0] || []).findIndex(c => c && !/^[\d.,\s]+$/.test(c)); if (j >= 0) { roles[j] = 'name'; used.name = true; } }
+  return { head: head, roles: roles, names: Array.from({ length: n }, (_, j) => (head >= 0 && first[j]) ? String(first[j]) : 'Sarake ' + (j + 1)) };
+}
+function schBuild(grid, head, roles, y0) { // -> { rows, warn }
+  const rows = [], warn = [], pick = (r, k) => { const j = roles.indexOf(k); return j >= 0 ? String(r[j] == null ? '' : r[j]).trim() : ''; };
+  grid.slice(head >= 0 ? 1 : 0).forEach((r, i) => {
+    const name = pick(r, 'name'); if (!name) return; const ln = i + (head >= 0 ? 2 : 1);
+    const o = { n: ln, name: name, code: pick(r, 'code'), grp: pick(r, 'grp'), unit: pick(r, 'unit'), lfrom: pick(r, 'lfrom'), lto: pick(r, 'lto'), loc: pick(r, 'loc') };
+    ['start', 'end'].forEach(k => { const v = pick(r, k); if (!v) { o[k] = null; return; } o[k] = schParseDate(v, y0); if (!o[k]) warn.push('Rivi ' + ln + ': päivämäärää ei tunnistettu (' + v + ')'); });
+    const d = qlNum(pick(r, 'dur').replace(/\s*(pv|pvä|päivää|d)\.?$/i, '')); o.dur = d != null && d > 0 ? d : null;
+    const q = qlNum(pick(r, 'qty')); o.qty = q != null && q > 0 ? q : null; const c = qlNum(pick(r, 'crew')); o.crew = c != null && c > 0 ? Math.round(c) : null;
+    rows.push(o);
+  });
+  return { rows: rows, warn: warn };
 }
 // </logic>
 
@@ -2093,7 +2135,99 @@ function qlMatch(name, leaves) {
     if (d.xadd != null) { const tr = trade(d.xadd); if (!tr || !t.value || !RES.some(r => r.id === t.value)) return; pushUndo(snapshot()); tr.extra = (tr.extra || []).concat([{ res: t.value, n: 1 }]); render(); return; }
     if (d.xn != null) { const tr = trade(d.xn); if (!tr) return; const main = resIdOf(tr), ex = (tr.extra || []).filter(x => x.res !== main), x = ex[+d.xi], v = +t.value; if (!x || !(v > 0)) return; pushUndo(snapshot()); x.n = Math.round(v * 100) / 100; tr.extra = ex; render(); }
   });
-  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, prtDoc: buildPrintDoc, stateObj: () => stateObj() });
+
+  // ---- aikataulun tuonti ja vienti (taulukko / CSV) ----
+  const SCH = { grid: null, g: null, roles: [], mode: 'tasks' };
+  const schBox = document.createElement('div'); schBox.id = 'schBox';
+  schBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo/vie aikataulu"><h2>Tuo / vie aikataulu</h2>' +
+    '<h3>Vie</h3><div class="row2"><label><input type="radio" name="schM" value="tasks" checked> Yksi rivi / tehtävä</label><label><input type="radio" name="schM" value="locs"> Yksi rivi / tehtävä ja sijainti</label>' +
+    '<button type="button" id="schCopy">Kopioi taulukko (liitä Exceliin)</button><button type="button" id="schCsv">Lataa CSV</button><span id="schOut" class="ok"></span></div>' +
+    '<h3>Tuo</h3><p class="ok" style="margin:0 0 6px">Kopioi Excelistä (tai Tactplanin Grid-näkymästä) taulukko otsikkorivi mukaan ja liitä alle, tai avaa CSV-tiedosto. Tuonti lisää tehtävät nykyisen aikataulun perään. Päivämäärät: 5.1.2027, 5.1. tai 2027-01-05. Rivi, jonka sijainti löytyy projektin sijainneista, tulee sijaintitehtäväksi, muut sijaintittomiksi.</p>' +
+    '<textarea id="schTxt" placeholder="Tehtävä\tAlku\tLoppu\tSijainti alku\tSijainti loppu"></textarea><div class="row2"><button type="button" id="schParse">Jäsennä</button><label>tai CSV-tiedosto <input type="file" id="schFile" accept=".csv,.txt,.tsv"></label><button type="button" id="schClose">Sulje</button></div><div id="schBody"></div></div>';
+  document.body.appendChild(schBox);
+  function schExport(mode) {
+    const H = mode === 'locs' ? ['Littera', 'Ylätehtävä', 'Tehtävä', 'Sijainti', 'Alku', 'Loppu', 'Kesto (pv)', 'Määrä', 'Yksikkö', 'Toteuma %'] : ['Littera', 'Ylätehtävä', 'Tehtävä', 'Alku', 'Loppu', 'Kesto (pv)', 'Sijainti alku', 'Sijainti loppu', 'Määrä', 'Yksikkö', 'Työryhmä', 'Toteuma %'];
+    const rows = [H], dm = ms => { const t = new Date(ms); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.' + t.getUTCFullYear(); }, ds = d => dm(dateOfDay(d)), de = e => dm(dateOfDay(Math.max(0, Math.ceil(e - 1e-9) - 1))), rd = x => Math.round(x * 100) / 100;
+    const ordered = lines.slice().sort((a, b) => (a.ord || 0) - (b.ord || 0));
+    ordered.forEach(l => {
+      const t = trade(l.trade) || {}, gr = gChain(l.grp).map(g => g.name).join(' / '), nm = t.name || '', lit = t.lit || '', ts = tasks(l);
+      if (!ts.length) return;
+      const s0 = Math.min.apply(null, ts.map(k => k.s)), e0 = lineEnd(l), nmOf = (l.flat ? l.name : '') || nm;
+      if (l.flat) { const a = actOf(l, ts[0]); rows.push(mode === 'locs' ? [lit, gr, nm, '', ds(s0), de(e0), rd(e0 - s0), rd(l.qty || 0), t.unit || '', Math.round(a.pct || 0)] : [lit, gr, nm, ds(s0), de(e0), rd(e0 - s0), '', '', rd(l.qty || 0), t.unit || '', crewOf(l), Math.round(a.pct || 0)]); return; }
+      if (mode === 'locs') { ts.forEach(k => { const a = actOf(l, k), lc = LOCS.find(x => x.id === k.locId); rows.push([lit, gr, nm, lc ? lc.name : '', ds(k.s), de(k.e), rd(k.d), rd(k.qty), t.unit || '', Math.round(a.pct || 0)]); }); }
+      else { const a = ts.map(k => actOf(l, k).pct || 0), L = id => (LOCS.find(x => x.id === id) || {}).name || ''; rows.push([lit, gr, nm, ds(s0), de(e0), rd(e0 - s0), L(ts[0].locId), L(ts[ts.length - 1].locId), rd(totalQty(l)), t.unit || '', crewOf(l), Math.round(a.reduce((x, y) => x + y, 0) / a.length)]); }
+    });
+    return rows;
+  }
+  const schTsv = rows => rows.map(r => r.map(c => String(c == null ? '' : c).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\r\n');
+  const schCsv = rows => '﻿' + rows.map(r => r.map(c => { c = String(c == null ? '' : c); return /[;"\r\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(';')).join('\r\n');
+  function schDraw() {
+    const body = schBox.querySelector('#schBody'); if (!SCH.grid) { body.innerHTML = ''; return; }
+    const g = SCH.g, y0 = new Date(cc().s0).getUTCFullYear(), B = schBuild(SCH.grid, g.head, SCH.roles, y0), opt = (v, sel, t) => '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(t) + '</option>';
+    SCH.B = B;
+    let h = '<h3>Sarakkeet</h3><table><tr>' + g.names.map((n, j) => '<th>' + esc(n) + '<br><select data-sr="' + j + '">' + SCH_ROLES.map(r => opt(r[0], SCH.roles[j], r[1])).join('') + '</select></th>').join('') + '</tr>' +
+      SCH.grid.slice(g.head >= 0 ? 1 : 0, (g.head >= 0 ? 1 : 0) + 3).map(r => '<tr>' + g.names.map((n, j) => '<td>' + esc(r[j] || '') + '</td>').join('') + '</tr>').join('') + '</table>';
+    if (!SCH.roles.includes('name')) h += '<p class="w">Valitse jollekin sarakkeelle rooli "Tehtävä".</p>';
+    else h += '<p class="ok">' + B.rows.length + ' tehtävärivi' + (B.rows.length === 1 ? '' : 'ä') + '.</p>' + (B.warn.length ? '<p class="w">' + B.warn.slice(0, 6).map(esc).join('<br>') + (B.warn.length > 6 ? '<br>…' : '') + '</p>' : '') + '<div class="row2"><button type="button" id="schGo"><b>Tuo tehtävät</b></button><span id="schMsg" class="ok"></span></div>';
+    body.innerHTML = h;
+  }
+  function schApply() {
+    const B = SCH.B; if (!B || !B.rows.length) return { n: 0, loc: 0, flat: 0, warn: [] };
+    const leaves = LOCS.map(x => ({ id: x.id, name: x.name, own: (LT.find(n => n.id === x.id) || {}).name })), idx = id => LOCS.findIndex(x => x.id === id), warn = B.warn.slice();
+    const find = nm => { if (!nm) return null; const m = qlMatch(nm, leaves); return m.length ? m[0] : null; };
+    // sijaintirivit samalla tehtävällä (Tehtävä × sijainti -muoto) yhdistetään yhdeksi tehtäväksi
+    const items = [], by = {};
+    B.rows.forEach(r => {
+      const single = r.loc && !r.lfrom && !r.lto, key = single ? r.grp + '|' + r.name : null;
+      if (key && by[key]) { const it = by[key]; it.locs.push(r.loc); if (r.start && (!it.start || r.start < it.start)) it.start = r.start; if (r.end && (!it.end || r.end > it.end)) it.end = r.end; it.qty = (it.qty || 0) + (r.qty || 0) || null; return; }
+      const it = Object.assign({}, r, { locs: single ? [r.loc] : [] }); if (key) by[key] = it; items.push(it);
+    });
+    pushUndo(snapshot()); ensureOrd();
+    let ord = maxOrd(), nLoc = 0, nFlat = 0; const gcache = {};
+    const grpOf = path => { // "A / B" -> ryhmäketju
+      if (!path) return null; let par = null, gid = null;
+      path.split('/').map(x => x.trim()).filter(Boolean).forEach(nm => { const k = (par || '') + '>' + nm; let g = gcache[k] || groups.find(x => x.name === nm && (x.parent || null) === par); if (!g) { g = { id: uid('K'), name: nm, ord: (ord += 10) }; if (par) g.parent = par; groups.push(g); } gcache[k] = g; par = g.id; gid = g.id; });
+      return gid;
+    };
+    let seqS = 0;
+    items.forEach(it => {
+      const ids = []; let ok = true;
+      if (it.locs.length) it.locs.forEach(n => { const id = find(n); if (id) ids.push(id); else ok = false; });
+      else if (it.lfrom || it.lto) { const a = find(it.lfrom || it.lto), b = find(it.lto || it.lfrom); if (a && b) ids.push(a, b); else ok = false; }
+      if (!ok || (it.locs.length || it.lfrom || it.lto) && !ids.length) warn.push('Rivi ' + it.n + ' (' + it.name + '): sijaintia ei löytynyt projektista, tuotu sijaintittomana');
+      const isLoc = ids.length > 0 && ok;
+      let s = it.start ? dayOfIso(it.start, false) : null, e = it.end ? dayOfIso(it.end, true) : null; if (e != null) e += 1;
+      if (s == null && e != null && it.dur) s = Math.max(0, e - it.dur);
+      if (s == null) s = seqS;
+      if (e == null) e = s + (it.dur || 5); if (e <= s) e = s + 1;
+      const t = newTrade(); t.name = it.name.slice(0, isLoc ? 24 : 40); if (it.unit) t.unit = it.unit.slice(0, 6); if (it.qty) t.qty = it.qty; if (it.code && litOf(it.code)) t.lit = litOf(it.code); if (!isLoc) t.flat = true;
+      const l = { id: nextId++, trade: t.id, from: null, to: null, start: s, dur: Math.max(1, e - s), gap: 0, qty: it.qty || t.qty, prod: t.prod, ov: {}, ord: (ord += 10) };
+      if (it.crew) l.agreed = it.crew;
+      if (isLoc) { const ix = ids.map(idx), a = Math.min.apply(null, ix), b = Math.max.apply(null, ix); setSpan(l, s, LOCS[a].id, e, LOCS[b].id); nLoc++; }
+      else { l.flat = true; fit(l); nFlat++; }
+      const g = grpOf(it.grp); if (g) l.grp = g;
+      lines.push(l);
+    });
+    gEnsureRoom(); render();
+    return { n: items.length, loc: nLoc, flat: nFlat, warn: warn };
+  }
+  function schLoad(txt) { SCH.grid = qlParse(txt); if (!SCH.grid.length) { SCH.grid = null; schDraw(); return; } SCH.g = schGuess(SCH.grid); SCH.roles = SCH.g.roles.slice(); schDraw(); }
+  document.getElementById('schBtn').addEventListener('click', () => { schBox.classList.add('on'); });
+  schBox.addEventListener('click', async e => {
+    const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
+    if (e.target === schBox || t.id === 'schClose') { schBox.classList.remove('on'); return; }
+    const mode = (schBox.querySelector('input[name=schM]:checked') || {}).value || 'tasks', out = schBox.querySelector('#schOut');
+    if (t.id === 'schCopy') { const txt = schTsv(schExport(mode)); try { await navigator.clipboard.writeText(txt); out.textContent = 'Kopioitu: liitä Exceliin.'; } catch (er) { schBox.querySelector('#schTxt').value = txt; out.textContent = 'Leikepöytä ei käytössä: taulukko on alla olevassa kentässä, kopioi se sieltä.'; } return; }
+    if (t.id === 'schCsv') { const txt = schCsv(schExport(mode)), fn = (projName || 'aikataulu').replace(/[^\wåäöÅÄÖ-]+/g, '_') + '.csv'; try { if (dl) await dl.save({ filename: fn, data: txt }); else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv' })); a.download = fn; document.body.appendChild(a); a.click(); a.remove(); } out.textContent = 'CSV ladattu.'; } catch (er) { out.textContent = 'Lataus ei onnistunut.'; } return; }
+    if (t.id === 'schParse') { schLoad(schBox.querySelector('#schTxt').value); return; }
+    if (t.id === 'schGo') { const r = schApply(), m = schBox.querySelector('#schMsg'); m.innerHTML = 'Tuotu ' + r.n + ' tehtävää (' + r.loc + ' sijaintitehtävää, ' + r.flat + ' sijaintitonta).' + (r.warn.length ? '<br><span class="w">' + r.warn.slice(0, 6).map(esc).join('<br>') + '</span>' : ''); return; }
+  });
+  schBox.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset && t.dataset.sr != null) { SCH.roles[+t.dataset.sr] = t.value; if (t.value !== 'skip') SCH.roles = SCH.roles.map((r, j) => j !== +t.dataset.sr && r === t.value ? 'skip' : r); schDraw(); return; }
+    if (t.id === 'schFile' && t.files && t.files[0]) { const fr = new FileReader(); fr.onload = () => { let tx = String(fr.result || ''); if (tx.charCodeAt(0) === 0xfeff) tx = tx.slice(1); schBox.querySelector('#schTxt').value = tx; schLoad(tx); }; fr.readAsText(t.files[0], 'utf-8'); }
+  });
+  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, prtDoc: buildPrintDoc, schExport: schExport, schTsv: schTsv, schLoad: schLoad, schApply: schApply, SCH: SCH, stateObj: () => stateObj() });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
@@ -3479,7 +3613,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '193';
+  const APP_BUILD = '194';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
