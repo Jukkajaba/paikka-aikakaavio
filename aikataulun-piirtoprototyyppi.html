@@ -547,7 +547,7 @@ function fit(l) {
   else if (l.lockC == null) { if (!isFinite(l.dur)) l.dur = 5; l.dur = Math.min(l.dur, N_DAYS); while (span(l) > N_DAYS && l.dur > 1 && g++ < 5000) l.dur = Math.max(1, l.dur - Math.max(1, Math.ceil((span(l) - N_DAYS) / Math.max(1, shareW(l))))); }
   l.start = Math.max(0, Math.min(l.start, N_DAYS - span(l)));
 }
-function cleanOv(ov) { const o = {}; for (const k in (ov || {})) { const v = ov[k], c = {}; if (v.name) c.name = v.name; if (v.pct != null) c.pct = v.pct; if (v.as != null) c.as = v.as; if (v.ae != null) c.ae = v.ae; if (v.q != null) c.q = v.q; if (Object.keys(c).length) o[k] = c; } return o; }
+function cleanOv(ov) { const o = {}; for (const k in (ov || {})) { const v = ov[k], c = {}; if (v.name) c.name = v.name; if (v.pct != null) c.pct = v.pct; if (v.as != null) c.as = v.as; if (v.ae != null) c.ae = v.ae; if (Array.isArray(v.hist) && v.hist.length) c.hist = v.hist.filter(q => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])).map(q => [q[0], Math.max(0, Math.min(100, q[1]))]); if (c.hist && !c.hist.length) delete c.hist; if (v.q != null) c.q = v.q; if (Object.keys(c).length) o[k] = c; } return o; }
 function setSpan(l, s, fromId, e, toId) {
   l.from = fromId; l.to = toId; l.total = null; l.lockC = null;
   const r = range(l); let W = 0;
@@ -869,6 +869,17 @@ function actOf(l, k) { // k = tasks()-rivi
   const o = actBox(l, k.locId), pct = Math.max(0, Math.min(100, o.pct || 0));
   return { pct: pct, as: o.as != null ? o.as : (pct > 0 ? k.s : null), ae: o.ae != null ? o.ae : (pct >= 100 ? k.e : null), set: o.pct != null || o.as != null || o.ae != null };
 }
+// toteumahistoria: o.hist = [[päivä, %], ...] (tilanne päivän lopussa); toteumaviiva piirretään pisteiden kautta
+function histSet(o, d, p) { const h = (Array.isArray(o.hist) ? o.hist : []).filter(q => q[0] < d - 1e-9); h.push([d, p]); o.hist = h; } // myöhemmät pisteet kumotaan
+function histSync(o) { const h = o.hist; if (!h || !h.length) { delete o.hist; return; } h.sort((a, b) => a[0] - b[0]); o.pct = h[h.length - 1][1]; if (o.pct < 100) delete o.ae; }
+function actPts(l, k) {
+  const o = actBox(l, k.locId), h = Array.isArray(o.hist) ? o.hist : []; if (!h.length) return null;
+  const a = actOf(l, k); if (a.as == null) return null;
+  const pts = [{ x: a.as, p: 0 }];
+  h.slice().sort((u, v) => u[0] - v[0]).forEach(q => { if (!(a.ae != null && a.pct >= 100 && q[1] >= 100)) pts.push({ x: Math.max(a.as, q[0]), p: q[1] }); });
+  if (a.ae != null && a.pct >= 100) pts.push({ x: Math.max(a.as, a.ae), p: 100 });
+  return pts;
+}
 function pctOfTasks(items) { let d = 0, w = 0; items.forEach(q => { d += q.k.d; w += q.k.d * actOf(q.l, q.k).pct; }); return d ? w / d : 0; }
 const dateOnly = t => t.replace(/^(ma|ti|ke|to|pe) /, '');
 const wkShow = d => wkNo(weekOf(d));
@@ -966,7 +977,7 @@ function qlMatch(name, leaves) {
   const undoBtn = document.getElementById('undo');
   let needRoom = true, newForm = false;
   let impSaved = null, hRes = 'hlo';
-  let mdlTpl = '', lines = [], deps = [], FC = null, fcProd = true, baselines = [], blShow = null, statusDay = null, selGrp = null, nextId = 1, nextDepId = 1, selDep = null, showDeps = true, selId = null, drawTrade = 'levytys', target = 16, tasksOpen = false;
+  let mdlTpl = '', lines = [], deps = [], FC = null, fcProd = true, baselines = [], blShow = null, statusDay = null, stAuto = false, selGrp = null, nextId = 1, nextDepId = 1, selDep = null, showDeps = true, selId = null, drawTrade = 'levytys', target = 16, tasksOpen = false;
   let db = null, dl = null, dbState = 'pending', projId = null, projName = 'Esimerkkihanke', projList = [], baseline = '', saving = false, pendingSave = false, saveTimer = null, suspend = false, statusText = '', confirmDel = null;
   let undoStack = [], drag = null, preview = null, G = null;
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -984,14 +995,14 @@ function qlMatch(name, leaves) {
     ];
   }
   const byId = id => lines.find(l => String(l.id) === String(id));
-  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES, cal: CAL });
+  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, stAuto: stAuto, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES, cal: CAL });
   function syncWeeks() {
     const w = document.getElementById('weeks'), t = document.getElementById('target');
     if (w) w.value = N_WEEKS; if (t) { t.max = N_WEEKS; t.value = target; }
     const pw = document.getElementById('pj-weeks'), pt = document.getElementById('pj-target'); if (pw) pw.value = N_WEEKS; if (pt) { pt.max = N_WEEKS; pt.value = target; }
   }
   function restore(s) {
-    const o = JSON.parse(s); setCal(o.cal); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; statusDay = o.statusDay != null ? o.statusDay : null; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
+    const o = JSON.parse(s); setCal(o.cal); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; statusDay = o.statusDay != null ? o.statusDay : null; stAuto = !!o.stAuto; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
     if (Array.isArray(o.res) && o.res.length) RES = o.res; if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     if (!trade(drawTrade)) drawTrade = TRADES.length ? TRADES[0].id : null;
     if (selId !== null && !byId(selId)) selId = null;
@@ -1268,6 +1279,8 @@ function qlMatch(name, leaves) {
         if (RM && RM[k.loc] < 0) return;
         const a = actOf(l, k); if (a.as == null) return;
         const y0 = asc ? Ybot(k.loc) : Ytop(k.loc), y1 = asc ? Ytop(k.loc) : Ybot(k.loc);
+        const pts = actPts(l, k);
+        if (pts) { pts.forEach((q, i) => { d += (i ? 'L' : 'M') + (i ? XE(q.x) : X(q.x)).toFixed(1) + ' ' + (y0 + (y1 - y0) * q.p / 100).toFixed(1); }); return; }
         const xe = a.ae != null ? a.ae : (statusDay != null ? Math.max(a.as, statusDay) : k.s + (k.e - k.s) * a.pct / 100), ye = a.ae != null ? y1 : y0 + (y1 - y0) * a.pct / 100;
         d += 'M' + X(a.as).toFixed(1) + ' ' + y0 + 'L' + XE(xe).toFixed(1) + ' ' + ye.toFixed(1);
       });
@@ -2437,7 +2450,8 @@ function qlMatch(name, leaves) {
     const dIn = (field, val, lab) => '<span class="lab" style="min-width:52px">' + lab + '</span><input class="num" style="width:128px" type="date" value="' + (val != null ? isoOfDay(field === 'aae' ? val - 1 : val) : '') + '" data-field="' + field + '" data-id="' + l.id + '"' + loc + ' aria-label="' + lab + '">';
     return '<div class="trow"><span class="lab">Valmis</span><input class="num" style="width:56px" type="number" min="0" max="100" step="5" value="' + (o.pct != null ? Math.round(a.pct) : '') + '" placeholder="0" data-field="apct" data-id="' + l.id + '"' + loc + ' aria-label="Valmiusaste prosentteina"><span class="u">%</span>' +
       (a.set ? '<button type="button" data-act="aclear" data-id="' + l.id + '"' + loc + '>Tyhjennä toteuma</button>' : '') + '</div>' +
-      '<div class="trow">' + dIn('aas', a.as, 'Alkoi') + '</div><div class="trow">' + dIn('aae', a.ae, 'Päättyi') + '</div>';
+      '<div class="trow">' + dIn('aas', a.as, 'Alkoi') + '</div><div class="trow">' + dIn('aae', a.ae, 'Päättyi') + '</div>' +
+      (Array.isArray(o.hist) && o.hist.length ? '<div class="lab2" style="margin-top:6px">Toteumahistoria (päivä, valmis %)</div>' + o.hist.map((q, i) => '<div class="trow"><input class="num" style="width:128px" type="date" value="' + isoOfDay(q[0] - 1) + '" data-field="ahd" data-i="' + i + '" data-id="' + l.id + '"' + loc + ' aria-label="Pisteen päivä"><input class="num" style="width:56px" type="number" min="0" max="100" step="5" value="' + Math.round(q[1]) + '" data-field="ahp" data-i="' + i + '" data-id="' + l.id + '"' + loc + ' aria-label="Pisteen valmiusaste"><span class="u">%</span><button type="button" data-act="ahdel" data-i="' + i + '" data-id="' + l.id + '"' + loc + ' aria-label="Poista piste" title="Poista piste">×</button></div>').join('') : '');
   }
   function grpSelect(l) {
     if (!groups.length && !l.grp) return '';
@@ -2719,13 +2733,14 @@ function qlMatch(name, leaves) {
   fcCard.addEventListener('change', e => { if (e.target.id === 'fc-prod') { fcProd = e.target.checked; savePn(); render(); } });
   // tilanne-paneeli: tilannepäivä ja toteuma. Tilanne näkyy kaavioissa vain, kun paneeli on auki.
   const stOn = () => !!vis.st;
+  const todayDay = () => { const t = new Date(), iso = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'), d = dayOfIso(iso, true); return (d == null ? 0 : d) + 1; };
   const stCard = document.getElementById('stCard');
   function renderSt() {
     if (!vis.st) return;
     const act = document.activeElement, fk = act && stCard.contains(act) && act.dataset ? [act.dataset.field, act.dataset.loc, act.id].join('|') : null;
     const tot = []; lines.forEach(l => tasks(l).forEach(k => tot.push({ l: l, k: k })));
     let h = '<div class="row" style="border-top:0;padding-top:0"><label for="st-day">Tilannepäivä</label><span><input id="st-day" class="num" style="width:132px" type="date" value="' + (statusDay != null ? isoOfDay(statusDay - 1) : '') + '"></span></div>' +
-      '<div class="btns" style="border-top:0;padding-top:0"><button type="button" data-st="today">Tänään</button><button type="button" data-st="clear"' + (statusDay != null ? '' : ' disabled') + '>Tyhjennä</button></div>' +
+      '<div class="btns" style="border-top:0;padding-top:0"><button type="button" data-st="today">Tänään</button><button type="button" data-st="clear"' + (statusDay != null ? '' : ' disabled') + '>Tyhjennä</button></div>' + (statusDay != null ? '<div class="row" style="border-top:0;padding-top:0"><label for="st-auto" style="flex:1">Päivitä tänään, kun avaan projektin</label><input id="st-auto" type="checkbox"' + (stAuto ? ' checked' : '') + '></div>' : '') +
       '<p class="ok hlp" style="margin:6px 0 4px">Tilanne näkyy kaavioissa oranssina pystyviivana, valmiusasteena (%) ja toteumaviivoina, kun tämä paneeli on auki. Syötä toteuma valitsemalla viiva tai tehtävä: valmiusaste, toteutunut alku ja loppu.</p><p class="ok" style="margin:6px 0 8px">Valmiusaste yhteensä: <b>' + Math.round(pctOfTasks(tot)) + ' %</b>.</p>';
     const l = byId(selId), gp = !l && selGrp ? groups.find(x => x.id === selGrp) : null;
     let sel = '';
@@ -2749,10 +2764,10 @@ function qlMatch(name, leaves) {
     const sb = stCard.closest('.fp-body'); if (keepTop && sb) sb.scrollTop = 0;
     if (fk) { const ae = stCard.querySelectorAll('[data-field],input'); for (const el of ae) if ([el.dataset.field, el.dataset.loc, el.id].join('|') === fk) { el.focus(); break; } }
   }
-  stCard.addEventListener('change', e => { if (e.target.id === 'st-day') { const d = dayOfIso(e.target.value, true); pushUndo(snapshot()); statusDay = d == null ? null : d + 1; render(); } });
+  stCard.addEventListener('change', e => { if (e.target.id === 'st-day') { const d = dayOfIso(e.target.value, true); pushUndo(snapshot()); statusDay = d == null ? null : d + 1; stAuto = false; render(); } if (e.target.id === 'st-auto') { pushUndo(snapshot()); stAuto = e.target.checked; if (stAuto) statusDay = todayDay(); render(); } });
   stCard.addEventListener('click', e => {
     const bt = e.target.closest('[data-st]'); if (!bt || bt.disabled) return; pushUndo(snapshot());
-    if (bt.dataset.st === 'today') { const d = dayOfIso(new Date().toISOString().slice(0, 10), true); statusDay = (d == null ? 0 : d) + 1; } else statusDay = null;
+    if (bt.dataset.st === 'today') { statusDay = todayDay(); stAuto = true; } else { statusDay = null; stAuto = false; }
     render();
   });
   // baseline-paneeli
@@ -2763,7 +2778,7 @@ function qlMatch(name, leaves) {
     const f = JSON.parse(JSON.stringify(b.full)), old = lines;
     LT = ltFrom(f); syncLocs(); TRADES = f.trades; groups = f.groups || []; deps = f.deps || [];
     lines = f.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
-    lines.forEach(nl => { const ol = old.find(x => x.id === nl.id); if (!ol) return; const cp = (a, c) => { ['pct', 'as', 'ae'].forEach(k => { if (a[k] != null) c[k] = a[k]; else delete c[k]; }); };
+    lines.forEach(nl => { const ol = old.find(x => x.id === nl.id); if (!ol) return; const cp = (a, c) => { ['pct', 'as', 'ae', 'hist'].forEach(k => { if (a[k] != null) c[k] = k === 'hist' ? a[k].map(q => q.slice()) : a[k]; else delete c[k]; }); };
       if (nl.flat) cp(ol, nl); else for (const k in (ol.ov || {})) { const v = ol.ov[k]; if (v.pct != null || v.as != null || v.ae != null) { nl.ov = nl.ov || {}; cp(v, nl.ov[k] = nl.ov[k] || {}); } } });
     nextId = Math.max(nextId, maxNum(lines) + 1); nextDepId = Math.max(nextDepId, maxNum(deps) + 1);
     if (!trade(drawTrade)) drawTrade = TRADES.length ? TRADES[0].id : null;
@@ -3155,7 +3170,8 @@ function qlMatch(name, leaves) {
       const k = tasks(l).find(t => t.locId === ds.loc); if (!k) return;
       releaseTotal(l); ovOf(l, ds.loc).shift = Math.max(-30, snap(k.shift, a === 'tsh+' ? 1 : -1)); fit(l);
     }
-    else if (a === 'aclear') { const k0 = l.flat ? l : ovOf(l, ds.loc); delete k0.pct; delete k0.as; delete k0.ae; }
+    else if (a === 'aclear') { const k0 = l.flat ? l : ovOf(l, ds.loc); delete k0.pct; delete k0.as; delete k0.ae; delete k0.hist; }
+    else if (a === 'ahdel') { const k0 = l.flat ? l : ovOf(l, ds.loc); if (Array.isArray(k0.hist)) { k0.hist.splice(+ds.i, 1); histSync(k0); } }
     else if (a === 'tqreset') { const o = ovOf(l, ds.loc); delete o.q; fit(l); }
     else if (a === 'treset') { const o = ovOf(l, ds.loc); delete o.d; delete o.shift; }
     render();
@@ -3205,10 +3221,14 @@ function qlMatch(name, leaves) {
       const l = byId(id), ks = l && tasks(l), k = ks && (l.flat ? ks[0] : ks.find(x => x.locId === e.target.dataset.loc));
       if (l && k) {
         const o = l.flat ? l : ovOf(l, k.locId), v = e.target.value;
-        if (f === 'apct') { if (v === '') delete o.pct; else { o.pct = clamp(Math.round(parseFloat(v) || 0), 0, 100); if (o.pct > 0 && o.as == null) o.as = k.s; if (o.pct >= 100 && o.ae == null) o.ae = Math.max(k.e, (o.as != null ? o.as : 0) + MIN_D); } }
+        if (f === 'apct') { if (v === '') delete o.pct; else { o.pct = clamp(Math.round(parseFloat(v) || 0), 0, 100); if (o.pct > 0 && o.as == null) o.as = k.s; if (o.pct >= 100 && o.ae == null) o.ae = Math.max(k.e, (o.as != null ? o.as : 0) + MIN_D); histSet(o, statusDay != null ? statusDay : todayDay(), o.pct); } if (v === '') delete o.hist; }
         else if (f === 'aas') { const d = dayOfIso(v, false); if (d == null) delete o.as; else { o.as = d; if (o.pct == null) o.pct = 0; } }
         else { const d = dayOfIso(v, true); if (d == null) delete o.ae; else { o.ae = d + 1; o.pct = 100; if (o.as == null) o.as = Math.min(k.s, d); } }
       }
+    }
+    else if (f === 'ahd' || f === 'ahp') {
+      const l = byId(id), o = l && (l.flat ? l : ovOf(l, e.target.dataset.loc)), q = o && Array.isArray(o.hist) && o.hist[+e.target.dataset.i];
+      if (q) { if (f === 'ahd') { const d = dayOfIso(e.target.value, true); if (d != null) q[0] = d + 1; } else q[1] = clamp(Math.round(parseFloat(e.target.value) || 0), 0, 100); histSync(o); }
     }
     else if (f === 'tname') { const l = byId(id); if (l) { const o = ovOf(l, e.target.dataset.loc); if (txt) o.name = txt.slice(0, 40); else delete o.name; } }
     else if (f === 'locname') { const x = LT.find(q => q.id === id); if (x && txt) { x.name = txt.slice(0, 24); syncLocs(); } }
@@ -3341,7 +3361,7 @@ function qlMatch(name, leaves) {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols, tx: gTxt }, imp: impSaved, res: RES, cal: CAL });
+  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, stAuto: stAuto, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols, tx: gTxt }, imp: impSaved, res: RES, cal: CAL });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -3374,7 +3394,7 @@ function qlMatch(name, leaves) {
     setCal(st.cal); setWeeks(st.weeks || 26);
     LT = ltFrom(st); syncLocs(); TRADES = st.trades;
     lines = st.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
-    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
+    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; stAuto = !!st.stAuto && statusDay != null; if (stAuto) statusDay = todayDay(); target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
     nextId = Math.max(parseInt(st.nextId, 10) || 1, maxNum(lines) + 1);
     nextDepId = Math.max(parseInt(st.nextDepId, 10) || 1, maxNum(deps) + 1);
     _uid = Math.max(_uid, maxNum(LOCS), maxNum(LT), maxNum(TRADES), maxNum(groups), maxNum(baselines));
@@ -3388,7 +3408,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '186';
+  const APP_BUILD = '187';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -3539,7 +3559,7 @@ function qlMatch(name, leaves) {
     if (st) applyState(st);
     else {
       setCal(Object.assign(CAL_DEF(), { hol: true })); if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
-      RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; statusDay = null; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
+      RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; statusDay = null; stAuto = false; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
       selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; gCols = COLDEFAULT.slice(); gTxt = false; try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
     }
     projId = null; projName = name; renderSub(); render(); suspend = false; baseline = ''; try { renderWelcome(); } catch (err) { }
