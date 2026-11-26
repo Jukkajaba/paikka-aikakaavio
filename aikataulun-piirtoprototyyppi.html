@@ -1188,11 +1188,12 @@ function qlMatch(name, leaves) {
     if (stOn() && statusDay != null) { const sx = X(statusDay); p.push('<line x1="' + sx.toFixed(1) + '" x2="' + sx.toFixed(1) + '" y1="' + (22 + hy) + '" y2="' + (histTop + HH) + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"/>'); p.push('<text class="tgtl" x="' + (sx + 5) + '" y="' + (TOP + 12) + '" style="fill:#b86a0c">Tilanne ' + esc(fmtE(statusDay)) + '</text>'); }
     p.push('<rect x="' + LEFT + '" y="' + TOP + '" width="' + (W - LEFT - RIGHT) + '" height="' + bodyH + '" fill="transparent" data-role="bg"/>');
 
+    const gapRow = (a, t) => Math.abs((RM ? RM[t.loc] : t.loc) - (RM ? RM[a.loc] : a.loc)) > 1; // väliin jäävä sijainti puuttuu: ei pystyyhdysviivaa sen läpi
     function pathOf(l, tsArg) {
       const ts0 = mergeRows(tsArg || tasks(l), RM); if (!ts0.length) return ''; const asc = tsArg ? ts0[0].loc <= ts0[ts0.length - 1].loc : range(l).dir >= 0; let d = '';
       ts0.forEach((t, i) => {
         const y0 = asc ? Ybot(t.loc) : Ytop(t.loc), y1 = asc ? Ytop(t.loc) : Ybot(t.loc);
-        d += (i === 0 ? 'M' : 'L') + X(t.s).toFixed(1) + ' ' + y0 + 'L' + XE(t.e).toFixed(1) + ' ' + y1;
+        d += (i === 0 || gapRow(ts0[i - 1], t) ? 'M' : 'L') + X(t.s).toFixed(1) + ' ' + y0 + 'L' + XE(t.e).toFixed(1) + ' ' + y1;
       });
       return d;
     }
@@ -1257,7 +1258,7 @@ function qlMatch(name, leaves) {
     if (FC) vlines().forEach(l => {
       const a = FC.get(l.id), ts = tasks(l); if (!a || !a.length || !a.some((q, i) => ts[i] && (Math.abs(q.s - ts[i].s) > 0.05 || Math.abs(q.e - ts[i].e) > 0.05))) return;
       const asc = range(l).dir >= 0; let d = '';
-      mergeRows(a, RM).forEach((q, i) => { const y0 = asc ? Ybot(q.loc) : Ytop(q.loc), y1 = asc ? Ytop(q.loc) : Ybot(q.loc); d += (i === 0 ? 'M' : 'L') + X(q.s).toFixed(1) + ' ' + y0 + 'L' + XE(q.e).toFixed(1) + ' ' + y1; });
+      const arr0 = mergeRows(a, RM); arr0.forEach((q, i) => { const y0 = asc ? Ybot(q.loc) : Ytop(q.loc), y1 = asc ? Ytop(q.loc) : Ybot(q.loc); d += (i === 0 || gapRow(arr0[i - 1], q) ? 'M' : 'L') + X(q.s).toFixed(1) + ' ' + y0 + 'L' + XE(q.e).toFixed(1) + ' ' + y1; });
       p.push('<path d="' + d + '" fill="none" stroke="' + colorOf(l.trade) + '" stroke-width="3" stroke-dasharray="7 4" stroke-linecap="round" stroke-linejoin="round" opacity=".95" pointer-events="none"><title>Ennuste</title></path>');
     });
     // toteuma: tummat umpiviivat toteutuneiden päivien kohdalla (alku -> loppu tai tilannepäivä, korkeus valmiusasteen mukaan)
@@ -2937,7 +2938,7 @@ function qlMatch(name, leaves) {
         svg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return;
       }
     }
-    if (G.rm && role !== 'body' && role !== 'lbl') { toast('Piirtäminen ja viivan alun tai lopun muutos toimivat vain, kun kaikki sijainnit näkyvät yksittäisinä riveinä (ylin Taso, Näytä: Kaikki)'); return; }
+    if (G.rows && G.rows.some(r => r.coll) && role !== 'body' && role !== 'lbl') { toast('Piirtäminen ja viivan alun tai lopun muutos toimivat vain, kun sijaintiryhmiä ei ole tiivistetty (ylin Taso). Sijaintien rajaus (Näytä) ei estä muokkausta.'); return; }
     if (role === 'body' || role === 'hs' || role === 'he') gEnsureRoom();
     if (role === 'body' || role === 'hs' || role === 'he' || role === 'lbl') {
       const l = byId(el.dataset.id); if (!l) return;
@@ -3387,7 +3388,7 @@ function qlMatch(name, leaves) {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '185';
+  const APP_BUILD = '186';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
