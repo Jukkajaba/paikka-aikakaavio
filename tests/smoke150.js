@@ -17,6 +17,14 @@ const { chromium } = require('playwright');
   ok(await pdfPages(h2, 'prt_gantt') === n2, 'PDF-sivut = dokumentin sivut');
   // sivutus: pieni A4 jakaa pitkän aikataulun useille sivuille
   const rows = await p.evaluate(() => __aik().gRows.length); console.log('rivejä', rows, 'sivuja A4', n2, 'A3', ((await p.evaluate(() => __aik().prtDoc('A3', false))).match(/<section class="pg"/g) || []).length);
+  const hd = await p.evaluate(() => __aik().prtDoc('A4', false, { deps: true, warn: true })), hn = await p.evaluate(() => __aik().prtDoc('A4', false, {}));
+  ok(hd.length > hn.length, 'riippuvuudet mukaan vain valinnalla: ' + hd.length + ' > ' + hn.length);
+  ok(!/<rect[^>]*fill="var\(--band\)"/.test(hn), 'raidoitus pois tulosteesta');
+  await p.click('#vFlow'); await p.waitForTimeout(400);
+  const fd = await p.evaluate(() => __aik().prtDoc('A4', false, { deps: true, warn: true })), fn = await p.evaluate(() => __aik().prtDoc('A4', false, {}));
+  ok(fd.length > fn.length, 'paikka-aika: riippuvuudet/huomiot vain valinnalla: ' + fd.length + ' > ' + fn.length);
+  ok(await p.evaluate(() => document.querySelectorAll('#chart path[data-role="body"]').length) > 0, 'kaavio palautuu tulostuksen jälkeen');
+  await pdfPages(fn, 'prt_flow2');
   // valinta ja piirtotila eivät muutu tulostuksesta
   ok(await p.evaluate(() => __aik().selId) == null || true, 'ok');
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
