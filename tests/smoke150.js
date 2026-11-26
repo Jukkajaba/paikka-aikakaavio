@@ -6,7 +6,7 @@ const { chromium } = require('playwright');
   await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(500);
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   await p.click('#prtBtn'); ok(await p.locator('#prtPop').isVisible(), 'tulostusvalikko aukeaa'); await p.keyboard.press('Escape'); ok(!(await p.locator('#prtPop').isVisible()), 'Esc sulkee');
-  const pdfPages = async (html, name) => { const q = await b.newPage(); await q.setContent(html); await q.waitForTimeout(300); const buf = await q.pdf({ preferCSSPageSize: true, printBackground: true }); require('fs').writeFileSync('/tmp/' + name + '.pdf', buf); await q.screenshot({ path: '/tmp/' + name + '.png' }); await q.close(); return (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length; };
+  const pdfPages = async (html, name) => { const q = await b.newPage(); await q.emulateMedia({ colorScheme: 'dark' }); await q.setContent(html); ok(/^#fff/i.test((await q.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--panel'))).trim()), 'tuloste vaalea myös tummassa tilassa'); await q.waitForTimeout(300); const buf = await q.pdf({ preferCSSPageSize: true, printBackground: true }); require('fs').writeFileSync('/tmp/' + name + '.pdf', buf); await q.screenshot({ path: '/tmp/' + name + '.png' }); await q.close(); return (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length; };
   const h1 = await p.evaluate(() => __aik().prtDoc('A4', false));
   ok(/Esimerkkihanke/.test(h1) && /Paikka-aikakaavio/.test(h1) && /class="leg"/.test(h1) && /Sivu 1 \/ 1/.test(h1), 'paikka-aika-dokumentin sisältö');
   ok(!/<circle[^>]*data-role="he"/.test(h1) && !/stroke="transparent"/.test(h1), 'interaktiiviset elementit pois');
@@ -28,6 +28,9 @@ const { chromium } = require('playwright');
   const fb = await p.evaluate(() => __aik().prtDoc('A4', false, { bot: true })), fnb = await p.evaluate(() => __aik().prtDoc('A4', false, {}));
   const axN = h => (h.match(/class="ax"/g) || []).length; ok(axN(fb) > axN(fnb), 'alakalenteri lisää akselitekstejä: ' + axN(fb) + ' > ' + axN(fnb));
   await pdfPages(fb, 'prt_flow3');
+  const gb = await p.evaluate(() => { document.getElementById('vGantt').click(); return new Promise(r => setTimeout(() => r(__aik().prtDoc('A4', false, { bot: true })), 400)); });
+  ok((gb.match(/class="ax"/g) || []).length > (h2.match(/class="ax"/g) || []).length, 'gantt: alakalenteri lisää akselitekstejä');
+  await pdfPages(gb, 'prt_gantt2');
   // valinta ja piirtotila eivät muutu tulostuksesta
   ok(await p.evaluate(() => __aik().selId) == null || true, 'ok');
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
