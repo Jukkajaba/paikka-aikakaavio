@@ -12,6 +12,9 @@ const { chromium } = require('playwright');
   await p.click('#zIn'); await p.click('#zOut'); await p.waitForTimeout(300);
   const t = await p.evaluate(() => [...document.querySelectorAll('#ganttWrap title')].filter(x => x.textContent === 'Toteuma').length);
   ok(t >= 3, 'toteuma näkyy sijaintirivien lisäksi viivarivillä: ' + t + ' (sijainteja ' + n + ')');
+  await p.selectOption('#gGroup', 'loc'); await p.waitForTimeout(400);
+  const tl = await p.evaluate(() => [...document.querySelectorAll('#ganttWrap title')].filter(x => x.textContent === 'Toteuma').length); ok(tl >= 2, 'toteuma näkyy myös Sijainnin mukaan -ryhmittelyssä: ' + tl);
+  await p.selectOption('#gGroup', 'trade'); await p.waitForTimeout(300);
   // kerrosrivin määrä = alla olevien asuntojen summa
   await p.evaluate(() => { const A = __aik(), st = JSON.parse(JSON.stringify(A.stateObj())); st.lt = [];
     for (let f = 1; f <= 2; f++) { st.lt.push({ id: 'f' + f, name: 'Kerros ' + f, share: 1, par: null }); for (let i = 1; i <= 4; i++) st.lt.push({ id: 'f' + f + 'a' + i, name: 'Asunto ' + i, share: 1, par: 'f' + f }); }
