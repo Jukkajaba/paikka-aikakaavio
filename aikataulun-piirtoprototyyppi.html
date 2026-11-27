@@ -770,7 +770,7 @@ function enforceDeps(lines, deps, freeId) {
     for (let i = 0; i < deps.length; i++) {
       const d = deps[i], A = ep(d.a, 'a'), B = ep(d.b, 'b');
       if (!A || !B) continue;
-      const need = A.e + (d.lag || 0), cur = B.s;
+      const bFree = B.grp ? B.kids.every(k => isFree(k.id)) : isFree(B.l.id), need = A.e + (bFree ? Math.min(d.lag || 0, 0) : (d.lag || 0)), cur = B.s; // vedettävä seuraaja saa mennä kiinni edeltäjään: positiivinen viive ei estä, vaan pienenee vedon päätyttyä (absorbSlack)
       if (cur < need - 1e-9) {
         const room0 = B.grp ? N_DAYS - Math.max.apply(null, B.kids.map(k => lineEnd(k))) : N_DAYS - lineEnd(B.l), delta = Math.min(need - cur, room0);
         if (delta > 1e-9) { if (B.grp) moveKids(B.kids, delta); else shiftTask(B.l, B.i, B.loc, delta); ch = true; }
@@ -3419,6 +3419,10 @@ const XLS = (() => {
       if (!need[k] || n > need[k].n + 1e-9) need[k] = { n: n, b: b.s, deps: [d] }; else if (Math.abs(n - need[k].n) <= 1e-9) need[k].deps.push(d);
     });
     Object.keys(need).forEach(k => { const q = need[k], slack = q.b - q.n, d = q.deps.find(x => x.rigid); if (d && slack > 1e-9) d.lag = clamp(r1((d.lag || 0) + slack), -60, 60); });
+    validDeps().forEach(d => { // seuraaja vedetty lähemmäs edeltäjää kuin viive sallisi: viive pienenee todelliseen väliin (ei alle nollan, ellei se jo ollut negatiivinen)
+      if (String(d.b.l) !== String(id) || !(d.lag > 0)) return; const a = depTask(lines, d.a, 'a'), b = depTask(lines, d.b, 'b'); if (!a || !b) return;
+      const g = r1(b.s - a.e); if (g < d.lag - 1e-9) { d.lag = Math.max(g, 0); if (!d.lag) delete d.lag; }
+    });
   }
   function absorbSlackG(gid) {
     const ds = allDeps().filter(d => isGref(d.b) && d.b.g === gid); if (!ds.length) return;
@@ -3823,7 +3827,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '202';
+  const APP_BUILD = '203';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
