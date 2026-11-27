@@ -10,9 +10,10 @@ const { chromium } = require('playwright');
   await p.fill('#rp-new', 'Kaivinkone'); await p.click('[data-ract="add"]'); await p.waitForTimeout(250);
   ok(await p.locator('[data-ract="show"]').count() === 1, 'graph selector with 2 resources');
   // valittu työlaji (Runko) -> pääresurssi Kaivinkone
-  const rid = await p.evaluate(() => document.querySelector('[data-ract="show"]').value);
+  const rid = await p.evaluate(() => { const o = document.querySelector('[data-ract="show"]').options; return o[o.length - 1].value; });
   const sel = p.locator('.task[style*="outline"] select[data-tm]'); ok(await sel.count() === 1, 'selected trade highlighted');
   await sel.selectOption(rid); await p.waitForTimeout(250);
+  await p.selectOption('[data-ract="show"]', rid); await p.waitForTimeout(250);
   ok(await p.locator('#chart text:has-text("kpl")').count() >= 1, 'graph shows kpl');
   // lisäresurssi: Työntekijät 2 / kone
   await p.locator('.task[style*="outline"] select[data-xadd]').selectOption({ label: 'Työntekijät' }); await p.waitForTimeout(250);

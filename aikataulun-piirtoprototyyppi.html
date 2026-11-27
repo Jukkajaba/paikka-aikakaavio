@@ -2285,7 +2285,7 @@ const XLS = (() => {
     if (a === 'graph') { resMode = resOn ? 'off' : 'on'; try { localStorage.setItem(RKEY, resMode); } catch (err) { } render(); return; }
     if (a === 'add') {
       const nm = (resCard.querySelector('#rp-new').value || '').trim().slice(0, 24), un = ((resCard.querySelector('#rp-unit').value || 'kpl').trim() || 'kpl').slice(0, 6);
-      if (!nm || RES.some(r => r.name.toLowerCase() === nm.toLowerCase())) return; pushUndo(snapshot()); const r = { id: uid('R'), name: nm, unit: un }; RES.push(r); hRes = r.id; render(); return;
+      if (!nm || RES.some(r => r.name.toLowerCase() === nm.toLowerCase())) return; pushUndo(snapshot()); const r = { id: uid('R'), name: nm, unit: un }; RES.push(r); render(); return; // kuvaaja jää nykyiselle resurssityypille (uusi tyyppi on tyhjä, kunnes sitä käytetään tehtävissä)
     }
     if (a === 'del') { const id = b.dataset.rid; if (RES[0].id === id) return; pushUndo(snapshot()); RES = RES.filter(r => r.id !== id); TRADES.forEach(t => { if (t.res === id) delete t.res; if (t.extra) { t.extra = t.extra.filter(x => x.res !== id); if (!t.extra.length) delete t.extra; } }); if (hRes === id) hRes = RES[0].id; render(); return; }
     if (a === 'xdel') { const t = trade(b.dataset.tm); if (!t) return; const main = resIdOf(t); pushUndo(snapshot()); const ex = (t.extra || []).filter(x => x.res !== main); ex.splice(+b.dataset.xi, 1); t.extra = ex; if (!ex.length) delete t.extra; render(); }
@@ -4049,7 +4049,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '231'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '232'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
