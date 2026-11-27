@@ -1860,6 +1860,18 @@ const XLS = (() => {
       const sd0 = showDeps; selId = null; selGrp = null; selLoc = null; selDep = null; msel = []; showDeps = !!o.deps;
       try { for (let a = 0; ; a += perPage) { gPrint = { a: a, b: Math.min(n, a + perPage) }; drawGanttBody(); const c = prtClean(gSvg); prtRows(c, g.W, g.rowH, gPrint.b - gPrint.a); pages.push('<div class="prtg">' + hdr + prtSvg(c, wmm, +c.getAttribute('height') * s) + bot + '</div>'); if (a + perPage >= n) break; } }
       finally { gPrint = null; showDeps = sd0; selId = keep.a; selGrp = keep.b; selLoc = keep.c; selDep = keep.d; msel = keep.e; drawGanttBody(); }
+    } else if (view === 'takt') { // tahti: koko aikataulu (loppuun asti), rivit jaetaan sivuille kuten Ganttissa
+      const keep = { a: selId, b: selGrp, c: selLoc, d: selDep, e: msel, m: new Set(tkMulti), wk: tkWk }, sd0 = showDeps, HEADp = CAL.ax === 'wd' ? 46 : 34, LWp = 150;
+      selId = null; selGrp = null; selLoc = null; selDep = null; msel = []; tkMulti.clear(); showDeps = !!o.deps;
+      try {
+        const endMax = lines.reduce((m, l) => l.flat ? m : Math.max(m, lineEnd(l)), 1), cl = Math.min(calLen(), (Math.ceil(w2cE(endMax) / calVpw()) + 1) * calVpw());
+        tkWk = Math.max(14, Math.floor((1250 - LWp - 16) / cl * calVpw())); tkPrint = { cl: cl }; renderTakt();
+        const Wt = LWp + (+taktR.getAttribute('width')), nR = Math.max(1, LOCS.length), s = bw / Wt, perPage = o.fit ? nR : Math.max(1, Math.floor((avail / s - HEADp) / tkRowH));
+        const part = (y0, h, mmH) => { const box = document.createElement('div'); box.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ' + y0 + ' ' + Wt + ' ' + h + '"><g>' + taktL.innerHTML + '</g><g transform="translate(' + LWp + ',0)">' + taktR.innerHTML + '</g></svg>'; const c = prtClean(box.firstChild); c.querySelectorAll('rect[fill="var(--band)"]').forEach(x => x.remove()); return prtSvg(c, Wt * s, mmH); };
+        const sf = o.fit ? Math.min(s, avail / (HEADp + nR * tkRowH) ) : s;
+        for (let a = 0; a < nR; a += perPage) { const b2 = Math.min(nR, a + perPage), k = o.fit ? sf : s;
+          pages.push('<div class="prtg">' + part(0, HEADp, HEADp * k).replace(/width:[\d.]+mm/, 'width:' + (Wt * k).toFixed(1) + 'mm') + part(HEADp + a * tkRowH, (b2 - a) * tkRowH, (b2 - a) * tkRowH * k).replace(/width:[\d.]+mm/, 'width:' + (Wt * k).toFixed(1) + 'mm') + '</div>'); }
+      } finally { tkPrint = null; tkWk = keep.wk; showDeps = sd0; selId = keep.a; selGrp = keep.b; selLoc = keep.c; selDep = keep.d; msel = keep.e; keep.m.forEach(x => tkMulti.add(x)); renderTakt(); }
     } else {
       const sd0 = showDeps, keep = { a: selId, b: selGrp, c: selLoc, d: selDep, e: msel }; let c;
       selId = null; selGrp = null; selLoc = null; selDep = null; msel = []; showDeps = !!o.deps;
@@ -1869,14 +1881,14 @@ const XLS = (() => {
       const W = +c.getAttribute('width'), H = +c.getAttribute('height'), k = Math.min(bw / W, avail / H);
       pages.push(prtSvg(c, W * k, H * k));
     }
-    const vname = view === 'gantt' ? 'Aikataulu (Gantt)' : 'Paikka-aikakaavio', today = new Date().toLocaleDateString('fi-FI'), st = stOn() && statusDay != null ? ' · Tilanne ' + fmtE(statusDay) : '';
+    const vname = view === 'gantt' ? 'Aikataulu (Gantt)' : view === 'takt' ? 'Tahtiaikataulu' : 'Paikka-aikakaavio', today = new Date().toLocaleDateString('fi-FI'), st = stOn() && statusDay != null ? ' · Tilanne ' + fmtE(statusDay) : '';
     const css = [].map.call(document.querySelectorAll('style'), x => x.textContent).join('\n'), rm = css.match(/:root\s*\{([^}]*)\}/), light = rm ? 'html:root, html:root[data-theme]{' + rm[1] + '}html:root,html:root[data-theme]{--muted:#2F3B40;--grid:#DCE3E6;--grid2:#7F8D93}svg line[stroke="var(--grid2)"]{stroke-width:1.3px}svg text.ax,svg text.gce{fill:#1B2529}svg text.loc,svg text.gc{fill:#000}svg text.loc{font-weight:700}' : '';
     const body = pages.map((p, i) => '<section class="pg"><div class="ph"><b>' + esc(projName) + '</b><span>' + vname + st + '</span></div>' + p + legend + '<div class="pf"><span>Tulostettu ' + today + '</span><span>Sivu ' + (i + 1) + ' / ' + pages.length + '</span></div></section>').join('');
     const pcss = '@page{size:' + pk + (land ? ' landscape' : ' portrait') + ';margin:' + M + 'mm}html,body{background:#fff!important;color:#1B2529;margin:0;padding:0;min-height:0}body{font:12px/1.3 system-ui,sans-serif;display:block}.pg{box-sizing:border-box;height:' + bh + 'mm;width:' + bw + 'mm;display:flex;flex-direction:column;break-after:page;page-break-after:always;overflow:hidden}.pg:last-of-type{break-after:auto;page-break-after:auto}.pg>*{flex-shrink:0}.pg svg{display:block;max-height:none}.ph{display:flex;justify-content:space-between;font-size:13px;border-bottom:.3mm solid #8a959a;padding-bottom:1.5mm;margin-bottom:2mm;height:7mm;box-sizing:content-box}.pf{margin-top:auto;display:flex;justify-content:space-between;font-size:10px;color:#555;height:6mm}.leg{display:flex;flex-wrap:wrap;gap:1mm 4mm;font-size:10px;margin-top:2mm;height:9mm;overflow:hidden;align-content:flex-start}.leg i{display:inline-block;width:3mm;height:3mm;margin-right:1mm;vertical-align:-.5mm;border-radius:.5mm}.noprint{padding:6px 10px}@media print{.noprint{display:none}}@media screen{html,body{background:#e9eef0!important}.pg{background:#fff;margin:8mm auto;padding:' + M + 'mm;width:' + pw + 'mm;height:' + ph + 'mm;box-shadow:0 1px 6px rgba(0,0,0,.25)}}';
     return '<!DOCTYPE html><html lang="fi" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>' + esc(projName) + ' – ' + vname + '</title><style>' + css + '\n' + light + '\n' + pcss + '</style></head><body>' + (interactive ? '<div class="noprint"><button onclick="window.print()">Tulosta</button> <span>Valitse tulostimeksi "Tallenna PDF:ksi", jos haluat PDF-tiedoston.</span></div>' : '') + body + '</body></html>';
   }
   const prtPop = document.getElementById('prtPop'), prtBtn = document.getElementById('prtBtn');
-  const prtOpen = o => { prtPop.hidden = !o; prtBtn.setAttribute('aria-expanded', String(o)); if (o) document.getElementById('prtHint').textContent = view === 'gantt' ? 'Tulostaa koko Gantt-aikataulun, rivit jaetaan sivuille. Aikaväli on se, joka näkyy ruudulla (Näkyvillä vk). Sovita sivulle: koko aikaväli ja kaikki rivit yhdelle sivulle.' : 'Tulostaa Paikka-aika-kaavion siltä aikaväliltä, joka näkyy ruudulla (säädä Zoomaa-napeilla tai Sovita näyttöön).'; };
+  const prtOpen = o => { prtPop.hidden = !o; prtBtn.setAttribute('aria-expanded', String(o)); if (o) document.getElementById('prtHint').textContent = view === 'takt' ? 'Tulostaa koko tahtiaikataulun alusta loppuun, sijaintirivit jaetaan sivuille. Sovita sivulle: kaikki rivit yhdelle sivulle. Riippuvuudet-valinta tuo nuolet mukaan.' : view === 'gantt' ? 'Tulostaa koko Gantt-aikataulun, rivit jaetaan sivuille. Aikaväli on se, joka näkyy ruudulla (Näkyvillä vk). Sovita sivulle: koko aikaväli ja kaikki rivit yhdelle sivulle.' : 'Tulostaa Paikka-aika-kaavion siltä aikaväliltä, joka näkyy ruudulla (säädä Zoomaa-napeilla tai Sovita näyttöön).'; };
   const prtOpts = () => ({ deps: document.getElementById('prtDeps').checked, warn: document.getElementById('prtWarn').checked, bot: document.getElementById('prtBot').checked, fit: document.getElementById('prtFit').checked });
   prtBtn.addEventListener('click', () => prtOpen(prtPop.hidden));
   document.addEventListener('pointerdown', e => { if (!prtPop.hidden && !e.target.closest('#prtWrap')) prtOpen(false); });
@@ -1888,7 +1900,7 @@ const XLS = (() => {
     document.body.appendChild(f);
   });
   document.getElementById('prtDl').addEventListener('click', async () => {
-    const html = buildPrintDoc(document.getElementById('prtPaper').value, true, prtOpts()), fn = (projName || 'aikataulu').replace(/[^\wåäöÅÄÖ-]+/g, '_') + (view === 'gantt' ? '-gantt' : '-paikka-aika') + '.html'; prtOpen(false);
+    const html = buildPrintDoc(document.getElementById('prtPaper').value, true, prtOpts()), fn = (projName || 'aikataulu').replace(/[^\wåäöÅÄÖ-]+/g, '_') + (view === 'gantt' ? '-gantt' : view === 'takt' ? '-tahti' : '-paikka-aika') + '.html'; prtOpen(false);
     try { if (dl) await dl.save({ filename: fn, data: html }); else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = fn; document.body.appendChild(a); a.click(); a.remove(); } toast('Tiedosto ladattu: avaa se selaimessa ja valitse Tulosta.'); } catch (err) { toast('Lataus ei onnistunut'); }
   });
   function renderGantt() {
@@ -2777,7 +2789,7 @@ const XLS = (() => {
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
   const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä tyhjään kohtaan luodaksesi uuden tehtävän (alku- ja loppusijainti sekä aika vedolla). Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko). Tilanne-paneeli auki: kaksoisklikkaus kirjaa valmiiksi, valitun laatikon nuppia vetämällä asetat valmiusasteen, Ctrl+klikkaus valitsee useita ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
-  let tkWk = 70, tkRowH = 44, tkHead = 34, tkMulti = new Set(), tkLast = null, tkWin = null;
+  let tkWk = 70, tkRowH = 44, tkHead = 34, tkMulti = new Set(), tkLast = null, tkWin = null, tkPrint = null;
   const tkKey = (l, loc) => l + '|' + loc;
   let lohkoN = 3;
   function linPart(w, n) { // peräkkäisten painojen jako n osaan niin, että suurin osasumma on mahdollisimman pieni (palauttaa osien alkuindeksit)
@@ -2821,11 +2833,11 @@ const XLS = (() => {
   };
   function renderTakt() {
     if (view !== 'takt') return;
-    const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
+    const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = tkPrint ? tkPrint.cl : calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
     const XC = c => c * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), rowOf = i => i, yOf = i => HEAD + rowOf(i) * tkRowH, hp = [], p = [], lp = [];
     const weekPx = tkWk, step = weekPx < 36 ? 4 : weekPx < 56 ? 2 : 1;
     // virtualisointi: piirretään vain näkyvä alue (+ reunus), jotta iso projekti (tuhansia laatikoita) pysyy sujuvana
-    const bx0 = document.getElementById('taktBox'), vw = bx0 ? bx0.clientWidth : 0, virt = vw > 0;
+    const bx0 = document.getElementById('taktBox'), vw = bx0 ? bx0.clientWidth : 0, virt = vw > 0 && !tkPrint;
     let wr0 = 0, wr1 = n - 1, wc0 = -1e9, wc1 = 1e9;
     if (virt) { const sl = bx0.scrollLeft, st = bx0.scrollTop, vh = bx0.clientHeight; wr0 = Math.max(0, Math.floor((st - HEAD) / tkRowH) - 4); wr1 = Math.min(n - 1, Math.ceil((st + vh - HEAD) / tkRowH) + 4); wc0 = (sl - 400) / dayW; wc1 = (sl + vw + 400) / dayW; tkWin = { r0: wr0, r1: wr1, x0: sl - 400, x1: sl + vw + 400, n: n, head: HEAD }; } else tkWin = null;
     for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) {
@@ -4059,7 +4071,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '233'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '234'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
