@@ -324,6 +324,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
       <button id="fitBtn" type="button" class="chip" aria-pressed="false" title="Sovita näkymä koko näytön kokoiseksi: leveä asettelu ja kaavion korkeus ikkunan mukaan">Sovita näyttöön</button>
       <button id="depToggle" type="button" class="chip" aria-pressed="true">Riippuvuudet</button>
       <button id="resBtn" type="button" class="chip" aria-pressed="true" title="Resurssit-paneeli: resurssityypit, työlajien resurssit ja resurssikuvaaja">Resurssit</button>
+      <button id="depRigid" type="button" title="Asettaa kaikki riippuvuudet seuraamaan edeltäjää myös aikaisemmaksi («Seuraa edeltäjää myös aikaisemmaksi»). Nykyiset ajat säilyvät: olemassa oleva väli muutetaan viiveeksi (Kumoa palauttaa)">Kaikki seuraa</button>
       <button id="depClear" type="button" title="Poistaa kaikki riippuvuudet (Kumoa palauttaa)">Poista riippuvuudet</button>
       <button id="projBtn" type="button" class="chip" aria-pressed="false" title="Projektit-paneeli">Projektit</button>
       <button id="impBtn" type="button" title="Tuo määräluettelo Excelistä (liittämällä)">Tuo määrät</button>
@@ -1867,7 +1868,13 @@ const XLS = (() => {
         const endMax = lines.reduce((m, l) => l.flat ? m : Math.max(m, lineEnd(l)), 1), cl = Math.min(calLen(), (Math.ceil(w2cE(endMax) / calVpw()) + 1) * calVpw());
         tkWk = Math.max(14, Math.floor((1250 - LWp - 16) / cl * calVpw())); tkPrint = { cl: cl }; renderTakt();
         const Wt = LWp + (+taktR.getAttribute('width')), nR = Math.max(1, LOCS.length), s = bw / Wt, perPage = o.fit ? nR : Math.max(1, Math.floor((avail / s - HEADp) / tkRowH));
-        const part = (y0, h, mmH) => { const box = document.createElement('div'); box.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ' + y0 + ' ' + Wt + ' ' + h + '"><g>' + taktL.innerHTML + '</g><g transform="translate(' + LWp + ',0)">' + taktR.innerHTML + '</g></svg>'; const c = prtClean(box.firstChild); c.querySelectorAll('rect[fill="var(--band)"]').forEach(x => x.remove()); return prtSvg(c, Wt * s, mmH); };
+        const part = (y0, h, mmH) => { const box = document.createElement('div'); box.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ' + y0 + ' ' + Wt + ' ' + h + '"><g>' + taktL.innerHTML + '</g><g transform="translate(' + LWp + ',0)">' + taktR.innerHTML + '</g></svg>'; const c = prtClean(box.firstChild); c.querySelectorAll('rect[fill="var(--band)"]').forEach(x => x.remove());
+          c.querySelectorAll('g > *').forEach(x => { // pidä vain sivun korkeusvälille osuvat elementit (muuten jokainen sivu sisältäisi koko kaavion)
+            let a1 = null, a2 = null; const g = n => x.hasAttribute(n) ? parseFloat(x.getAttribute(n)) : null, tg = x.tagName;
+            if (tg === 'line') { a1 = Math.min(g('y1'), g('y2')); a2 = Math.max(g('y1'), g('y2')); } else if (tg === 'text') { a1 = a2 = g('y'); } else if (tg === 'rect') { a1 = g('y'); a2 = a1 + (g('height') || 0); }
+            else if (tg === 'path' && /^[MLZ\d\s.,-]+$/.test(x.getAttribute('d') || '')) { const n = (x.getAttribute('d').match(/-?\d+\.?\d*/g) || []).map(Number).filter((v, i) => i % 2 === 1); if (n.length) { a1 = Math.min.apply(null, n); a2 = Math.max.apply(null, n); } }
+            if (a1 != null && isFinite(a1) && isFinite(a2) && (a2 < y0 - 2 || a1 > y0 + h + 2)) x.remove(); });
+          return prtSvg(c, Wt * s, mmH); };
         const sf = o.fit ? Math.min(s, avail / (HEADp + nR * tkRowH) ) : s;
         for (let a = 0; a < nR; a += perPage) { const b2 = Math.min(nR, a + perPage), k = o.fit ? sf : s;
           pages.push('<div class="prtg">' + part(0, HEADp, HEADp * k).replace(/width:[\d.]+mm/, 'width:' + (Wt * k).toFixed(1) + 'mm') + part(HEADp + a * tkRowH, (b2 - a) * tkRowH, (b2 - a) * tkRowH * k).replace(/width:[\d.]+mm/, 'width:' + (Wt * k).toFixed(1) + 'mm') + '</div>'); }
@@ -4074,7 +4081,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '236'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '238'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -4356,6 +4363,12 @@ const XLS = (() => {
   const depBtn = document.getElementById('depToggle');
   const syncDep = () => depBtn.setAttribute('aria-pressed', String(showDeps));
   depBtn.addEventListener('click', () => { showDeps = !showDeps; if (!showDeps) selDep = null; syncDep(); savePn(); render(); });
+  document.getElementById('depRigid').addEventListener('click', () => { // kaikki riippuvuudet "seuraa myös aikaisemmaksi"; olemassa oleva väli säilyy viiveenä
+    const todo = deps.filter(d => !d.rigid); if (!todo.length) { toast('Kaikki riippuvuudet seuraavat jo aikaisemmaksi'); return; }
+    pushUndo(snapshot()); todo.forEach(d => { d.rigid = true; });
+    const ids = new Set(), gs = new Set(); deps.forEach(d => { if (isGref(d.b)) gs.add(d.b.g); else ids.add(d.b.l); });
+    ids.forEach(id => absorbSlack(id)); gs.forEach(g => absorbSlackG(g)); render(); toast(todo.length + ' riippuvuutta seuraa nyt myös aikaisemmaksi');
+  });
   document.getElementById('depClear').addEventListener('click', () => { if (!deps.length) return; pushUndo(snapshot()); deps = []; selDep = null; render(); });
   lines = seed(); deps = seedDeps(); syncDep(); renderSub(); render(); renderToggles(); placeAll(); baseline = stateJson(); renderProj(); initDb();
 })();

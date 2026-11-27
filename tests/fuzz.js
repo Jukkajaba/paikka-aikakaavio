@@ -21,6 +21,7 @@ const INV = () => {
   });
   A.deps.forEach(d => ['a', 'b'].forEach(k => { const r = d[k]; if (r.g != null ? !gid.has(r.g) : !lid.has(String(r.l))) e.push('dep ref missing'); }));
   const html = document.getElementById('chart').outerHTML; if (/NaN|undefined|Infinity/.test(html)) e.push('chart has NaN/undefined/Infinity');
+  const tr = document.getElementById('taktR'); if (tr && /NaN|undefined|Infinity/.test(tr.outerHTML)) e.push('takt has NaN/undefined/Infinity');
   const g = document.getElementById('gantt'); if (g && /NaN|undefined|Infinity/.test(g.outerHTML)) e.push('gantt has NaN/undefined/Infinity');
   const tx = document.body.innerText; if (/\bNaN\b|undefined|Infinity/.test(tx)) e.push('text has NaN/undefined: ' + (tx.match(/.{0,25}(NaN|undefined|Infinity).{0,15}/) || [''])[0].replace(/\n/g, ' '));
   try { JSON.stringify(A.stateObj()); } catch (x) { e.push('state not serialisable'); }
@@ -49,14 +50,14 @@ const INV = () => {
         const n = await p.evaluate(() => { const els = [...document.querySelectorAll('input[type=checkbox],input[type=radio]')].filter(e => e.offsetParent !== null && !e.closest('#impBox') && !e.disabled); window.__els = els; return els.length; });
         if (n) { const k = Math.floor(rnd() * n); desc = 'check ' + await p.evaluate(k => { const e = window.__els[k]; e.click(); return e.dataset.field || e.id || e.name; }, k); }
       } else if (r < 0.86) { // piirtoalue: klikkaus tai vedon aloitus satunnaisesta kohdasta
-        const box = await p.evaluate(() => { const e = document.getElementById('chart').offsetParent ? document.getElementById('chart') : document.getElementById('gantt'); if (!e) return null; const q = e.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; });
-        if (box && box.w > 50) { const x = box.x + 60 + rnd() * (box.w - 80), y = box.y + 30 + rnd() * Math.max(20, box.h - 50), x2 = x + (rnd() - 0.5) * 300, y2 = y + (rnd() - 0.5) * 120, mod = rnd() < 0.15 ? 'Control' : rnd() < 0.1 ? 'Shift' : null;
+        const box = await p.evaluate(() => { const tk = document.getElementById('taktR'), e = tk && tk.offsetParent ? tk : document.getElementById('chart').offsetParent ? document.getElementById('chart') : document.getElementById('gantt'); if (!e) return null; const q = e.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; });
+        if (box && box.w > 50) { const x = box.x + 60 + rnd() * (box.w - 80), y = box.y + 30 + rnd() * Math.max(20, box.h - 50), x2 = x + (rnd() - 0.5) * 300, y2 = y + (rnd() - 0.5) * 120, mod = rnd() < 0.15 ? 'Control' : rnd() < 0.1 ? 'Shift' : rnd() < 0.08 ? 'Alt' : null;
           desc = 'drag ' + Math.round(x) + ',' + Math.round(y) + '→' + Math.round(x2) + ',' + Math.round(y2) + (mod ? ' +' + mod : ''); if (mod) await p.keyboard.down(mod);
           await p.mouse.move(x, y); await p.mouse.down(); await p.mouse.move(x2, y2, { steps: 4 }); await p.mouse.up(); if (mod) await p.keyboard.up(mod);
           if (rnd() < 0.3) { await p.mouse.click(x2, y2); await p.mouse.click(x2, y2); desc += ' +dbl'; } }
       } else if (r < 0.90) { desc = 'import'; await p.evaluate(txt => { document.getElementById('impBtn').click(); document.getElementById('impTxt').value = txt; document.getElementById('impParse').click(); document.getElementById('impGo').click(); document.getElementById('impBox').classList.remove('on'); }, pick(SAMPLE)); }
       else if (r < 0.94) { desc = 'undo'; await p.evaluate(() => document.getElementById('undo').click()); }
-      else { const v = pick(['vFlow', 'vGantt']); desc = 'view ' + v; await p.evaluate(v => document.getElementById(v).click(), v); }
+      else { const v = pick(['vFlow', 'vGantt', 'vTakt', 'vTakt']); desc = 'view ' + v; await p.evaluate(v => document.getElementById(v).click(), v); }
     } catch (err) { desc += ' [driver: ' + err.message.split('\n')[0] + ']'; }
     trace.push(desc); try { await p.waitForTimeout(25); } catch (err) { console.log('CRASH seed', SEED, 'step', i, err.message.split('\n')[0], '\n  trace(last 8): ' + trace.slice(-8).join(' | ')); process.exit(1); }
     let e = []; try { e = await p.evaluate(INV); } catch (err) { e = ['inv throw ' + err.message]; }
