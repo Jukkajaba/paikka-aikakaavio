@@ -118,32 +118,50 @@
    {
     "id": "l1",
     "name": "Kerros 1",
-    "share": 1
+    "share": 1,
+    "path": [
+     "l1"
+    ]
    },
    {
     "id": "l2",
     "name": "Kerros 2",
-    "share": 1
+    "share": 1,
+    "path": [
+     "l2"
+    ]
    },
    {
     "id": "l3",
     "name": "Kerros 3",
-    "share": 1
+    "share": 1,
+    "path": [
+     "l3"
+    ]
    },
    {
     "id": "l4",
     "name": "Kerros 4",
-    "share": 1
+    "share": 1,
+    "path": [
+     "l4"
+    ]
    },
    {
     "id": "l5",
     "name": "Kerros 5",
-    "share": 1
+    "share": 1,
+    "path": [
+     "l5"
+    ]
    },
    {
     "id": "l6",
     "name": "Kerros 6",
-    "share": 1
+    "share": 1,
+    "path": [
+     "l6"
+    ]
    }
   ],
   "lt": [

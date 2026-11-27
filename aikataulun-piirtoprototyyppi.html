@@ -417,7 +417,7 @@ function syncLocs() {
     let ch = false; leaves.forEach((n, i) => { if (cnt.get(str(i)) > 1 && d[i] < chain[i].length) { d[i]++; ch = true; } });
     if (!ch) break;
   }
-  LOCS = leaves.map((n, i) => ({ id: n.id, name: str(i), share: n.share }));
+  LOCS = leaves.map((n, i) => { const path = [n.id]; let q = n.par ? byId.get(n.par) : null; while (q) { path.unshift(q.id); q = q.par ? byId.get(q.par) : null; } return { id: n.id, name: str(i), share: n.share, path: path }; });
 }
 syncLocs();
 // näkymätaso: supistetut solmut (coll) näkyvät yhtenä rivinä; map = lehtisijainnin indeksi -> rivi
@@ -547,15 +547,33 @@ function tasks(l) {
 }
 function tasksCalc(l) {
   const r = range(l), out = [], lc = l.lockC != null ? l.lockC : null, dist = (l.total != null && lc == null) ? distribute(l, r) : null, q = effQty(l); let prevEnd = 0, prevS = 0;
+  const ta = (!l.flat && l.ta != null) ? l.ta : null; // tahtialue: puun taso, jonka alueet ajoitetaan yhtenä jaksona (null = hienoin taso eli lehdet)
+  const units = [];
   for (let k = 0; k < r.n; k++) {
-    const idx = rat(r, k), loc = locAt(idx), o = (l.ov && l.ov[loc.id]) || {}, qk = o.q != null ? o.q : q * shr(l, loc);
-    const d = Math.min(N_DAYS, o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(qk / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc))))));
-    const sh = k === 0 ? 0 : (o.shift || 0);
-    const s = k === 0 ? l.start : r1(Math.max(prevS, prevEnd + l.gap + sh)); // negatiivinen viive = päällekkäisyys, mutta ei ennen edellisen alkua
-    const crew = (lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(qk / l.prod / d - 1e-9));
-    out.push({ loc: idx, locId: loc.id, s: s, e: r1(s + d), d: d, crew: crew, name: o.name || '', ovd: o.d != null, shift: sh, qty: qk });
-    prevEnd = r1(s + d); prevS = s;
+    const loc = locAt(rat(r, k)), key = ta == null || !loc.path ? loc.id : loc.path[Math.min(ta, loc.path.length - 1)], lu = units[units.length - 1];
+    if (ta != null && lu && lu.key === key) lu.ks.push(k); else units.push({ key: key, ks: [k] });
   }
+  units.forEach((u, ui) => {
+    const mem = u.ks.map(k => {
+      const idx = rat(r, k), loc = locAt(idx), o = (l.ov && l.ov[loc.id]) || {}, qk = o.q != null ? o.q : q * shr(l, loc);
+      const d = Math.min(N_DAYS, o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(qk / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc))))));
+      return { idx: idx, loc: loc, o: o, qk: qk, d: d };
+    });
+    const grouped = ta != null && (mem.length > 1 || u.key !== mem[0].loc.id), o = grouped ? ((l.ov && l.ov[u.key]) || {}) : mem[0].o;
+    const d = grouped ? Math.min(N_DAYS, o.d != null ? o.d : mem.reduce((a, m) => a + m.d, 0)) : mem[0].d;
+    const sh = ui === 0 ? 0 : (o.shift || 0);
+    const s = ui === 0 ? l.start : r1(Math.max(prevS, prevEnd + l.gap + sh)); // negatiivinen viive = päällekkäisyys, mutta ei ennen edellisen alkua
+    const qs = mem.reduce((a, m) => a + m.qk, 0), G = (lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(qs / l.prod / d - 1e-9));
+    let cr = mem.map(() => G);
+    if (grouped) { // ryhmän työryhmä jaetaan jäsenille määrien suhteessa, jotta summa pysyy ryhmän työryhmänä
+      const raw = mem.map(m => G * m.qk / Math.max(1e-9, qs)), fl = raw.map(Math.floor); let rem = G - fl.reduce((a, b) => a + b, 0);
+      raw.map((x, i) => [x - Math.floor(x), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(z => { if (rem > 0) { fl[z[1]]++; rem--; } }); cr = fl;
+    }
+    mem.forEach((m, i) => {
+      out.push({ loc: m.idx, locId: m.loc.id, s: s, e: r1(s + d), d: d, rd: m.d, crew: grouped ? cr[i] : ((lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(m.qk / l.prod / d - 1e-9))), name: o.name || '', ovd: o.d != null, shift: sh, qty: m.qk, gk: u.key, gn: mem.length, gi: i, gcrew: grouped ? G : (lc != null && o.d == null ? lc : Math.max(1, Math.ceil(m.qk / l.prod / d - 1e-9))), gqty: qs });
+    });
+    prevEnd = r1(s + d); prevS = s;
+  });
   return out;
 }
 const lineEnd = l => { const t = tasks(l); let e = 0; for (let i = 0; i < t.length; i++) if (t[i].e > e) e = t[i].e; return e; };
@@ -2703,13 +2721,46 @@ const XLS = (() => {
   const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä tyhjään kohtaan luodaksesi uuden tehtävän (alku- ja loppusijainti sekä aika vedolla). Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko). Tilanne-paneeli auki: kaksoisklikkaus kirjaa valmiiksi, valitun laatikon nuppia vetämällä asetat valmiusasteen, Ctrl+klikkaus valitsee useita ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
   let tkWk = 70, tkRowH = 44, tkHead = 34, tkMulti = new Set(), tkLast = null;
   const tkKey = (l, loc) => l + '|' + loc;
+  let lohkoN = 3;
+  function linPart(w, n) { // peräkkäisten painojen jako n osaan niin, että suurin osasumma on mahdollisimman pieni (palauttaa osien alkuindeksit)
+    const m = w.length, pre = [0]; w.forEach(x => pre.push(pre[pre.length - 1] + x)); const INF = 1e18, dp = [], cut = [];
+    for (let k = 0; k <= n; k++) { dp.push(new Array(m + 1).fill(INF)); cut.push(new Array(m + 1).fill(0)); } dp[0][0] = 0;
+    for (let k = 1; k <= n; k++) for (let i = k; i <= m; i++) for (let j = k - 1; j < i; j++) { const v = Math.max(dp[k - 1][j], pre[i] - pre[j]); if (v < dp[k][i] - 1e-12) { dp[k][i] = v; cut[k][i] = j; } }
+    const st = []; let i = m; for (let k = n; k >= 1; k--) { st.unshift(cut[k][i]); i = cut[k][i]; } return st;
+  }
+  function makeBlocks(n) {
+    const kids = new Map(); LT.forEach(x => { if (x.par) { if (!kids.has(x.par)) kids.set(x.par, []); kids.get(x.par).push(x); } });
+    const targets = LT.filter(x => { const k = kids.get(x.id); return k && k.length >= n && k.every(c => !kids.has(c.id)); });
+    if (!targets.length) { toast('Ei kerroksia, joissa on vähintään ' + n + ' alasijaintia'); return; }
+    pushUndo(snapshot()); let D = Infinity, ex = '';
+    const depth = nd => { let d = 0, q = nd; while (q.par) { q = LT.find(z => z.id === q.par); d++; } return d; };
+    targets.forEach(f => {
+      const ch = kids.get(f.id), st = linPart(ch.map(c => c.share), n), at = LT.findIndex(z => z.id === f.id); D = Math.min(D, depth(f) + 1);
+      const sums = []; st.forEach((a, bi) => { const b = bi + 1 < st.length ? st[bi + 1] : ch.length, mem = ch.slice(a, b); const lo = { id: uid('l'), name: 'Lohko ' + letN(bi), share: Math.max(0.05, Math.min(8, Math.round(mem.reduce((x, c) => x + c.share, 0) * 1000) / 1000)), par: f.id }; if (mem.every(c => c.area > 0)) lo.area = Math.round(mem.reduce((x, c) => x + c.area, 0) * 100) / 100; mem.forEach(c => { c.par = lo.id; }); LT.splice(at + 1 + bi, 0, lo); sums.push(mem.reduce((x, c) => x + c.share, 0)); });
+      if (!ex) { const avg = sums.reduce((x, y) => x + y, 0) / sums.length; ex = sums.map(x => Math.round(x / avg * 100) + ' %').join(' / '); }
+    });
+    LT = normTree(LT); syncLocs();
+    lines.forEach(l => { if (!l.flat && l.ta != null && l.ta >= D) l.ta++; }); // uusi taso tuli väliin: kerrostasolla olevat tehtävät pysyvät, tarkemmalla tasolla olevat siirtyvät yhden tason alemmas
+    pruneDeps(); lines.forEach(fit); render(); toast('Lohkot luotu ' + targets.length + ' kerrokseen. Lohkojen koot keskiarvoon verrattuna (1. kerros): ' + ex + '. Valitse tehtävälle Tahtialue-kenttään lohkotaso.');
+  }
+  const maxDepth = () => LOCS.reduce((m, x) => Math.max(m, (x.path ? x.path.length : 1) - 1), 0);
+  function taRow(l) { // tahtialue: millä sijaintipuun tasolla tehtävä ajoitetaan yhtenä jaksona
+    const md = maxDepth(); if (md < 1 || l.flat) return '';
+    const nm = d => { const a = []; LT.forEach(n => { let q = n, dd = 0; while (q.par) { q = LT.find(x => x.id === q.par); dd++; } if (dd === d && a.length < 2) a.push(n.name); }); return a.join(', ') + '…'; };
+    let o = '<option value=""' + (l.ta == null ? ' selected' : '') + '>Hienoin taso (oletus)</option>';
+    for (let d = 0; d < md; d++) o += '<option value="' + d + '"' + (l.ta === d ? ' selected' : '') + '>Taso ' + (d + 1) + ' · ' + esc(nm(d)) + '</option>';
+    return '<div class="row"><label for="f-ta" title="Tehtävän kesto lasketaan tälle tasolle: kaikki alueen sijainnit saavat saman alun ja lopun (esim. lohko tai kerros).">Tahtialue</label><select id="f-ta" data-field="ta" data-id="' + l.id + '">' + o + '</select></div>';
+  }
   function setPctAt(l, k, pct) { // toteuma-% yhteen laatikkoon (sama logiikka kuin Valmis-kentässä)
     const o = ovOf(l, k.locId); pct = clamp(Math.round(pct), 0, 100);
     if (pct === 0 && o.pct == null && o.as == null) return;
     o.pct = pct; if (pct > 0 && o.as == null) o.as = k.s; if (pct >= 100 && o.ae == null) o.ae = Math.max(k.e, (o.as != null ? o.as : 0) + MIN_D); if (pct < 100) delete o.ae;
     if (pct === 0) { delete o.as; delete o.hist; } else histSet(o, statusDay != null ? statusDay : todayDay(), pct);
   }
-  const tkTargets = (l, locId) => tkMulti.size > 1 && tkMulti.has(tkKey(l.id, locId)) ? [...tkMulti].map(q => { const [i, lc] = q.split('|'), ln = byId(+i), k = ln && tasks(ln).find(x => x.locId === lc); return k ? { l: ln, k: k } : null; }).filter(Boolean) : [{ l: l, k: tasks(l).find(x => x.locId === locId) }].filter(x => x.k);
+  const tkTargets = (l, locId) => { // laatikon sijainnit: ryhmälaatikossa kaikki ryhmän lehdet
+    const one = (ln, lc) => { const ts = tasks(ln), k = ts.find(x => x.locId === lc); return k ? ts.filter(x => x.gk === k.gk).map(x => ({ l: ln, k: x })) : []; };
+    return tkMulti.size > 1 && tkMulti.has(tkKey(l.id, locId)) ? [].concat.apply([], [...tkMulti].map(q => { const [i, lc] = q.split('|'), ln = byId(+i); return ln ? one(ln, lc) : []; })) : one(l, locId);
+  };
   function renderTakt() {
     if (view !== 'takt') return;
     const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
@@ -2728,24 +2779,19 @@ const XLS = (() => {
     // sijaintien nimet
     LOCS.forEach((lc, i) => { const y = yOf(i), nm = lc.name.length > 22 ? lc.name.slice(0, 21) + '…' : lc.name; lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--panel)"/>'); if (rowOf(i) % 2 === 0) lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); lp.push('<line x1="0" x2="' + LW + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/><text class="gc" x="8" y="' + (y + tkRowH / 2 + 4) + '"><title>' + esc(lc.name) + '</title>' + esc(nm) + '</text>'); });
     // laatikot: jokaiselle sijaintirivillä päällekkäiset laatikot jakavat korkeuden päällekkäisyyden ajan
-    const byRow = new Map(); let cnt = 0;
-    lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; tasks(l).forEach(k => { if (k.loc == null || !LOCS[k.loc]) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); cnt++; }); });
+    const byRow = new Map(), talls = []; let cnt = 0;
+    lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; const ts0 = tasks(l); ts0.forEach(k => { if (k.loc == null || !LOCS[k.loc] || k.gi > 0) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; if (k.gn > 1) { const mem = ts0.filter(x => x.gk === k.gk), rr = mem.map(x => x.loc); talls.push({ l: l, k: k, a: a, b: b, mem: mem, rmin: Math.min.apply(null, rr), rmax: Math.max.apply(null, rr), tall: true }); cnt++; return; } if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); cnt++; }); });
     const PADV = 4; tkHead = HEAD;
-    byRow.forEach((bx, li) => {
-      bx.sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)); const cuts = []; bx.forEach(q => { cuts.push(q.a, q.b); }); const cs = Array.from(new Set(cuts)).sort((u, v) => u - v), segs = [];
-      for (let c = 0; c + 1 < cs.length; c++) { const a = cs[c], b = cs[c + 1], act = bx.filter(q => q.a <= a + 1e-9 && q.b >= b - 1e-9); if (act.length) segs.push({ a: a, b: b, act: act }); }
-      const y0 = yOf(li) + PADV, inner = tkRowH - 2 * PADV, gap = 1.5;
-      bx.forEach(q => { q.seg = segs.filter(sg => sg.act.indexOf(q) >= 0).map(sg => { const m = sg.act.length, h = (inner - gap * (m - 1)) / m, i = sg.act.indexOf(q); return { a: sg.a, b: sg.b, y: y0 + i * (h + gap), h: h, m: m }; }); q.ov = q.seg.some(z => z.m > 1); });
-      bx.forEach((q, qi) => {
+    const drawQ = (q, li) => {
         const sg = q.seg; if (!sg.length) return; let d = ''; sg.forEach((z, i) => { const xa = XC(z.a).toFixed(1), xb = XC(z.b).toFixed(1); d += (i ? 'L' : 'M') + xa + ' ' + z.y.toFixed(1) + 'L' + xb + ' ' + z.y.toFixed(1); });
         for (let i = sg.length - 1; i >= 0; i--) { const z = sg[i]; d += 'L' + XC(z.b).toFixed(1) + ' ' + (z.y + z.h).toFixed(1) + 'L' + XC(z.a).toFixed(1) + ' ' + (z.y + z.h).toFixed(1); } d += 'Z';
-        const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + LOCS[li].name + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + q.k.crew + ' hlö';
+        const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + (q.tall ? LOCS[q.rmin].name + ' – ' + LOCS[q.rmax].name : LOCS[li].name) + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + (q.tall ? q.k.gcrew : q.k.crew) + ' hlö';
         // toteuma: vaalea laatikko, jonka tumma täyttö etenee vasemmalta prosentin verran; myöhässä (tilannepäivään verrattuna) punainen reuna
-        const sOn = stOn(), act = sOn ? actOf(q.l, q.k) : null, pc = act ? act.pct : 0, ms = tkMulti.has(tkKey(q.l.id, q.k.locId)); let late = false;
+        const sOn = stOn(), pc = sOn ? (q.tall ? q.mem.reduce((a, m) => a + actOf(q.l, m).pct * m.qty, 0) / Math.max(1e-9, q.k.gqty) : actOf(q.l, q.k).pct) : 0, ms = tkMulti.has(tkKey(q.l.id, q.k.locId)); let late = false;
         if (sOn && statusDay != null && pc < 100 && statusDay > q.k.s) late = pc < Math.min(100, (statusDay - q.k.s) / Math.max(1e-6, q.k.e - q.k.s) * 100) - 0.5;
         const tip2 = sOn ? tip + ' · valmis ' + Math.round(pc) + ' %' + (late ? ' · myöhässä' : '') : tip;
         p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity="' + (sOn ? '.3' : '.9') + '" stroke="' + (late ? '#d62828' : ms ? '#1f6feb' : 'var(--ink)') + '" stroke-opacity="' + (late || sel || ms ? 1 : .35) + '" stroke-width="' + (late || sel || ms ? 2 : 1) + '"' + (ms ? ' stroke-dasharray="5 2"' : '') + '><title>' + esc(tip2) + '</title></path>');
-        if (sOn && pc > 0) { const cx0 = XC(q.a), cx1 = XC(q.b), cid = 'tkc' + q.l.id + '_' + li; p.push('<clipPath id="' + cid + '"><rect x="' + cx0.toFixed(1) + '" y="' + yOf(li) + '" width="' + Math.max(0, (cx1 - cx0) * Math.min(100, pc) / 100).toFixed(1) + '" height="' + tkRowH + '"/></clipPath><path class="tkf" d="' + d + '" clip-path="url(#' + cid + ')" fill="' + colorOf(q.l.trade) + '" fill-opacity=".92" pointer-events="none"/>'); }
+        if (sOn && pc > 0) { const cx0 = XC(q.a), cx1 = XC(q.b), cid = 'tkc' + q.l.id + '_' + li; p.push('<clipPath id="' + cid + '"><rect x="' + cx0.toFixed(1) + '" y="' + (q.tall ? yOf(q.rmin) : yOf(li)) + '" width="' + Math.max(0, (cx1 - cx0) * Math.min(100, pc) / 100).toFixed(1) + '" height="' + (q.tall ? (q.rmax - q.rmin + 1) * tkRowH : tkRowH) + '"/></clipPath><path class="tkf" d="' + d + '" clip-path="url(#' + cid + ')" fill="' + colorOf(q.l.trade) + '" fill-opacity=".92" pointer-events="none"/>'); }
         let knob = ''; if (sOn && (ms || (selLoc && selLoc.l === q.l.id && selLoc.loc === q.k.locId))) { const kx0 = XC(q.a), kx1 = XC(q.b); knob = ('<circle class="tkp" data-tl="' + q.l.id + '" data-tloc="' + li + '" data-x0="' + kx0.toFixed(1) + '" data-x1="' + kx1.toFixed(1) + '" cx="' + (kx0 + (kx1 - kx0) * pc / 100).toFixed(1) + '" cy="' + sg[0].y.toFixed(1) + '" r="5.5" fill="#fff" stroke="var(--ink)" stroke-width="1.6" style="cursor:ew-resize"><title>Vedä: valmiusaste (25 % välein, Shift: 5 %)</title></circle>'); }
         { const z0 = sg[0], z1 = sg[sg.length - 1], hw = Math.min(6, Math.max(3, ((z1.b - z0.a) * dayW) / 3)); const hd = 'data-tl="' + q.l.id + '" data-tloc="' + li + '"';
           p.push('<rect class="tkh" ' + hd + ' data-tm="hs" x="' + (XC(z0.a) - 1).toFixed(1) + '" y="' + z0.y.toFixed(1) + '" width="' + hw + '" height="' + z0.h.toFixed(1) + '" fill="transparent"/>');
@@ -2756,7 +2802,14 @@ const XLS = (() => {
         if (best) {
           const wpx = (best.b - best.a) * dayW - 6, chars = Math.floor(wpx / 6.2), nm = t.name || ''; if (chars >= 3) p.push('<text x="' + (XC(best.a) + 4).toFixed(1) + '" y="' + (best.y + best.h / 2 + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" pointer-events="none">' + esc(nm.length > chars ? nm.slice(0, chars - 1) + '…' : nm) + '</text>');
         }
-      });
+    };
+    talls.sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)).forEach(q => { const y0 = yOf(q.rmin) + PADV, y1 = yOf(q.rmax) + tkRowH - PADV; q.seg = [{ a: q.a, b: q.b, y: y0, h: y1 - y0, m: 1 }]; drawQ(q, q.k.loc); });
+    byRow.forEach((bx, li) => {
+      bx.sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)); const cuts = []; bx.forEach(q => { cuts.push(q.a, q.b); }); const cs = Array.from(new Set(cuts)).sort((u, v) => u - v), segs = [];
+      for (let c = 0; c + 1 < cs.length; c++) { const a = cs[c], b = cs[c + 1], act = bx.filter(q => q.a <= a + 1e-9 && q.b >= b - 1e-9); if (act.length) segs.push({ a: a, b: b, act: act }); }
+      const y0 = yOf(li) + PADV, inner = tkRowH - 2 * PADV, gap = 1.5;
+      bx.forEach(q => { q.seg = segs.filter(sg => sg.act.indexOf(q) >= 0).map(sg => { const m = sg.act.length, h = (inner - gap * (m - 1)) / m, i = sg.act.indexOf(q); return { a: sg.a, b: sg.b, y: y0 + i * (h + gap), h: h, m: m }; }); q.ov = q.seg.some(z => z.m > 1); });
+      bx.forEach(q => drawQ(q, li));
     });
     if (stOn() && statusDay != null) p.push('<line x1="' + X(statusDay).toFixed(1) + '" x2="' + X(statusDay).toFixed(1) + '" y1="' + HEAD + '" y2="' + H + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"><title>Tilanne ' + fmtE(statusDay) + '</title></line>');
     const tx = XC(calWeekC(target)).toFixed(1); p.push('<line x1="' + tx + '" x2="' + tx + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4" pointer-events="none"/>');
@@ -2805,12 +2858,12 @@ const XLS = (() => {
         if (!stOn()) { toast('Avaa Tilanne-paneeli, niin voit kirjata toteumaa'); return; }
         const tg = tkTargets(l0, loc0.id), all100 = tg.every(x => actOf(x.l, x.k).pct >= 100); pushUndo(snapshot()); tg.forEach(x => setPctAt(x.l, x.k, all100 ? 0 : 100)); render(); e.preventDefault(); return;
       }
-      tkLast = key0 ? { key: key0, t: now } : null; if (!tkMulti.has(key0)) tkMulti.clear(); }
+      if (!tkMulti.has(key0)) tkMulti.clear(); }
     const l = byId(+el.dataset.tl), loc = LOCS[+el.dataset.tloc]; if (!l || !loc) return;
     const ts = tasks(l), idx = ts.findIndex(t => t.locId === loc.id); if (idx < 0) return;
     const mode = el.dataset.tm || 'body'; gEnsureRoom();
     selId = l.id; selGrp = null; selDep = null; selLoc = { l: l.id, loc: loc.id };
-    drag = { type: mode === 'he' ? 'gend' : mode === 'hs' ? 'hs' : 'gmove', tk: true, id: l.id, x0: e.clientX, orig: JSON.parse(JSON.stringify(l)), loc: loc.id, idx: idx, ts: ts, k: ts[idx], single: e.shiftKey, minShift: idx > 0 ? ts[idx - 1].s - (ts[idx - 1].e + l.gap) : 0, snap: snapshot(), base: JSON.parse(JSON.stringify(lines)) };
+    drag = { type: mode === 'he' ? 'gend' : mode === 'hs' ? 'hs' : 'gmove', tk: true, id: l.id, x0: e.clientX, orig: JSON.parse(JSON.stringify(l)), loc: ts[idx].gk, locId: loc.id, nxi: idx + (ts[idx].gn || 1), idx: idx, ts: ts, k: ts[idx], single: e.shiftKey, minShift: idx > 0 ? ts[idx - 1].s - (ts[idx - 1].e + l.gap) : 0, snap: snapshot(), base: JSON.parse(JSON.stringify(lines)) };
     taktR.setPointerCapture(e.pointerId); e.preventDefault(); render();
   });
   taktR.addEventListener('pointermove', e => {
@@ -2831,21 +2884,21 @@ const XLS = (() => {
     }
     const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), st = snapStep(), dx = Math.round((c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW)) / st) * st;
     lines = JSON.parse(JSON.stringify(drag.base));
-    const l = byId(drag.id), o = drag.orig; if (!l) return; const room = N_DAYS - lineEnd(o), k = drag.k, nx = drag.ts[drag.idx + 1];
+    const l = byId(drag.id), o = drag.orig; if (!l) return; const room = N_DAYS - lineEnd(o), k = drag.k, nx = drag.ts[drag.nxi];
     const ovx = (id) => { releaseTotal(l); return ovOf(l, id); };
     if (drag.type === 'gmove') {
       if (!drag.single) l.start = clamp(o.start + dx, 0, N_DAYS - span(o));
-      else if (drag.idx === 0) { const ns = clamp(o.start + dx, 0, N_DAYS - span(o)), ap = ns - o.start; l.start = ns; if (nx) ovx(nx.locId).shift = nx.shift - ap; }
-      else { const ns = Math.max(drag.minShift, k.shift + Math.min(dx, room)), ap = ns - k.shift; ovx(drag.loc).shift = ns; if (nx) ovx(nx.locId).shift = nx.shift - ap; }
+      else if (drag.idx === 0) { const ns = clamp(o.start + dx, 0, N_DAYS - span(o)), ap = ns - o.start; l.start = ns; if (nx) ovx(nx.gk).shift = nx.shift - ap; }
+      else { const ns = Math.max(drag.minShift, k.shift + Math.min(dx, room)), ap = ns - k.shift; ovx(drag.loc).shift = ns; if (nx) ovx(nx.gk).shift = nx.shift - ap; }
     } else if (drag.type === 'gend') { ovx(drag.loc).d = Math.max(MIN_D, r1(k.d + Math.min(dx, room))); }
     else { // vasen reuna: alku siirtyy, loppu pysyy
       const dEff = Math.min(dx, k.d - MIN_D);
-      if (drag.idx === 0) { const ns = clamp(o.start + dEff, 0, N_DAYS - span(o)), ap = ns - o.start; l.start = ns; ovx(drag.loc).d = r1(k.d - ap); if (nx) ovx(nx.locId).shift = nx.shift - 0; }
+      if (drag.idx === 0) { const ns = clamp(o.start + dEff, 0, N_DAYS - span(o)), ap = ns - o.start; l.start = ns; ovx(drag.loc).d = r1(k.d - ap); if (nx) ovx(nx.gk).shift = nx.shift - 0; }
       else { const ns = Math.max(drag.minShift, k.shift + dEff), ap = ns - k.shift; ovx(drag.loc).shift = ns; ovOf(l, drag.loc).d = r1(k.d - ap); }
     }
     fit(l); renderSoon();
   });
-  taktR.addEventListener('pointerup', () => { if (drag && drag.tk) finish(true); });
+  taktR.addEventListener('pointerup', () => { if (drag && drag.tk) { tkLast = (drag.type === 'gmove' && snapshot() === drag.snap) ? { key: tkKey(drag.id, drag.locId), t: Date.now() } : null; finish(true); } });
   taktR.addEventListener('pointercancel', () => { if (drag && drag.tk) finish(false); });
   function applyView() {
     const isG = view === 'gantt';
@@ -3094,7 +3147,7 @@ const XLS = (() => {
       '<div class="row"><label>Kokonaiskesto ohjaa</label><button type="button" class="chip" data-act="tctl" data-id="' + l.id + '" aria-pressed="' + (!!l.tctl) + '">' + (l.tctl ? 'Päällä' : 'Pois') + '</button></div>' +
       '<p class="ok" style="margin:0 0 6px">' + (l.tctl ? 'Kokonaiskeston muutos jakautuu alatehtäville.' : 'Kokonaiskeston muokkaus kytkee tämän päälle ja jakaa keston alatehtäville.') + '</p>' +
       '<div class="row"><label>' + (l.total != null ? 'Aika sijainnissa (keskim.)' : 'Aika sijainnissa') + '</label>' + stepper('dur', l.id, '', null, r1(perLoc(l)), MIN_D) + '</div>' +
-      '<div class="row"><label title="Seuraava sijainti alkaa tämän verran edellisen lopun jälkeen. Negatiivinen arvo tarkoittaa päällekkäisyyttä.">Viive sijaintien välillä</label>' + stepper('gap', l.id, '', null, r1(l.gap), -30) + '</div>' +
+      '<div class="row"><label title="Seuraava sijainti alkaa tämän verran edellisen lopun jälkeen. Negatiivinen arvo tarkoittaa päällekkäisyyttä.">Viive sijaintien välillä</label>' + stepper('gap', l.id, '', null, r1(l.gap), -30) + '</div>' + taRow(l) +
       '<div class="row"><label>' + (resIdOf(t) === RES[0].id ? 'Työryhmä (suurin)' : esc(resById(resIdOf(t)).name) + ' (suurin)') + '</label>' + stepper('crew', l.id, c + ' ' + resUnit(t)) + '</div>' + agreedRows(l, t, c) +
       (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' ' + esc(resUnit(t)) + '. Pidennä aikaa tai lisää taukoa.</div>' : '') +
       '<div class="row"><label for="f-tqty">Kokonaismäärä</label><span class="qrow"><button type="button" class="lockbtn" data-act="qlock" data-id="' + l.id + '" aria-pressed="' + (l.lockQ != null) + '" aria-label="' + (l.lockQ != null ? 'Poista kokonaismäärän lukitus' : 'Lukitse kokonaismäärä') + '" title="' + (l.lockQ != null ? 'Lukittu: pysyy samana, kun sijainnit muuttuvat' : 'Lukitse kokonaismäärä') + '">' + (l.lockQ != null ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>' : '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 4.8-1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>') + '</button><input id="f-tqty" class="num" type="number" min="0.01" step="any" value="' + r2(totalQty(l)) + '" data-field="tqty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
@@ -3326,6 +3379,7 @@ const XLS = (() => {
       '<div class="btns" style="border-top:0;padding-top:4px"><button type="button" data-act="locimp" data-mode="replace">Korvaa rakenne</button><button type="button" data-act="locimp" data-mode="append">Lisää loppuun</button></div>' +
       (locMsg ? '<div class="warnline">' + esc(locMsg) + '</div>' : '') + '</details>';
     { const ta = LT.reduce((a, n) => a + (n.area > 0 && !LT.some(q => q.par === n.id) ? n.area : 0), 0); h += '<div class="ok" style="margin:6px 0 0">' + LOCS.length + ' sijaintia alimmalla tasolla' + (ta > 0 ? ' · ala yhteensä ' + Math.round(ta).toLocaleString('fi-FI') + ' m²' : '') + '</div>'; }
+    if (LT.some(x => { const k = LT.filter(c => c.par === x.id); return k.length >= 2 && k.every(c => !LT.some(z => z.par === c.id)); })) h += '<div class="trow" style="margin:6px 0" title="Jakaa jokaisen kerroksen peräkkäiset sijainnit (esim. asunnot) valittuun määrään lohkoja niin, että lohkojen koot ovat mahdollisimman tasaiset. Nykyiset tehtävät pysyvät ennallaan."><span class="lab">Lohkot</span><input class="num" style="width:48px" type="number" min="2" max="12" value="' + lohkoN + '" data-field="lohkon"> <button type="button" data-act="locblocks">Ehdota lohkot</button></div>';
     const walk = (par, depth) => {
       const arr = (kids.get(par) || []).slice().reverse(), tot = arr.length;
       arr.forEach((n, vi) => {
@@ -3557,10 +3611,11 @@ const XLS = (() => {
 
   // puun muokkaus: viivojen sijaintijäsenet säilytetään, ja viiva ilman sijainteja poistuu
   function ltOp(fn) {
-    const snap = snapshot(), mem = ltMembers(lines), repl = fn();
+    const snap = snapshot(), mem = ltMembers(lines), d0 = maxDepth(), repl = fn();
     if (repl === false) return;
     pushUndo(snap);
     LT = normTree(LT); syncLocs();
+    if (maxDepth() > d0) lines.forEach(l => { if (!l.flat && l.ta == null) l.ta = d0; }); // sijainti jaettiin tarkempiin: nykyiset tehtävät pysyvät entisellä tasollaan, joten aikataulu ei muutu
     lines = ltApply(lines, mem, repl || {});
     deps.forEach(d => ['a', 'b'].forEach(k => { const r = d[k]; if (r.loc != null && repl && repl[r.loc] !== undefined) { const t = repl[r.loc].find(q => LOCS.some(x => x.id === q)); if (t) r.loc = t; } }));
     pruneDeps();
@@ -3608,6 +3663,7 @@ const XLS = (() => {
       if (a === 'loccol') { if (pcol.has(id)) pcol.delete(id); else pcol.add(id); renderLocs(); return; }
       if (a === 'locgen') { locMsg = ''; const g = genTree(locDraft); if (g.err) { locMsg = g.err; renderLocs(); return; } ltSet(g.nodes, ds.mode); return; }
       if (a === 'locimp') { locMsg = ''; const nodes = parseTree(locDraft.text); if (!nodes.length) { locMsg = 'Ei sijainteja tekstissä.'; renderLocs(); return; } if (nodes.length > 3000) { locMsg = 'Liian monta sijaintia (' + nodes.length + '). Enintään 3000.'; renderLocs(); return; } ltSet(nodes, ds.mode); return; }
+      if (a === 'locblocks') { makeBlocks(clamp(Math.round(lohkoN) || 3, 2, 12)); return; }
       if (a === 'locadd') { ltOp(() => { LT.push({ id: uid('l'), name: 'Sijainti ' + (LOCS.length + 1), share: 1, par: null }); }); return; }
       const i = LT.findIndex(x => x.id === id); if (i < 0) return;
       ltOp(() => ltEdit(a, i));
@@ -3702,6 +3758,8 @@ const XLS = (() => {
     else if (f === 'tq-v') { const l = byId(id); if (l && v > 0 && !l.flat) setLocQty(l, e.target.dataset.loc, v); }
     else if (f === 'tdur-v') { const l = byId(id); if (l && v >= MIN_D) { releaseTotal(l); ovOf(l, e.target.dataset.loc).d = Math.min(N_DAYS, r1(v)); fit(l); } }
     else if (f === 'tsh-v') { const l = byId(id); if (l && isFinite(v)) { releaseTotal(l); ovOf(l, e.target.dataset.loc).shift = clamp(r1(v), -30, 60); fit(l); } }
+    else if (f === 'lohkon') { if (v >= 2) lohkoN = clamp(Math.round(v), 2, 12); }
+    else if (f === 'ta') { const l = byId(id); if (l) { if (e.target.value === "") delete l.ta; else l.ta = +e.target.value; fit(l); } }
     else if (f === 'qty' || f === 'prod') { const l = byId(id); if (l && v > 0) chgKeep(l, () => { l[f] = v; }); }
     else if (f === 'agreed') { const l = byId(id); if (l) { if (txt === '') delete l.agreed; else if (v >= 1) l.agreed = Math.round(v); } }
     else if (f === 'apct' || f === 'aas' || f === 'aae') {
@@ -3896,7 +3954,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '211';
+  const APP_BUILD = '212';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

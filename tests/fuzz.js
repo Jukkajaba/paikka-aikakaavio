@@ -16,7 +16,7 @@ const INV = () => {
     if (l.skip && l.skip.some(i => !ids.has(i))) e.push('line ' + l.id + ' skip ids');
     let ts; try { ts = A.tasks(l); } catch (x) { e.push('tasks throw ' + l.id + ' ' + x.message); return; }
     if (!ts.length) e.push('line ' + l.id + ' no tasks');
-    ts.forEach(t => { if (!isFinite(t.s) || !isFinite(t.e) || t.e <= t.s) e.push('line ' + l.id + ' bad time ' + t.s + '-' + t.e); if (!isFinite(t.crew) || t.crew < 1) e.push('line ' + l.id + ' crew ' + t.crew); if (!ids.has(t.locId)) e.push('task loc'); });
+    ts.forEach(t => { if (!isFinite(t.s) || !isFinite(t.e) || t.e <= t.s) e.push('line ' + l.id + ' bad time ' + t.s + '-' + t.e); if (!isFinite(t.crew) || t.crew < (t.gn > 1 ? 0 : 1)) e.push('line ' + l.id + ' crew ' + t.crew); if (!ids.has(t.locId)) e.push('task loc'); });
     if (!isFinite(A.totalQty(l))) e.push('line ' + l.id + ' qty');
   });
   A.deps.forEach(d => ['a', 'b'].forEach(k => { const r = d[k]; if (r.g != null ? !gid.has(r.g) : !lid.has(String(r.l))) e.push('dep ref missing'); }));
