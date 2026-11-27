@@ -1778,7 +1778,13 @@ const XLS = (() => {
     }
     const bw = pw - 2 * M, bh = ph - 2 * M, avail = bh - 12 - 6 - 9 - 4, pages = [];
     const used = []; lines.forEach(l => { const t = trade(l.trade); if (t && used.indexOf(t.id) < 0) used.push(t.id); });
-    const legend = '<div class="leg">' + used.map(id => '<span><i style="background:' + colorOf(id) + '"></i>' + esc(trade(id).name) + '</span>').join('') + '</div>';
+    const legend = '<div class="leg">' + used.map(id => '<span><i style="background:' + colorOf(id) + '"></i>' + esc(trade(id).name) + '</span>').join('') + (view === 'gantt' ? '' : (() => {
+      const sw = (st, w, op) => '<svg width="22" height="8" viewBox="0 0 22 8" style="vertical-align:-1px;margin-right:3px"><line x1="1" y1="4" x2="21" y2="4" stroke="#1B2529" stroke-width="' + w + '" ' + st + ' stroke-linecap="round" opacity="' + op + '"/></svg>', x = [];
+      if (curBl()) x.push('<span>' + sw('stroke-dasharray="1.5 4"', 2, .5) + 'Tavoite (baseline)</span>');
+      if (stOn()) x.push('<span>' + sw('', 3, 1) + 'Toteuma</span>');
+      if (fcOn() && FC) x.push('<span>' + sw('stroke-dasharray="6 3.5"', 3, .9) + 'Ennuste</span>');
+      return x.join('');
+    })()) + '</div>';
     if (o.fit && view === 'gantt' && gGeo) { // täyttää sivun: leveämpi aikajana tai korkeammat rivit, ei tyhjää tilaa
       const g0 = gGeo, HEAD0 = +gHead.getAttribute('height'), hk0 = o.bot ? 2 : 1, n0 = Math.max(1, gRows.length), sH = avail / (HEAD0 * hk0 + n0 * g0.rowH), Wn = bw / sH;
       if (Wn >= g0.W) gPrintW = Math.min(6000, Math.round(Wn)); else { gPrintW = g0.W; gPrintRowH = Math.max(g0.rowH, Math.floor((avail / (bw / g0.W) - HEAD0 * hk0) / n0)); }
@@ -3722,7 +3728,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '196';
+  const APP_BUILD = '197';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
