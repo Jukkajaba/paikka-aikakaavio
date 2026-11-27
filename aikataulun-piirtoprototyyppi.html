@@ -1010,6 +1010,98 @@ function schBuild(grid, head, roles, y0) { // -> { rows, warn }
   });
   return { rows: rows, warn: warn };
 }
+// ---- xlsx: luku ja kirjoitus ilman kirjastoja (zip: selaimen DecompressionStream / pakkaamaton kirjoitus) ----
+const XLS = (() => {
+  const crcT = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcT[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = new TextEncoder(), dec = new TextDecoder('utf-8');
+  const colName = i => { let n = '', k = i + 1; while (k > 0) { const m = (k - 1) % 26; n = String.fromCharCode(65 + m) + n; k = Math.floor((k - 1) / 26); } return n; };
+  const colIdx = ref => { const m = /^([A-Z]+)/.exec(ref); let n = 0; (m ? m[1] : 'A').split('').forEach(ch => { n = n * 26 + ch.charCodeAt(0) - 64; }); return n - 1; };
+  const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+  async function unzip(buf) {
+    const u = new Uint8Array(buf), dv = new DataView(buf), files = {}; let e = u.length - 22;
+    while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error('Ei zip-tiedosto');
+    let p = dv.getUint32(e + 16, true); const n = dv.getUint16(e + 10, true);
+    for (let i = 0; i < n; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const meth = dv.getUint16(p + 10, true), csz = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      const name = dec.decode(u.subarray(p + 46, p + 46 + nl)); p += 46 + nl + el + cl;
+      const lh = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), raw = u.subarray(lh, lh + csz);
+      files[name] = { meth: meth, raw: raw };
+    }
+    return files;
+  }
+  async function fileText(files, name) {
+    const f = files[name]; if (!f) return null;
+    if (f.meth === 0) return dec.decode(f.raw);
+    const ds = new DecompressionStream('deflate-raw'), w = ds.writable.getWriter(); w.write(f.raw); w.close();
+    return dec.decode(await new Response(ds.readable).arrayBuffer());
+  }
+  const dateFmt = c => /^(14|15|16|17|18|19|20|21|22|45|46|47)$/.test(String(c)) ;
+  const isDateCode = code => /[dmyh]/i.test(String(code).replace(/"[^"]*"|\[[^\]]*\]|\\./g, '')) && !/^general$/i.test(code);
+  const serial = n => { const t = new Date(Date.UTC(1899, 11, 30) + Math.floor(n) * 86400000); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.' + t.getUTCFullYear(); };
+  async function read(buf) { // -> [[string]] ensimmäisestä taulukosta; päivämäärät muodossa d.m.yyyy
+    const files = await unzip(buf), P = x => new DOMParser().parseFromString(x, 'application/xml'), ns = (d, tag) => Array.from(d.getElementsByTagName(tag));
+    const wb = await fileText(files, 'xl/workbook.xml'); if (!wb) throw new Error('Ei Excel-tiedosto');
+    const rels = await fileText(files, 'xl/_rels/workbook.xml.rels'); let path = 'xl/worksheets/sheet1.xml';
+    try { const sh = ns(P(wb), 'sheet')[0], rid = sh && (sh.getAttribute('r:id') || sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id')); const r = rid && ns(P(rels), 'Relationship').find(x => x.getAttribute('Id') === rid); if (r) { let tg = r.getAttribute('Target'); path = tg.charAt(0) === '/' ? tg.slice(1) : 'xl/' + tg.replace(/^\.\//, ''); } } catch (er) { /* oletus */ }
+    if (!files[path]) path = Object.keys(files).find(k => /^xl\/worksheets\/[^/]+\.xml$/.test(k)); if (!path) throw new Error('Ei taulukkoa');
+    const sst = [], ss = await fileText(files, 'xl/sharedStrings.xml'); if (ss) ns(P(ss), 'si').forEach(si => { sst.push(ns(si, 't').map(t => t.textContent).join('')); });
+    const dateX = {}; const st = await fileText(files, 'xl/styles.xml');
+    if (st) { const d = P(st), custom = {}; ns(d, 'numFmt').forEach(n => { custom[n.getAttribute('numFmtId')] = n.getAttribute('formatCode'); }); const xfs = d.getElementsByTagName('cellXfs')[0]; if (xfs) Array.from(xfs.children).forEach((x, i) => { const id = x.getAttribute('numFmtId'); if (dateFmt(id) || (custom[id] && isDateCode(custom[id]))) dateX[i] = true; }); }
+    const sd = P(await fileText(files, path)), grid = [];
+    ns(sd, 'row').forEach(row => {
+      const ri = +row.getAttribute('r') - 1; const out = grid[ri] = grid[ri] || [];
+      Array.from(row.children).filter(c => c.tagName === 'c' || /:c$/.test(c.tagName)).forEach(c => {
+        const j = colIdx(c.getAttribute('r') || 'A'), t = c.getAttribute('t'), vEl = ns(c, 'v')[0], v = vEl ? vEl.textContent : ''; let val = '';
+        if (t === 's') val = sst[+v] || ''; else if (t === 'inlineStr') val = ns(c, 't').map(x => x.textContent).join(''); else if (t === 'b') val = v === '1' ? 'tosi' : 'epätosi';
+        else if (v !== '' && t !== 'str' && t !== 'e' && dateX[c.getAttribute('s')] && isFinite(+v)) val = serial(+v); else val = v;
+        out[j] = val;
+      });
+    });
+    let rows = []; for (let i = 0; i < grid.length; i++) { const r = grid[i] ? Array.from(grid[i], x => x == null ? '' : x) : []; rows.push(r); }
+    while (rows.length && !rows[rows.length - 1].some(x => x !== '')) rows.pop(); return rows.filter(r => r.some(x => x !== ''));
+  }
+  function zip(entries) { // [{name, text}] pakkaamattomana
+    const parts = [], cen = []; let off = 0; const w16 = (a, v) => a.push(v & 255, (v >> 8) & 255), w32 = (a, v) => { a.push(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255); };
+    entries.forEach(en => {
+      const nm = enc.encode(en.name), data = enc.encode(en.text), c = crc(data), h = [];
+      w32(h, 0x04034b50); w16(h, 20); w16(h, 0x0800); w16(h, 0); w16(h, 0); w16(h, 0x21); w32(h, c); w32(h, data.length); w32(h, data.length); w16(h, nm.length); w16(h, 0);
+      parts.push(Uint8Array.from(h), nm, data);
+      const g = []; w32(g, 0x02014b50); w16(g, 20); w16(g, 20); w16(g, 0x0800); w16(g, 0); w16(g, 0); w16(g, 0x21); w32(g, c); w32(g, data.length); w32(g, data.length); w16(g, nm.length); w16(g, 0); w16(g, 0); w16(g, 0); w16(g, 0); w32(g, 0); w32(g, off);
+      cen.push(Uint8Array.from(g), nm); off += h.length + nm.length + data.length;
+    });
+    const csz = cen.reduce((a, x) => a + x.length, 0), e = []; w32(e, 0x06054b50); w16(e, 0); w16(e, 0); w16(e, entries.length); w16(e, entries.length); w32(e, csz); w32(e, off); w16(e, 0);
+    return new Blob(parts.concat(cen, [Uint8Array.from(e)]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  function write(rows, sheet) { // rows: [[...]], ensimmäinen rivi otsikot; d.m.yyyy -> päivämääräsolu, numerot numeroina
+    const dser = s => { const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s); return m ? Math.round((Date.UTC(+m[3], +m[2] - 1, +m[1]) - Date.UTC(1899, 11, 30)) / 86400000) : null; };
+    const widths = []; let x = '';
+    rows.forEach((r, i) => {
+      x += '<row r="' + (i + 1) + '">';
+      r.forEach((v, j) => {
+        const ref = colName(j) + (i + 1); v = v == null ? '' : v; widths[j] = Math.max(widths[j] || 8, Math.min(40, String(v).length + 2));
+        if (v === '') return; const d = i ? dser(String(v)) : null;
+        if (i === 0) x += '<c r="' + ref + '" s="2" t="inlineStr"><is><t>' + esc(v) + '</t></is></c>';
+        else if (d != null) x += '<c r="' + ref + '" s="1"><v>' + d + '</v></c>';
+        else if (typeof v === 'number' || (/^-?\d+(\.\d+)?$/.test(String(v)) && String(v).length < 15 && !/^0\d/.test(String(v)))) x += '<c r="' + ref + '"><v>' + v + '</v></c>';
+        else x += '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
+      });
+      x += '</row>';
+    });
+    const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', M = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    return zip([
+      { name: '[Content_Types].xml', text: head + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+      { name: '_rels/.rels', text: head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: 'xl/workbook.xml', text: head + '<workbook xmlns="' + M + '" xmlns:r="' + R + '"><sheets><sheet name="' + esc((sheet || 'Aikataulu').replace(/[\\\/?*\[\]:]/g, ' ').slice(0, 31)) + '" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+      { name: 'xl/_rels/workbook.xml.rels', text: head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="' + R + '/styles" Target="styles.xml"/></Relationships>' },
+      { name: 'xl/styles.xml', text: head + '<styleSheet xmlns="' + M + '"><numFmts count="1"><numFmt numFmtId="164" formatCode="d.m.yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
+      { name: 'xl/worksheets/sheet1.xml', text: head + '<worksheet xmlns="' + M + '"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>' + widths.map((w, j) => '<col min="' + (j + 1) + '" max="' + (j + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols><sheetData>' + x + '</sheetData></worksheet>' }
+    ]);
+  }
+  return { read: read, write: write };
+})();
 // </logic>
 
 (function () {
@@ -2141,9 +2233,9 @@ function schBuild(grid, head, roles, y0) { // -> { rows, warn }
   const schBox = document.createElement('div'); schBox.id = 'schBox';
   schBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo/vie aikataulu"><h2>Tuo / vie aikataulu</h2>' +
     '<h3>Vie</h3><div class="row2"><label><input type="radio" name="schM" value="tasks" checked> Yksi rivi / tehtävä</label><label><input type="radio" name="schM" value="locs"> Yksi rivi / tehtävä ja sijainti</label>' +
-    '<button type="button" id="schCopy">Kopioi taulukko (liitä Exceliin)</button><button type="button" id="schCsv">Lataa CSV</button><span id="schOut" class="ok"></span></div>' +
+    '<button type="button" id="schCopy">Kopioi taulukko (liitä Exceliin)</button><button type="button" id="schXlsx"><b>Lataa Excel (.xlsx)</b></button><button type="button" id="schCsv">Lataa CSV</button><span id="schOut" class="ok"></span></div>' +
     '<h3>Tuo</h3><p class="ok" style="margin:0 0 6px">Kopioi Excelistä (tai Tactplanin Grid-näkymästä) taulukko otsikkorivi mukaan ja liitä alle, tai avaa CSV-tiedosto. Tuonti lisää tehtävät nykyisen aikataulun perään. Päivämäärät: 5.1.2027, 5.1. tai 2027-01-05. Rivi, jonka sijainti löytyy projektin sijainneista, tulee sijaintitehtäväksi, muut sijaintittomiksi.</p>' +
-    '<textarea id="schTxt" placeholder="Tehtävä\tAlku\tLoppu\tSijainti alku\tSijainti loppu"></textarea><div class="row2"><button type="button" id="schParse">Jäsennä</button><label>tai CSV-tiedosto <input type="file" id="schFile" accept=".csv,.txt,.tsv"></label><button type="button" id="schClose">Sulje</button></div><div id="schBody"></div></div>';
+    '<textarea id="schTxt" placeholder="Tehtävä\tAlku\tLoppu\tSijainti alku\tSijainti loppu"></textarea><div class="row2"><button type="button" id="schParse">Jäsennä</button><label>tai Excel- / CSV-tiedosto <input type="file" id="schFile" accept=".xlsx,.csv,.txt,.tsv"></label><button type="button" id="schClose">Sulje</button></div><div id="schBody"></div></div>';
   document.body.appendChild(schBox);
   function schExport(mode) {
     const H = mode === 'locs' ? ['Littera', 'Ylätehtävä', 'Tehtävä', 'Sijainti', 'Alku', 'Loppu', 'Kesto (pv)', 'Määrä', 'Yksikkö', 'Toteuma %'] : ['Littera', 'Ylätehtävä', 'Tehtävä', 'Alku', 'Loppu', 'Kesto (pv)', 'Sijainti alku', 'Sijainti loppu', 'Määrä', 'Yksikkö', 'Työryhmä', 'Toteuma %'];
@@ -2219,15 +2311,17 @@ function schBuild(grid, head, roles, y0) { // -> { rows, warn }
     const mode = (schBox.querySelector('input[name=schM]:checked') || {}).value || 'tasks', out = schBox.querySelector('#schOut');
     if (t.id === 'schCopy') { const txt = schTsv(schExport(mode)); try { await navigator.clipboard.writeText(txt); out.textContent = 'Kopioitu: liitä Exceliin.'; } catch (er) { schBox.querySelector('#schTxt').value = txt; out.textContent = 'Leikepöytä ei käytössä: taulukko on alla olevassa kentässä, kopioi se sieltä.'; } return; }
     if (t.id === 'schCsv') { const txt = schCsv(schExport(mode)), fn = (projName || 'aikataulu').replace(/[^\wåäöÅÄÖ-]+/g, '_') + '.csv'; try { if (dl) await dl.save({ filename: fn, data: txt }); else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv' })); a.download = fn; document.body.appendChild(a); a.click(); a.remove(); } out.textContent = 'CSV ladattu.'; } catch (er) { out.textContent = 'Lataus ei onnistunut.'; } return; }
+    if (t.id === 'schXlsx') { const fn = (projName || 'aikataulu').replace(/[^\wåäöÅÄÖ-]+/g, '_') + '.xlsx', blob = XLS.write(schExport(mode), projName); try { let saved = false; if (dl) { try { await dl.save({ filename: fn, data: new Uint8Array(await blob.arrayBuffer()) }); saved = true; } catch (e2) { saved = false; } } if (!saved) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fn; document.body.appendChild(a); a.click(); a.remove(); } out.textContent = 'Excel-tiedosto ladattu.'; } catch (er) { out.textContent = 'Lataus ei onnistunut.'; } return; }
     if (t.id === 'schParse') { schLoad(schBox.querySelector('#schTxt').value); return; }
     if (t.id === 'schGo') { const r = schApply(), m = schBox.querySelector('#schMsg'); m.innerHTML = 'Tuotu ' + r.n + ' tehtävää (' + r.loc + ' sijaintitehtävää, ' + r.flat + ' sijaintitonta).' + (r.warn.length ? '<br><span class="w">' + r.warn.slice(0, 6).map(esc).join('<br>') + '</span>' : ''); return; }
   });
   schBox.addEventListener('change', e => {
     const t = e.target;
     if (t.dataset && t.dataset.sr != null) { SCH.roles[+t.dataset.sr] = t.value; if (t.value !== 'skip') SCH.roles = SCH.roles.map((r, j) => j !== +t.dataset.sr && r === t.value ? 'skip' : r); schDraw(); return; }
+    if (t.id === 'schFile' && t.files && t.files[0] && /\.xlsx$/i.test(t.files[0].name)) { const fr = new FileReader(); fr.onload = async () => { try { const rows = await XLS.read(fr.result); schBox.querySelector('#schTxt').value = schTsv(rows); schLoad(schTsv(rows)); } catch (er) { schBox.querySelector('#schBody').innerHTML = '<p class="w">Excel-tiedostoa ei voitu lukea (' + esc(er.message || er) + '). Kopioi taulukko Excelistä ja liitä se yllä olevaan kenttään.</p>'; } }; fr.readAsArrayBuffer(t.files[0]); return; }
     if (t.id === 'schFile' && t.files && t.files[0]) { const fr = new FileReader(); fr.onload = () => { let tx = String(fr.result || ''); if (tx.charCodeAt(0) === 0xfeff) tx = tx.slice(1); schBox.querySelector('#schTxt').value = tx; schLoad(tx); }; fr.readAsText(t.files[0], 'utf-8'); }
   });
-  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, prtDoc: buildPrintDoc, schExport: schExport, schTsv: schTsv, schLoad: schLoad, schApply: schApply, SCH: SCH, stateObj: () => stateObj() });
+  window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, prtDoc: buildPrintDoc, schExport: schExport, schTsv: schTsv, schLoad: schLoad, XLS: XLS, schApply: schApply, SCH: SCH, stateObj: () => stateObj() });
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
@@ -3613,7 +3707,7 @@ function schBuild(grid, head, roles, y0) { // -> { rows, warn }
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '194';
+  const APP_BUILD = '195';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
