@@ -2864,6 +2864,17 @@ const XLS = (() => {
       bx.forEach(q => { q.seg = segs.filter(sg => sg.act.indexOf(q) >= 0).map(sg => { const m = sg.act.length, h = (inner - gap * (m - 1)) / m, i = sg.act.indexOf(q); return { a: sg.a, b: sg.b, y: y0 + i * (h + gap), h: h, m: m }; }); q.ov = q.seg.some(z => z.m > 1); });
       bx.forEach(q => drawQ(q, li));
     });
+    // riippuvuudet: nuoli edeltäjän laatikon lopusta seuraajan laatikon alkuun; klikkaus valitsee (muokkaus ja poisto Tehtävä-paneelissa tai Delete)
+    if (showDeps) allDeps().forEach(d => {
+      const ta = depTask(lines, d.a, 'a'), tb = depTask(lines, d.b, 'b'); if (!ta || !tb || ta.grp || tb.grp || ta.loc == null || tb.loc == null || !LOCS[ta.loc] || !LOCS[tb.loc]) return;
+      if (Math.max(ta.loc, tb.loc) < wr0 || Math.min(ta.loc, tb.loc) > wr1) return;
+      const x1 = XE(ta.e), x2 = X(tb.s), ya = yOf(ta.loc) + tkRowH / 2, yb = yOf(tb.loc) + tkRowH / 2; if (Math.max(x1, x2) < wc0 * dayW - 50 || Math.min(x1, x2) > wc1 * dayW + 50) return;
+      const slk = tb.s - (ta.e + (d.lag || 0)), dc = depCol(d, slk), sel = d.id === selDep, pth = 'M' + x1.toFixed(1) + ' ' + ya.toFixed(1) + 'H' + (x1 + 5).toFixed(1) + 'V' + yb.toFixed(1) + 'H' + x2.toFixed(1);
+      p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="' + (sel ? 2.4 : 1.4) + '" pointer-events="none"/>');
+      p.push('<path d="M' + x2.toFixed(1) + ' ' + yb.toFixed(1) + 'l-5 -3v6Z" fill="' + dc + '" pointer-events="none"/>');
+      if (d.lag) p.push('<text class="tl" x="' + (x1 + 8).toFixed(1) + '" y="' + (ya - 4).toFixed(1) + '" style="fill:' + dc + '" pointer-events="none">' + (d.lag > 0 ? '+' : '−') + Math.abs(d.lag) + '</text>');
+      p.push('<path d="' + pth + '" fill="none" stroke="transparent" stroke-width="9" data-td="' + d.id + '" style="cursor:pointer"><title>Riippuvuus: ' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + '</title></path>');
+    });
     if (stOn() && statusDay != null) p.push('<line x1="' + X(statusDay).toFixed(1) + '" x2="' + X(statusDay).toFixed(1) + '" y1="' + HEAD + '" y2="' + H + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"><title>Tilanne ' + fmtE(statusDay) + '</title></line>');
     const tx = XC(calWeekC(target)).toFixed(1); p.push('<line x1="' + tx + '" x2="' + tx + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4" pointer-events="none"/>');
     if (preview && drag && drag.type === 'draw' && drag.tk) tasks(preview).forEach(t => { if (t.loc < 0 || t.loc >= n) return; p.push('<rect x="' + X(t.s).toFixed(1) + '" y="' + (yOf(t.loc) + PADV) + '" width="' + Math.max(2, XE(t.e) - X(t.s)).toFixed(1) + '" height="' + (tkRowH - 2 * PADV) + '" fill="' + colorOf(preview.trade) + '" fill-opacity=".35" stroke="' + colorOf(preview.trade) + '" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"/>'); });
@@ -2896,6 +2907,7 @@ const XLS = (() => {
   tkSel.addEventListener('change', e => { tkWk = +e.target.value || 70; renderTakt(); });
   document.getElementById('tkRow').addEventListener('change', e => { tkRowH = +e.target.value || 44; renderTakt(); });
   taktR.addEventListener('pointerdown', e => {
+    { const de = e.target.closest ? e.target.closest('[data-td]') : null; if (de && e.button === 0) { selDep = +de.dataset.td; selId = null; selGrp = null; selLoc = null; tkMulti.clear(); render(); e.preventDefault(); return; } }
     const el = e.target.closest ? e.target.closest('[data-tl]') : null;
     if (!el && e.button === 0) { // tyhjä kohta: veto luo uuden tehtävän (kuten paikka-aikakaaviossa)
       const r0 = taktR.getBoundingClientRect(); if (e.clientY - r0.top < tkHead) return;
@@ -4024,7 +4036,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '229'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '230'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
