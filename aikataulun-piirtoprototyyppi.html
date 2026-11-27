@@ -276,6 +276,10 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   #welcome .wg .acts .pri{border-color:var(--ink);font-weight:600}
   #welcome .wg .msg{font-size:12.5px;opacity:.8;min-height:1.3em}
   #welcome .rc{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--grid2);font-size:13px}
+  .tkctl{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:4px 2px 8px;font-size:13px}
+  #taktBox{display:flex;overflow:auto;max-height:calc(100vh - 210px);border:1px solid var(--grid2);border-radius:6px;background:var(--panel)}
+  #taktL{position:sticky;left:0;z-index:2;flex:none;background:var(--panel)}#taktR{flex:none}
+  #taktR .tkb{cursor:pointer}#taktR .tkb:hover{stroke-width:2}
   #impBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
   #impBox.on{display:flex}
   #schBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
@@ -307,7 +311,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
 
   <div class="toolbar">
     <div class="actions">
-      <span class="seg" role="group" aria-label="Näkymä"><button id="vFlow" type="button" class="chip" aria-pressed="true">Paikka-aika</button><button id="vGantt" type="button" class="chip" aria-pressed="false">Gantt</button></span>
+      <span class="seg" role="group" aria-label="Näkymä"><button id="vFlow" type="button" class="chip" aria-pressed="true">Paikka-aika</button><button id="vGantt" type="button" class="chip" aria-pressed="false">Gantt</button><button id="vTakt" type="button" class="chip" aria-pressed="false" title="Tahtiaikataulu: sijainnit riveinä, tehtävät laatikoina">Tahti</button></span>
       <button id="grpBtn" type="button" class="chip" aria-pressed="false" title="Sulje tai avaa kaikki ylätehtävät (esim. Runko yhtenä viivana)">Ylätehtävät</button>
       <label class="tgt" id="fCtl" title="Näytä sijainnit tiivistettynä: ylin taso = 1">Taso <select id="lvlSel"></select></label>
       <span class="fltwrap" id="fltWrap"><button id="fltBtn" type="button" class="chip" aria-haspopup="true" aria-expanded="false" aria-controls="fltPop">Näytä: Kaikki ▾</button><div id="fltPop" class="fltpop" role="dialog" aria-label="Rajaa näkyvät sijainnit" hidden><input id="fltQ" class="txt" type="search" placeholder="Hae sijaintia…" aria-label="Hae sijaintia" autocomplete="off"><div class="fltact"><button id="fltOnly" type="button">Vain hakutulokset</button><button id="fltAll" type="button">Näytä kaikki</button></div><div id="fltList" class="fltlist"></div></div></span>
@@ -334,6 +338,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
     <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
+    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
     <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddSub" type="button" class="gplus small" title="Lisää alatehtävä valitun rivin alle" aria-label="Lisää alatehtävä">+</button><button id="gAddGrp" type="button" style="display:none" aria-hidden="true" tabindex="-1" title="Luo ylätehtävä valitun rivin alapuolelle">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
@@ -1512,12 +1517,13 @@ const XLS = (() => {
       summary.innerHTML = '<span>Valmis <b>vk ' + wkNo(endW) + '</b> (' + tgtTxt + ')</span><span>Huippuväki <b>' + peakP + ' ' + esc(RES[0].unit) + '</b></span><span>' + (bad ? '<span class="bad">' + bad + ' työjärjestyshuomiota</span>' : 'Ei työjärjestyshuomioita') + '</span>';
     }
     PH('summary'); if (drag) { renderPanel(); PH('panel'); renderGantt(); PH('gantt'); } // vedon aikana vain välttämätön; muut paneelit päivittyvät vedon päätyttyä
-    else { renderPanel(); renderList(); renderNotes(vio, dvio); renderLocs(); renderBl(); renderSt(); renderFc(); renderGantt(); }
+    else { renderPanel(); renderList(); renderNotes(vio, dvio); renderLocs(); renderBl(); renderSt(); renderFc(); renderGantt(); renderTakt(); }
     undoBtn.disabled = !undoStack.length;
     scheduleSave();
   }
 
   // ---- Gantt-näkymä: samat tehtävät riveinä, vain näkyvät rivit piirretään ----
+  const taktWrap = document.getElementById('taktWrap'), taktL = document.getElementById('taktL'), taktR = document.getElementById('taktR'), vTakt = document.getElementById('vTakt');
   const gWrap = document.getElementById('ganttWrap'), gHead = document.getElementById('ganttHead'), gScroll = document.getElementById('ganttScroll'), gSvg = document.getElementById('gantt');
   const gSpacer = document.getElementById('ganttSpacer'), gCtl = document.getElementById('gCtl'), gSel = document.getElementById('gGroup'), hintEl = document.getElementById('hint');
   const RKEY = 'aik-resurssit-v1'; let resMode = 'auto', resOn = true; try { const rv = localStorage.getItem(RKEY); if (rv === 'on' || rv === 'off') resMode = rv; } catch (err) { }
@@ -1534,7 +1540,7 @@ const XLS = (() => {
   let gEntry = false; // Gantin syöttörivi: tyhjä rivi listan lopussa, johon kirjoitettu nimi luo tehtävän
   let gPrint = null, gPrintW = null, gPrintRowH = null, prtBot = false, view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
-  try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt') view = 'gantt'; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
+  try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt' || o.view === 'takt') view = o.view; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
   let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
   const saveView = () => { try { localStorage.setItem(VKEY, JSON.stringify({ view: view, group: gGroup, vis: gVisW, fit: gFit })); } catch (err) { } try { scheduleSave(); } catch (err) { } };
 
@@ -2692,16 +2698,68 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin. Klikkaa laatikkoa valitaksesi tehtävän.';
+  let tkWk = 70, tkRowH = 44;
+  function renderTakt() {
+    if (view !== 'takt') return;
+    const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
+    const XC = c => c * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), rowOf = i => n - 1 - i, yOf = i => HEAD + rowOf(i) * tkRowH, hp = [], p = [], lp = [];
+    const weekPx = tkWk, step = weekPx < 36 ? 4 : weekPx < 56 ? 2 : 1;
+    for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) {
+      const wc = calWeekC(w); if (wc > CL + calVpw()) break; const major = w % step === 0, x = XC(wc);
+      hp.push('<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (major ? 14 : HEAD - 8) + '" y2="' + HEAD + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '"/>');
+      if (major && wc < CL) hp.push('<text class="ax" x="' + (x + 3).toFixed(1) + '" y="24">' + axLabel(w) + '</text>');
+    }
+    hp.push(axDays(XC, 0, CL, dayW, HEAD - 5)); hp.push(axMonths(XC, 0, CL, 10)); hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
+    // rivit ja viikkoviivat
+    for (let i = 0; i < n; i++) { const y = HEAD + i * tkRowH; if (i % 2 === 0) p.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); p.push('<line x1="0" x2="' + W + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/>'); }
+    p.push(shadeSvg(XC, 0, CL, HEAD, bodyH, dayW));
+    for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) { const wc = calWeekC(w); if (wc > CL + calVpw()) break; const x = XC(wc).toFixed(1); p.push('<line x1="' + x + '" x2="' + x + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--grid)" stroke-width=".6" opacity=".6"/>'); }
+    // sijaintien nimet
+    LOCS.forEach((lc, i) => { const y = yOf(i), nm = lc.name.length > 22 ? lc.name.slice(0, 21) + '…' : lc.name; lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--panel)"/>'); if (rowOf(i) % 2 === 0) lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); lp.push('<line x1="0" x2="' + LW + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/><text class="gc" x="8" y="' + (y + tkRowH / 2 + 4) + '"><title>' + esc(lc.name) + '</title>' + esc(nm) + '</text>'); });
+    // laatikot: jokaiselle sijaintirivillä päällekkäiset laatikot jakavat korkeuden päällekkäisyyden ajan
+    const byRow = new Map(); let cnt = 0;
+    lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; tasks(l).forEach(k => { if (k.loc == null || !LOCS[k.loc]) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); cnt++; }); });
+    const PADV = 4;
+    byRow.forEach((bx, li) => {
+      bx.sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)); const cuts = []; bx.forEach(q => { cuts.push(q.a, q.b); }); const cs = Array.from(new Set(cuts)).sort((u, v) => u - v), segs = [];
+      for (let c = 0; c + 1 < cs.length; c++) { const a = cs[c], b = cs[c + 1], act = bx.filter(q => q.a <= a + 1e-9 && q.b >= b - 1e-9); if (act.length) segs.push({ a: a, b: b, act: act }); }
+      const y0 = yOf(li) + PADV, inner = tkRowH - 2 * PADV, gap = 1.5;
+      bx.forEach(q => { q.seg = segs.filter(sg => sg.act.indexOf(q) >= 0).map(sg => { const m = sg.act.length, h = (inner - gap * (m - 1)) / m, i = sg.act.indexOf(q); return { a: sg.a, b: sg.b, y: y0 + i * (h + gap), h: h, m: m }; }); q.ov = q.seg.some(z => z.m > 1); });
+      bx.forEach((q, qi) => {
+        const sg = q.seg; if (!sg.length) return; let d = ''; sg.forEach((z, i) => { const xa = XC(z.a).toFixed(1), xb = XC(z.b).toFixed(1); d += (i ? 'L' : 'M') + xa + ' ' + z.y.toFixed(1) + 'L' + xb + ' ' + z.y.toFixed(1); });
+        for (let i = sg.length - 1; i >= 0; i--) { const z = sg[i]; d += 'L' + XC(z.b).toFixed(1) + ' ' + (z.y + z.h).toFixed(1) + 'L' + XC(z.a).toFixed(1) + ' ' + (z.y + z.h).toFixed(1); } d += 'Z';
+        const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + LOCS[li].name + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + q.k.crew + ' hlö';
+        p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity=".9" stroke="var(--ink)" stroke-opacity="' + (sel ? 1 : .35) + '" stroke-width="' + (sel ? 2 : 1) + '"><title>' + esc(tip) + '</title></path>');
+        // nimi: suurimmassa osassa, jonka korkeus riittää; päällekkäisistä laatikoista nimi vuorotellen
+        let best = null; sg.forEach(z => { if (z.h >= 13 && (!best || (z.b - z.a) > (best.b - best.a))) best = z; });
+        const lane = q.seg.length ? Math.max.apply(null, q.seg.map(z => z.m)) : 1, idxIn = bx.filter(o2 => o2.a < q.b && o2.b > q.a).sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)).indexOf(q);
+        if (best && (!q.ov || (rowOf(li) + idxIn) % 2 === 0)) {
+          const wpx = (best.b - best.a) * dayW - 6, chars = Math.floor(wpx / 6.2), nm = t.name || ''; if (chars >= 3) p.push('<text x="' + (XC(best.a) + 4).toFixed(1) + '" y="' + (best.y + best.h / 2 + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" pointer-events="none">' + esc(nm.length > chars ? nm.slice(0, chars - 1) + '…' : nm) + '</text>');
+        }
+      });
+    });
+    if (stOn() && statusDay != null) p.push('<line x1="' + X(statusDay).toFixed(1) + '" x2="' + X(statusDay).toFixed(1) + '" y1="' + HEAD + '" y2="' + H + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"><title>Tilanne ' + fmtE(statusDay) + '</title></line>');
+    const tx = XC(calWeekC(target)).toFixed(1); p.push('<line x1="' + tx + '" x2="' + tx + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4" pointer-events="none"/>');
+    taktL.setAttribute('width', LW); taktL.setAttribute('height', H); taktL.setAttribute('viewBox', '0 0 ' + LW + ' ' + H); taktL.innerHTML = '<rect x="0" y="0" width="' + LW + '" height="' + HEAD + '" fill="var(--panel)"/>' + lp.join('') + '<line x1="' + (LW - .5) + '" x2="' + (LW - .5) + '" y1="0" y2="' + H + '" stroke="var(--grid2)"/>';
+    taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('');
+    document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Piirrä tehtävät Paikka-aika-näkymässä.';
+  }
+  document.getElementById('tkZoom').addEventListener('change', e => { tkWk = +e.target.value || 70; renderTakt(); });
+  document.getElementById('tkRow').addEventListener('change', e => { tkRowH = +e.target.value || 44; renderTakt(); });
+  taktR.addEventListener('click', e => { const el = e.target.closest ? e.target.closest('[data-tl]') : null; if (!el) return; const id = +el.dataset.tl; selId = id; selGrp = null; selLoc = { l: id, loc: LOCS[+el.dataset.tloc] ? LOCS[+el.dataset.tloc].id : null }; render(); });
   function applyView() {
     const isG = view === 'gantt';
-    wrap.hidden = isG; gWrap.hidden = !isG; gCtl.hidden = !isG;
-    vFlow.setAttribute('aria-pressed', String(!isG)); vGantt.setAttribute('aria-pressed', String(isG));
-    hintEl.textContent = isG ? GANTT_HINT : FLOW_HINT; if (h1El) h1El.textContent = isG ? 'Gantt' : 'Paikka-aikakaavio';
+    const isT = view === 'takt';
+    wrap.hidden = isG || isT; gWrap.hidden = !isG; gCtl.hidden = !isG; taktWrap.hidden = !isT;
+    vFlow.setAttribute('aria-pressed', String(!isG && !isT)); vGantt.setAttribute('aria-pressed', String(isG)); vTakt.setAttribute('aria-pressed', String(isT));
+    hintEl.textContent = isT ? TAKT_HINT : isG ? GANTT_HINT : FLOW_HINT; if (h1El) h1El.textContent = isT ? 'Tahti' : isG ? 'Gantt' : 'Paikka-aikakaavio';
     gSel.value = gGroup; applyHelp();
   }
   function setView(v) { if (v === view) return; view = v; saveView(); needRoom = true; applyView(); render(); gAutoEntry(); }
   vFlow.addEventListener('click', () => setView('flow'));
   vGantt.addEventListener('click', () => setView('gantt'));
+  vTakt.addEventListener('click', () => setView('takt'));
   gSel.addEventListener('change', () => { gGroup = gSel.value === 'loc' ? 'loc' : 'trade'; saveView(); gScroll.scrollTop = 0; renderGantt(); refreshLvl(); });
   applyView();
   { const fb = document.getElementById('fitBtn'), setFit = () => { document.body.classList.toggle('fit', gFit); fb.setAttribute('aria-pressed', String(gFit)); }; setFit(); fb.addEventListener('click', () => { gFit = !gFit; setFit(); saveView(); needRoom = true; render(); }); }
@@ -3735,7 +3793,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '198';
+  const APP_BUILD = '199';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
