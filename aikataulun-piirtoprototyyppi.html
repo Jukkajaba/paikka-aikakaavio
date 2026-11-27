@@ -923,6 +923,8 @@ function actPts(l, k) {
   if (a.ae != null && a.pct >= 100) pts.push({ x: Math.max(a.as, a.ae), p: 100 });
   return pts;
 }
+// viivarivin toteuma: aikaisin toteutunut alku, loppu vasta kun kaikki sijainnit valmiit
+function lineAct(l, ts) { const as = [], ae = []; let pc = 0, w = 0, n100 = 0; ts.forEach(k => { const a = actOf(l, k); w += k.d; pc += k.d * a.pct; if (a.as != null) as.push(a.as); if (a.pct >= 100) { n100++; if (a.ae != null) ae.push(a.ae); } }); if (!as.length) return null; return { pct: w ? pc / w : 0, as: Math.min.apply(null, as), ae: (n100 === ts.length && ae.length) ? Math.max.apply(null, ae) : null, set: true }; }
 function pctOfTasks(items) { let d = 0, w = 0; items.forEach(q => { d += q.k.d; w += q.k.d * actOf(q.l, q.k).pct; }); return d ? w / d : 0; }
 const dateOnly = t => t.replace(/^(ma|ti|ke|to|pe) /, '');
 const wkShow = d => wkNo(weekOf(d));
@@ -1736,17 +1738,17 @@ const XLS = (() => {
     let ts = tasks(l); const t = trade(l.trade), key = 'L' + l.id, closed = !!gClosed[key], mx = t.maxCrew;
     if (locHid.size && !l.flat) { ts = ts.filter(x => !locHid.has(x.locId)); if (!ts.length) return; }
     if (l.flat) { rows.push({ g: false, flat: true, label: t.name, s: ts[0].s, e: lineEnd(l), crew: crewOf(l), max: mx, col: l.trade, line: l.id, locId: ts[0].locId, lvl: lvl, pg: pg, pct: actOf(l, ts[0]).pct, act: actOf(l, ts[0]) }); return; }
-    rows.push({ g: true, key: key, closed: closed, label: t.name, s: ts[0].s, e: locHid.size ? ts.reduce((m, x) => Math.max(m, x.e), 0) : lineEnd(l), crew: locHid.size ? ts.reduce((m, x) => Math.max(m, x.crew), 1) : crewOf(l), max: mx, col: l.trade, line: l.id, lvl: lvl, pg: pg, pct: pctOfTasks(ts.map(k => ({ l: l, k: k }))) });
+    rows.push({ g: true, key: key, closed: closed, label: t.name, s: ts[0].s, e: locHid.size ? ts.reduce((m, x) => Math.max(m, x.e), 0) : lineEnd(l), crew: locHid.size ? ts.reduce((m, x) => Math.max(m, x.crew), 1) : crewOf(l), max: mx, col: l.trade, line: l.id, lvl: lvl, pg: pg, pct: pctOfTasks(ts.map(k => ({ l: l, k: k }))), act: lineAct(l, ts) });
     if (closed) return;
     if (!ts.some(x => gAnc(x.locId).A.length)) { ts.forEach(x => rows.push({ g: false, label: x.name || (t.name + ', ' + LOCS[x.loc].name), s: x.s, e: x.e, crew: x.crew, max: mx, col: l.trade, line: l.id, locId: x.locId, lvl: lvl, pg: pg, pct: actOf(l, x).pct, act: actOf(l, x) })); return; }
     const agg = new Map(); // yläsolmujen yhteenvedot tämän viivan sisällä
-    ts.forEach(x => gAnc(x.locId).A.forEach(n => { const o = agg.get(n.id); if (!o) agg.set(n.id, { s: x.s, e: x.e, crew: x.crew }); else { o.s = Math.min(o.s, x.s); o.e = Math.max(o.e, x.e); o.crew = Math.max(o.crew, x.crew); } }));
+    ts.forEach(x => gAnc(x.locId).A.forEach(n => { const o = agg.get(n.id); if (!o) agg.set(n.id, { s: x.s, e: x.e, crew: x.crew, ts: [x] }); else { o.ts.push(x); o.s = Math.min(o.s, x.s); o.e = Math.max(o.e, x.e); o.crew = Math.max(o.crew, x.crew); } }));
     let shown = [];
     ts.forEach(x => {
       const A = gAnc(x.locId).A, base = lvl + 1; let k = 0; while (k < shown.length && k < A.length && shown[k] === A[k].id) k++;
       shown = A.map(n => n.id);
       const hid = A.findIndex(n => nClosed(key + 'N' + n.id, n.id));
-      for (let j = k; j < A.length; j++) { if (hid >= 0 && j > hid) break; const n = A[j], o = agg.get(n.id); rows.push({ g: true, nh: true, key: key + 'N' + n.id, closed: nClosed(key + 'N' + n.id, n.id), nid: n.id, pl: l.id, label: n.name, lvl: base + j, s: o.s, e: o.e, crew: o.crew, max: mx, col: l.trade, pg: pg }); }
+      for (let j = k; j < A.length; j++) { if (hid >= 0 && j > hid) break; const n = A[j], o = agg.get(n.id); rows.push({ g: true, nh: true, key: key + 'N' + n.id, closed: nClosed(key + 'N' + n.id, n.id), nid: n.id, pl: l.id, label: n.name, lvl: base + j, s: o.s, e: o.e, crew: o.crew, max: mx, col: l.trade, pg: pg, pct: pctOfTasks(o.ts.map(k => ({ l: l, k: k }))), act: lineAct(l, o.ts) }); }
       if (hid >= 0) return;
       rows.push({ g: false, label: x.name || (gAnc(x.locId).leaf || LOCS[x.loc].name), s: x.s, e: x.e, crew: x.crew, max: mx, col: l.trade, line: l.id, locId: x.locId, lvl: base + A.length, pg: pg, pct: actOf(l, x).pct, act: actOf(l, x) });
     });
@@ -2147,7 +2149,7 @@ const XLS = (() => {
   }, { passive: false }));
   function addFlatTask(gid, o) {
     o = o || {}; if (!o.noUndo) pushUndo(snapshot()); ensureOrd(); if (o.end) { gEntry = true; selId = null; selGrp = null; selLoc = null; }
-    const t = newTrade(); t.name = o.name || 'Uusi tehtävä'; t.flat = true;
+    const t = newTrade(); t.name = o.name || 'Uusi tehtävä'; t.flat = true; t.qty = 0; // uusi tehtävä: määrä 0, kesto 5 pv
     const sel = byId(selId), g = gid ? groups.find(x => x.id === gid) : null, kids = g ? gKidsOf(lines, g.id) : [];
     { const st = sel && trade(sel.trade); if (st && st.col) t.col = st.col; } // uusi tehtävä saa valitun tehtävän värin
     const st0 = sel ? sel.start : (kids.length ? Math.min.apply(null, kids.map(k => k.start)) : 0);
@@ -2157,7 +2159,7 @@ const XLS = (() => {
     if (sel && !gid && (sel.grp || true)) { // uusi tehtävä valitun rivin alapuolelle (samaan ryhmään)
       if (sel.grp) l.grp = sel.grp; else delete l.grp;
       const items = itemsOf(l.grp || null).filter(x => x.o !== l), ix = items.findIndex(x => x.k === 'l' && x.id === sel.id);
-      items.splice(ix >= 0 ? ix + 1 : items.length, 0, { k: 'l', id: l.id, o: l }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; });
+      items.splice(ix >= 0 ? (o.above ? ix : ix + 1) : items.length, 0, { k: 'l', id: l.id, o: l }); items.forEach((x, i) => { x.o.ord = (i + 1) * 10; });
     }
     selId = l.id; selGrp = null; selDep = null; tasksOpen = false; gEnsureRoom(); render();
     const ri = gRows.findIndex(r => r.line === l.id); gScroll.scrollTop = Math.max(0, (ri >= 0 ? ri : gRows.length) * ROWH[gRowK] - 120);
@@ -3055,7 +3057,7 @@ const XLS = (() => {
       const b0 = ctx.querySelector('button:not(:disabled)'); if (b0) b0.focus(); return;
     }
     let u = null; if (l) { selId = l.id; selGrp = null; selDep = null; render(); u = mdlUrl(l); }
-    const tk = '<div class="ctx-sub"><button type="button" role="menuitem" aria-haspopup="true" data-cx="addtoggle" data-id="">Lisää <span style="float:right">▸</span></button><div class="ctx-subm"><button type="button" role="menuitem" data-cx="taskadd" data-id="">Uusi tehtävä valitun alle (Enter)</button><button type="button" role="menuitem" data-cx="tasksub" data-id="">Uusi alatehtävä</button><button type="button" role="menuitem" data-cx="grpnew" data-id="">Uusi ylätehtävä</button></div></div>';
+    const tk = '<div class="ctx-sub"><button type="button" role="menuitem" aria-haspopup="true" data-cx="addtoggle" data-id="">Lisää <span style="float:right">▸</span></button><div class="ctx-subm"><button type="button" role="menuitem" data-cx="taskadd" data-id="">Uusi tehtävä valitun alle (Enter)</button><button type="button" role="menuitem" data-cx="taskabove" data-id="">Uusi tehtävä valitun yläpuolelle (Shift+Enter)</button><button type="button" role="menuitem" data-cx="tasksub" data-id="">Uusi alatehtävä</button><button type="button" role="menuitem" data-cx="grpnew" data-id="">Uusi ylätehtävä</button></div></div>';
     const gt = '<button type="button" role="menuitem" data-cx="gtxt" data-id="">' + (gTxt ? 'Piilota janatekstit' : 'Näytä janatekstit') + '</button>';
     ctx.innerHTML = l ? '<div class="ctx-h">' + esc(t.name) + '</div>' +
       '<button type="button" role="menuitem" data-cx="open" data-id="' + l.id + '"' + (u ? '' : ' disabled') + '>Avaa malli</button>' +
@@ -3073,6 +3075,7 @@ const XLS = (() => {
     else if (a === 'grpdel') act('grpdel', id, {});
     else if (a === 'grpnew') document.getElementById('gAddGrp').click();
     else if (a === 'taskadd') document.getElementById('gAddTask').click();
+    else if (a === 'taskabove') { if (byId(selId)) { addFlatTask(null, { above: true }); gOpenFresh(); } else toast('Valitse ensin rivi, jonka yläpuolelle tehtävä tulee.'); }
     else if (a === 'tasksub') document.getElementById('gAddSub').click();
     else if (a === 'indent') { gIndent(+id); render(); }
     else if (a === 'outdent') { gOutdent(+id); render(); }
@@ -3841,6 +3844,7 @@ const XLS = (() => {
       if (e.key === 'Tab' && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); gMultiIndent(e.shiftKey); return; }
       if (e.key === 'Escape') { msel = []; render(); return; }
     }
+    if (e.key === 'Enter' && e.shiftKey && view === 'gantt' && byId(selId) && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details|input|textarea)$/i.test((document.activeElement || {}).tagName || '') && !document.querySelector('body > input.gedit')) { e.preventDefault(); addFlatTask(null, { above: true }); gOpenFresh(); return; }
     if (e.key === 'Enter' && view === 'gantt' && (selId != null || selGrp) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && !document.querySelector('body > input.gedit')) { e.preventDefault(); const sel = byId(selId); addFlatTask(selGrp && !sel ? selGrp : null); /* valitun tehtävän alle samaan ryhmään (addFlatTask hoitaa) */ gOpenFresh(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '') && byId(selId)) { e.preventDefault(); if (e.shiftKey) gOutdent(selId); else gIndent(selId); render(); return; }
     if (e.key === 'Tab' && view === 'gantt' && selGrp && selId == null && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(button|a|summary|details)$/i.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); if (e.shiftKey) gOutdent(selGrp, 'group'); else gIndent(selGrp, 'group'); render(); return; }
@@ -3972,7 +3976,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '220';
+  const APP_BUILD = '222';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
