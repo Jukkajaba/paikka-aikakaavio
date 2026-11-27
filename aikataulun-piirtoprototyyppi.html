@@ -627,7 +627,10 @@ function shareW(l) { const r = range(l); let w = 0; for (let k = 0; k < r.n; k++
 // Sijaintikohtainen perusaika (keskimäärin): kiinteän kokonaiskeston tilassa lasketaan kokonaiskestosta, muuten l.dur.
 // Tahtialueella (l.ta) "aika sijainnissa" tarkoittaa aikaa yhdellä tahtialueella (keskimäärin): kerroin = lehtien osuuksien summa / alueiden määrä
 function taF(l) { if (l.flat || l.ta == null) return 1; const u = tasks(l).filter(t => t.gi === 0).length; return u ? shareW(l) / u : 1; }
-function perLoc(l) { const f = taF(l); return l.total != null ? Math.max(MIN_D, r1((l.total - fixedDays(l)) / shareW(l) * f)) : (f === 1 ? l.dur : r1(l.dur * f)); }
+function perLoc(l) {
+  // työryhmä-ohjatussa tilassa (lockC) tai omilla kestoilla kesto ei tule dur-kentästä: näytetään todellinen keskikesto, jotta kenttä vastaa laatikoiden pituutta
+  if (!l.flat && (l.lockC != null || (l.ov && Object.keys(l.ov).some(k => l.ov[k] && l.ov[k].d != null)))) { const u = tasks(l).filter(t => t.gi === 0); if (u.length) return r1(u.reduce((a, t) => a + t.d, 0) / u.length); }
+  const f = taF(l); return l.total != null ? Math.max(MIN_D, r1((l.total - fixedDays(l)) / shareW(l) * f)) : (f === 1 ? l.dur : r1(l.dur * f)); }
 function setTotal(l, T) {
   if (l.ov) for (const k in l.ov) delete l.ov[k].d; // kokonaiskesto jaetaan uudelleen kaikille: omat kestot vapautetaan
   const r = range(l), fx = fixedDays(l);
@@ -3695,7 +3698,7 @@ const XLS = (() => {
     else if (a === 'dlock') { if (l.lockD) delete l.lockD; else l.lockD = true; }
     else if (a === 'clock') { if (l.lockC != null) releaseTotal(l); else { const c0 = crewOf(l); l.total = null; if (l.ov) for (const k in l.ov) delete l.ov[k].d; l.lockC = c0; } }
     else if (a === 'tctl') { l.tctl = !l.tctl; if (!l.tctl) releaseTotal(l); }
-    else if ((a === 'dur+' || a === 'dur-') && l.lockC != null) { setPerLoc(l, snap(l.dur, a === 'dur+' ? 1 : -1)); }
+    else if ((a === 'dur+' || a === 'dur-') && l.lockC != null) { setPerLoc(l, snap(perLoc(l), a === 'dur+' ? 1 : -1)); }
     else if (a === 'dur+') { if (l.total != null) setTotal(l, snap(perLoc(l), 1) / taF(l) * shareW(l) + fixedDays(l)); else setPerLoc(l, snap(perLoc(l), 1)); }
     else if (a === 'dur-') { if (l.total != null) setTotal(l, Math.max(MIN_D, snap(perLoc(l), -1)) / taF(l) * shareW(l) + fixedDays(l)); else setPerLoc(l, snap(perLoc(l), -1)); }
     else if (a === 'gap+') { l.gap = snap(l.gap, 1); fit(l); }
@@ -3956,7 +3959,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '217';
+  const APP_BUILD = '218';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
