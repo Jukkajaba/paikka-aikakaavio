@@ -338,7 +338,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
     <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
-    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Zoomaus <button id="tkOut" title="Loitonna (Ctrl + rullaus)">−</button><button id="tkIn" title="Lähennä (Ctrl + rullaus)">+</button><button id="tkFit" title="Sovita koko aikajana näkyviin">Koko</button></label><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><label title="Asettaa saman tahtiajan (pv per tahtialue) valituille laatikoille. Ilman valintaa: valitulle tehtävälle, ja jos mitään ei ole valittu, kaikille. Työryhmä lasketaan uudelleen.">Tahtiaika <input id="tkTakt" type="number" min="0.5" max="60" step="0.5" value="5" style="width:56px"> pv</label><button id="tkTaktSet">Aseta</button><button id="tkTaktFree" title="Poistaa pakotetun tahtiajan: kestot palaavat osuuksien mukaisiksi">Vapauta</button><button id="tkPlan" title="Kirjaa kaikille vielä kirjaamattomille laatikoille suunnitelman mukainen valmiusaste tilannepäivään; korjaa poikkeukset käsin">Kirjaa suunnitelman mukaan</button><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
+    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Zoomaus <button id="tkOut" title="Loitonna (Ctrl + rullaus)">−</button><button id="tkIn" title="Lähennä (Ctrl + rullaus)">+</button><button id="tkFit" title="Sovita koko aikajana näkyviin">Koko</button></label><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><button id="tkPlan" title="Kirjaa kaikille vielä kirjaamattomille laatikoille suunnitelman mukainen valmiusaste tilannepäivään; korjaa poikkeukset käsin">Kirjaa suunnitelman mukaan</button><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
     <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddSub" type="button" class="gplus small" title="Lisää alatehtävä valitun rivin alle" aria-label="Lisää alatehtävä">+</button><button id="gAddGrp" type="button" style="display:none" aria-hidden="true" tabindex="-1" title="Luo ylätehtävä valitun rivin alapuolelle">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
@@ -557,10 +557,10 @@ function tasksCalc(l) {
     const mem = u.ks.map(k => {
       const idx = rat(r, k), loc = locAt(idx), o = (l.ov && l.ov[loc.id]) || {}, qk = o.q != null ? o.q : q * shr(l, loc);
       const d = Math.min(N_DAYS, o.d != null ? o.d : (lc != null ? Math.max(MIN_D, r1(qk / l.prod / lc)) : (dist && dist[k] != null ? dist[k] : Math.max(MIN_D, r1(l.dur * shr(l, loc))))));
-      return { idx: idx, loc: loc, o: o, qk: qk, d: d };
+      return { idx: idx, loc: loc, o: o, qk: qk, d: d, raw: l.dur * shr(l, loc), def: o.d == null && lc == null && !(dist && dist[k] != null) };
     });
     const grouped = ta != null && (mem.length > 1 || u.key !== mem[0].loc.id), o = grouped ? ((l.ov && l.ov[u.key]) || {}) : mem[0].o;
-    const d = grouped ? Math.min(N_DAYS, o.d != null ? o.d : mem.reduce((a, m) => a + m.d, 0)) : mem[0].d;
+    const d = grouped ? Math.min(N_DAYS, o.d != null ? o.d : (mem.every(m => m.def) ? Math.max(MIN_D, r1(mem.reduce((a, m) => a + m.raw, 0))) : mem.reduce((a, m) => a + m.d, 0))) : mem[0].d;
     const sh = ui === 0 ? 0 : (o.shift || 0);
     const s = ui === 0 ? l.start : r1(Math.max(prevS, prevEnd + l.gap + sh)); // negatiivinen viive = päällekkäisyys, mutta ei ennen edellisen alkua
     const qs = mem.reduce((a, m) => a + m.qk, 0), G = (lc != null && o.d == null) ? lc : Math.max(1, Math.ceil(qs / l.prod / d - 1e-9));
@@ -625,7 +625,9 @@ function shiftSum(l) { const r = range(l); let s = 0; for (let k = 1; k < r.n; k
 function fixedDays(l) { return (nLocs(l) - 1) * l.gap + shiftSum(l); }
 function shareW(l) { const r = range(l); let w = 0; for (let k = 0; k < r.n; k++) w += shr(l, LOCS[rat(r, k)]); return Math.max(w, 0.1); }
 // Sijaintikohtainen perusaika (keskimäärin): kiinteän kokonaiskeston tilassa lasketaan kokonaiskestosta, muuten l.dur.
-function perLoc(l) { return l.total != null ? Math.max(MIN_D, r1((l.total - fixedDays(l)) / shareW(l))) : l.dur; }
+// Tahtialueella (l.ta) "aika sijainnissa" tarkoittaa aikaa yhdellä tahtialueella (keskimäärin): kerroin = lehtien osuuksien summa / alueiden määrä
+function taF(l) { if (l.flat || l.ta == null) return 1; const u = tasks(l).filter(t => t.gi === 0).length; return u ? shareW(l) / u : 1; }
+function perLoc(l) { const f = taF(l); return l.total != null ? Math.max(MIN_D, r1((l.total - fixedDays(l)) / shareW(l) * f)) : (f === 1 ? l.dur : r1(l.dur * f)); }
 function setTotal(l, T) {
   if (l.ov) for (const k in l.ov) delete l.ov[k].d; // kokonaiskesto jaetaan uudelleen kaikille: omat kestot vapautetaan
   const r = range(l), fx = fixedDays(l);
@@ -2819,25 +2821,6 @@ const XLS = (() => {
     taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('');
     document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Vedä tyhjään kohtaan luodaksesi tehtävän.';
   }
-  function tkTaktLines() { // kohde: monivalitut laatikot, muuten valittu tehtävä, muuten kaikki
-    if (tkMulti.size) return [...new Set([...tkMulti].map(k => +k.split('|')[0]))].map(i => byId(i)).filter(l => l && !l.flat);
-    const sl = byId(selId); return sl && !sl.flat ? [sl] : lines.filter(l => !l.flat);
-  }
-  const maxG = l => tasks(l).reduce((m, t) => Math.max(m, t.gcrew || t.crew), 1);
-  document.getElementById('tkTaktSet').addEventListener('click', () => {
-    const n = Math.round(parseFloat(document.getElementById('tkTakt').value) * 2) / 2; if (!(n >= MIN_D)) { toast('Anna tahtiaika päivinä (vähintään ' + MIN_D + ')'); return; }
-    const tl = tkTaktLines(); if (!tl.length) { toast('Ei tehtäviä'); return; }
-    pushUndo(snapshot());
-    tl.forEach(l => { const keys = tasks(l).filter(k => k.gi === 0).map(k => k.gk); releaseTotal(l); keys.forEach(k => { ovOf(l, k).d = Math.min(N_DAYS, n); }); fit(l); });
-    render();
-    const over = tl.filter(l => { const t = trade(l.trade); return t && maxG(l) > t.maxCrew; }).map(l => { const t = trade(l.trade); return t.name + ' ' + maxG(l) + '/' + t.maxCrew; });
-    toast('Tahtiaika ' + n + ' pv asetettu ' + tl.length + ' tehtävälle.' + (over.length ? ' Ylittää enimmäismiehityksen (työryhmä/enintään): ' + over.join(', ') + '.' : ' Kaikki mahtuvat enimmäismiehitykseen.'));
-  });
-  document.getElementById('tkTaktFree').addEventListener('click', () => {
-    const tl = tkTaktLines(); if (!tl.length) return; pushUndo(snapshot());
-    tl.forEach(l => { tasks(l).filter(k => k.gi === 0).forEach(k => { const o = l.ov && l.ov[k.gk]; if (o) delete o.d; }); fit(l); });
-    render(); toast('Pakotettu tahtiaika poistettu ' + tl.length + ' tehtävältä.');
-  });
   document.getElementById('tkPlan').addEventListener('click', () => {
     if (statusDay == null) { toast('Aseta ensin tilannepäivä Tilanne-paneelissa'); return; }
     pushUndo(snapshot()); let n = 0;
@@ -2948,7 +2931,7 @@ const XLS = (() => {
   // Plus- ja miinuspainike siirtyvät seuraavaan kokonaiseen päivään (4,9 → 5 → 6), kenttään voi kirjoittaa tarkan arvon.
   function snap(x, d) { const r = r1(x); return Number.isInteger(r) ? r + d : (d > 0 ? Math.ceil(r) : Math.floor(r)); }
   // "Aika sijainnissa" asettaa kaikille sijainneille saman perusajan: tehtävien omat kestot vapautetaan (viiveet säilyvät).
-  function setPerLoc(l, v) { l.total = null; l.lockC = null; if (l.ov) for (const k in l.ov) delete l.ov[k].d; l.dur = Math.max(MIN_D, r1(v)); fit(l); }
+  function setPerLoc(l, v) { l.total = null; l.lockC = null; if (l.ov) for (const k in l.ov) delete l.ov[k].d; const f = taF(l); l.dur = f === 1 ? Math.max(MIN_D, r1(v)) : Math.max(MIN_D, Math.round(v / f * 1000) / 1000); fit(l); }
   function stepper(act, id, val, loc, num, min) {
     const x = ' data-id="' + id + '"' + (loc ? ' data-loc="' + loc + '"' : '');
     const mid = num != null ? '<input class="num stepin" type="number" step="0.1" min="' + min + '" value="' + num + '" data-field="' + act + '-v"' + x + ' aria-label="Päivää"><span class="u">pv</span>' : '<output>' + val + '</output>';
@@ -3714,8 +3697,8 @@ const XLS = (() => {
     else if (a === 'clock') { if (l.lockC != null) releaseTotal(l); else { const c0 = crewOf(l); l.total = null; if (l.ov) for (const k in l.ov) delete l.ov[k].d; l.lockC = c0; } }
     else if (a === 'tctl') { l.tctl = !l.tctl; if (!l.tctl) releaseTotal(l); }
     else if ((a === 'dur+' || a === 'dur-') && l.lockC != null) { setPerLoc(l, snap(l.dur, a === 'dur+' ? 1 : -1)); }
-    else if (a === 'dur+') { if (l.total != null) setTotal(l, snap(perLoc(l), 1) * shareW(l) + fixedDays(l)); else setPerLoc(l, snap(l.dur, 1)); }
-    else if (a === 'dur-') { if (l.total != null) setTotal(l, Math.max(MIN_D, snap(perLoc(l), -1)) * shareW(l) + fixedDays(l)); else setPerLoc(l, snap(l.dur, -1)); }
+    else if (a === 'dur+') { if (l.total != null) setTotal(l, snap(perLoc(l), 1) / taF(l) * shareW(l) + fixedDays(l)); else setPerLoc(l, snap(perLoc(l), 1)); }
+    else if (a === 'dur-') { if (l.total != null) setTotal(l, Math.max(MIN_D, snap(perLoc(l), -1)) / taF(l) * shareW(l) + fixedDays(l)); else setPerLoc(l, snap(perLoc(l), -1)); }
     else if (a === 'gap+') { l.gap = snap(l.gap, 1); fit(l); }
     else if (a === 'gap-') { l.gap = Math.max(-30, snap(l.gap, -1)); fit(l); }
     else if (a === 'crew+' || a === 'crew-') {
@@ -3773,7 +3756,7 @@ const XLS = (() => {
     else if (f === 'lgrp') { const l = byId(id); if (l) { ensureOrd(); const v2 = e.target.value; if (v2 && groups.some(x => x.id === v2)) { l.grp = v2; } else delete l.grp; l.ord = maxOrd() + 10; } }
     else if (f === 'total') { const l = byId(id); if (l && v > 0) setTotalScaled(l, v); }
     else if (f === 'tqty') { const l = byId(id); if (l && v > 0) chgKeep(l, () => setTotalQty(l, v)); }
-    else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, r1(v) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }
+    else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, (taF(l) === 1 ? r1(v) : v / taF(l)) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }
     else if (f === 'gap-v') { const l = byId(id); if (l && isFinite(v)) { l.gap = clamp(r1(v), -30, 60); fit(l); } }
     else if (f === 'tq-v') { const l = byId(id); if (l && v > 0 && !l.flat) setLocQty(l, e.target.dataset.loc, v); }
     else if (f === 'tdur-v') { const l = byId(id); if (l && v >= MIN_D) { releaseTotal(l); ovOf(l, e.target.dataset.loc).d = Math.min(N_DAYS, r1(v)); fit(l); } }
@@ -3974,7 +3957,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '215';
+  const APP_BUILD = '216';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
