@@ -338,7 +338,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
     <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
-    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Zoomaus <button id="tkOut" title="Loitonna (Ctrl + rullaus)">−</button><button id="tkIn" title="Lähennä (Ctrl + rullaus)">+</button><button id="tkFit" title="Sovita koko aikajana näkyviin">Koko</button></label><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
+    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Zoomaus <button id="tkOut" title="Loitonna (Ctrl + rullaus)">−</button><button id="tkIn" title="Lähennä (Ctrl + rullaus)">+</button><button id="tkFit" title="Sovita koko aikajana näkyviin">Koko</button></label><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><button id="tkPlan" title="Kirjaa kaikille vielä kirjaamattomille laatikoille suunnitelman mukainen valmiusaste tilannepäivään; korjaa poikkeukset käsin">Kirjaa suunnitelman mukaan</button><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
     <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddSub" type="button" class="gplus small" title="Lisää alatehtävä valitun rivin alle" aria-label="Lisää alatehtävä">+</button><button id="gAddGrp" type="button" style="display:none" aria-hidden="true" tabindex="-1" title="Luo ylätehtävä valitun rivin alapuolelle">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
@@ -2700,8 +2700,16 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
-  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä tyhjään kohtaan luodaksesi uuden tehtävän (alku- ja loppusijainti sekä aika vedolla). Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
-  let tkWk = 70, tkRowH = 44, tkHead = 34;
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä tyhjään kohtaan luodaksesi uuden tehtävän (alku- ja loppusijainti sekä aika vedolla). Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko). Tilanne-paneeli auki: kaksoisklikkaus kirjaa valmiiksi, valitun laatikon nuppia vetämällä asetat valmiusasteen, Ctrl+klikkaus valitsee useita ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
+  let tkWk = 70, tkRowH = 44, tkHead = 34, tkMulti = new Set(), tkLast = null;
+  const tkKey = (l, loc) => l + '|' + loc;
+  function setPctAt(l, k, pct) { // toteuma-% yhteen laatikkoon (sama logiikka kuin Valmis-kentässä)
+    const o = ovOf(l, k.locId); pct = clamp(Math.round(pct), 0, 100);
+    if (pct === 0 && o.pct == null && o.as == null) return;
+    o.pct = pct; if (pct > 0 && o.as == null) o.as = k.s; if (pct >= 100 && o.ae == null) o.ae = Math.max(k.e, (o.as != null ? o.as : 0) + MIN_D); if (pct < 100) delete o.ae;
+    if (pct === 0) { delete o.as; delete o.hist; } else histSet(o, statusDay != null ? statusDay : todayDay(), pct);
+  }
+  const tkTargets = (l, locId) => tkMulti.size > 1 && tkMulti.has(tkKey(l.id, locId)) ? [...tkMulti].map(q => { const [i, lc] = q.split('|'), ln = byId(+i), k = ln && tasks(ln).find(x => x.locId === lc); return k ? { l: ln, k: k } : null; }).filter(Boolean) : [{ l: l, k: tasks(l).find(x => x.locId === locId) }].filter(x => x.k);
   function renderTakt() {
     if (view !== 'takt') return;
     const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
@@ -2733,14 +2741,16 @@ const XLS = (() => {
         for (let i = sg.length - 1; i >= 0; i--) { const z = sg[i]; d += 'L' + XC(z.b).toFixed(1) + ' ' + (z.y + z.h).toFixed(1) + 'L' + XC(z.a).toFixed(1) + ' ' + (z.y + z.h).toFixed(1); } d += 'Z';
         const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + LOCS[li].name + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + q.k.crew + ' hlö';
         // toteuma: vaalea laatikko, jonka tumma täyttö etenee vasemmalta prosentin verran; myöhässä (tilannepäivään verrattuna) punainen reuna
-        const sOn = stOn(), act = sOn ? actOf(q.l, q.k) : null, pc = act ? act.pct : 0; let late = false;
+        const sOn = stOn(), act = sOn ? actOf(q.l, q.k) : null, pc = act ? act.pct : 0, ms = tkMulti.has(tkKey(q.l.id, q.k.locId)); let late = false;
         if (sOn && statusDay != null && pc < 100 && statusDay > q.k.s) late = pc < Math.min(100, (statusDay - q.k.s) / Math.max(1e-6, q.k.e - q.k.s) * 100) - 0.5;
         const tip2 = sOn ? tip + ' · valmis ' + Math.round(pc) + ' %' + (late ? ' · myöhässä' : '') : tip;
-        p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity="' + (sOn ? '.3' : '.9') + '" stroke="' + (late ? '#d62828' : 'var(--ink)') + '" stroke-opacity="' + (late || sel ? 1 : .35) + '" stroke-width="' + (late || sel ? 2 : 1) + '"><title>' + esc(tip2) + '</title></path>');
+        p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity="' + (sOn ? '.3' : '.9') + '" stroke="' + (late ? '#d62828' : ms ? '#1f6feb' : 'var(--ink)') + '" stroke-opacity="' + (late || sel || ms ? 1 : .35) + '" stroke-width="' + (late || sel || ms ? 2 : 1) + '"' + (ms ? ' stroke-dasharray="5 2"' : '') + '><title>' + esc(tip2) + '</title></path>');
         if (sOn && pc > 0) { const cx0 = XC(q.a), cx1 = XC(q.b), cid = 'tkc' + q.l.id + '_' + li; p.push('<clipPath id="' + cid + '"><rect x="' + cx0.toFixed(1) + '" y="' + yOf(li) + '" width="' + Math.max(0, (cx1 - cx0) * Math.min(100, pc) / 100).toFixed(1) + '" height="' + tkRowH + '"/></clipPath><path class="tkf" d="' + d + '" clip-path="url(#' + cid + ')" fill="' + colorOf(q.l.trade) + '" fill-opacity=".92" pointer-events="none"/>'); }
+        let knob = ''; if (sOn && (ms || (selLoc && selLoc.l === q.l.id && selLoc.loc === q.k.locId))) { const kx0 = XC(q.a), kx1 = XC(q.b); knob = ('<circle class="tkp" data-tl="' + q.l.id + '" data-tloc="' + li + '" data-x0="' + kx0.toFixed(1) + '" data-x1="' + kx1.toFixed(1) + '" cx="' + (kx0 + (kx1 - kx0) * pc / 100).toFixed(1) + '" cy="' + sg[0].y.toFixed(1) + '" r="5.5" fill="#fff" stroke="var(--ink)" stroke-width="1.6" style="cursor:ew-resize"><title>Vedä: valmiusaste (25 % välein, Shift: 5 %)</title></circle>'); }
         { const z0 = sg[0], z1 = sg[sg.length - 1], hw = Math.min(6, Math.max(3, ((z1.b - z0.a) * dayW) / 3)); const hd = 'data-tl="' + q.l.id + '" data-tloc="' + li + '"';
           p.push('<rect class="tkh" ' + hd + ' data-tm="hs" x="' + (XC(z0.a) - 1).toFixed(1) + '" y="' + z0.y.toFixed(1) + '" width="' + hw + '" height="' + z0.h.toFixed(1) + '" fill="transparent"/>');
           p.push('<rect class="tkh" ' + hd + ' data-tm="he" x="' + (XC(z1.b) - hw + 1).toFixed(1) + '" y="' + z1.y.toFixed(1) + '" width="' + hw + '" height="' + z1.h.toFixed(1) + '" fill="transparent"/>'); }
+        if (knob) p.push(knob);
         // nimi: laatikon leveimmässä osassa, jonka korkeus riittää (kaikissa laatikoissa, myös päällekkäisissä)
         let best = null; sg.forEach(z => { if (z.h >= 13 && (!best || (z.b - z.a) > (best.b - best.a))) best = z; });
         if (best) {
@@ -2755,6 +2765,12 @@ const XLS = (() => {
     taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('');
     document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Vedä tyhjään kohtaan luodaksesi tehtävän.';
   }
+  document.getElementById('tkPlan').addEventListener('click', () => {
+    if (statusDay == null) { toast('Aseta ensin tilannepäivä Tilanne-paneelissa'); return; }
+    pushUndo(snapshot()); let n = 0;
+    lines.forEach(l => { if (l.flat) return; tasks(l).forEach(k => { if (actOf(l, k).set || statusDay <= k.s) return; const pl = clamp((statusDay - k.s) / Math.max(1e-6, k.e - k.s), 0, 1); setPctAt(l, k, pl >= 1 ? 100 : Math.round(pl * 100 / 5) * 5); n++; }); });
+    render(); toast(n ? 'Kirjattu suunnitelman mukaan ' + n + ' laatikolle. Korjaa poikkeukset käsin.' : 'Kaikilla laatikoilla on jo toteuma tai ne alkavat vasta tilannepäivän jälkeen.');
+  });
   const tkSel = document.getElementById('tkZoom'), taktBoxEl = document.getElementById('taktBox');
   function tkSetWk(nw, clientX) { // zoom: pidetään hiiren kohdalla oleva aika paikallaan
     nw = clamp(Math.round(nw), 12, 400); if (nw === tkWk) return;
@@ -2773,10 +2789,23 @@ const XLS = (() => {
     if (!el && e.button === 0) { // tyhjä kohta: veto luo uuden tehtävän (kuten paikka-aikakaaviossa)
       const r0 = taktR.getBoundingClientRect(); if (e.clientY - r0.top < tkHead) return;
       if (!trade(drawTrade)) { const tt = newTrade(); tt.tmp = true; drawTrade = tt.id; }
-      selId = null; selGrp = null; selDep = null; selLoc = null; drag = { type: 'draw', tk: true, x0: e.clientX, y0: e.clientY, snap: snapshot() };
+      tkMulti.clear(); selId = null; selGrp = null; selDep = null; selLoc = null; drag = { type: 'draw', tk: true, x0: e.clientX, y0: e.clientY, snap: snapshot() };
       taktR.setPointerCapture(e.pointerId); e.preventDefault(); render(); return;
     }
     if (!el || e.button !== 0) return;
+    if (el.classList.contains('tkp')) { // valmiusasteen nuppi
+      const l = byId(+el.dataset.tl), loc = LOCS[+el.dataset.tloc]; if (!l || !loc) return;
+      drag = { type: 'pct', tk: true, id: l.id, loc: loc.id, px0: +el.dataset.x0, px1: +el.dataset.x1, snap: snapshot(), base: JSON.parse(JSON.stringify(lines)) };
+      taktR.setPointerCapture(e.pointerId); e.preventDefault(); return;
+    }
+    { const l0 = byId(+el.dataset.tl), loc0 = LOCS[+el.dataset.tloc], now = Date.now(), key0 = l0 && loc0 ? tkKey(l0.id, loc0.id) : null;
+      if (e.ctrlKey || e.metaKey) { if (key0) { if (!tkMulti.size && selLoc) tkMulti.add(tkKey(selLoc.l, selLoc.loc)); if (tkMulti.has(key0)) tkMulti.delete(key0); else tkMulti.add(key0); selId = l0.id; selLoc = { l: l0.id, loc: loc0.id }; tkLast = null; render(); } return; }
+      if (key0 && tkLast && tkLast.key === key0 && now - tkLast.t < 400 && !el.dataset.tm) { // kaksoisklikkaus: valmis (tai takaisin 0, jos jo valmis)
+        tkLast = null;
+        if (!stOn()) { toast('Avaa Tilanne-paneeli, niin voit kirjata toteumaa'); return; }
+        const tg = tkTargets(l0, loc0.id), all100 = tg.every(x => actOf(x.l, x.k).pct >= 100); pushUndo(snapshot()); tg.forEach(x => setPctAt(x.l, x.k, all100 ? 0 : 100)); render(); e.preventDefault(); return;
+      }
+      tkLast = key0 ? { key: key0, t: now } : null; if (!tkMulti.has(key0)) tkMulti.clear(); }
     const l = byId(+el.dataset.tl), loc = LOCS[+el.dataset.tloc]; if (!l || !loc) return;
     const ts = tasks(l), idx = ts.findIndex(t => t.locId === loc.id); if (idx < 0) return;
     const mode = el.dataset.tm || 'body'; gEnsureRoom();
@@ -2786,6 +2815,11 @@ const XLS = (() => {
   });
   taktR.addEventListener('pointermove', e => {
     if (!drag || !drag.tk) return;
+    if (drag.type === 'pct') {
+      const r0 = taktR.getBoundingClientRect(), f = clamp((e.clientX - r0.left - drag.px0) / Math.max(1, drag.px1 - drag.px0), 0, 1), stp = e.shiftKey ? 5 : 25, pct = Math.round(f * 100 / stp) * stp;
+      lines = JSON.parse(JSON.stringify(drag.base)); const l = byId(drag.id); if (!l) return;
+      tkTargets(l, drag.loc).forEach(x => setPctAt(x.l, x.k, pct)); renderSoon(); return;
+    }
     if (drag.type === 'draw') {
       if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) {
         const r0 = taktR.getBoundingClientRect(), dW = tkWk / calVpw(), stp = snapStep(), nL = LOCS.length;
@@ -3862,7 +3896,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '210';
+  const APP_BUILD = '211';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
