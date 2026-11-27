@@ -3119,7 +3119,6 @@ const XLS = (() => {
         ((k.ovd || k.shift) ? '<button type="button" data-act="treset" data-id="' + l.id + '" data-loc="' + k.locId + '">Palauta</button>' : '') + '</div></div>';
     });
     th += '</details>';
-    if (slk) queueMicrotask(() => { const e = panel.querySelector('.task.sel'); if (!e) return; const pr = panel.getBoundingClientRect(), er = e.getBoundingClientRect(); if (er.bottom > pr.bottom) panel.scrollTop += er.bottom - pr.bottom + 8; else if (er.top < pr.top) panel.scrollTop -= pr.top - er.top + 8; });
     const vd = validDeps(), myDeps = vd.filter(d => d.a.l === l.id || d.b.l === l.id), sd = allDeps().find(d => d.id === selDep);
     if (sd && myDeps.indexOf(sd) < 0) myDeps.push(sd);
     if (l.flat) th = '';
@@ -3957,7 +3956,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '216';
+  const APP_BUILD = '217';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
