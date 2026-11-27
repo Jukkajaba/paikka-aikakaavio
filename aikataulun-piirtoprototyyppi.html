@@ -3679,7 +3679,7 @@ const XLS = (() => {
   function finish(commit) {
     flushRender();
     if (!drag) return;
-    if (drag.type === 'draw' && preview && commit) { /* väliaikainen pohja poistetaan alla */ const tpl = trade(drawTrade), nt = newTrade(); if (tpl) { nt.unit = tpl.unit; nt.qty = tpl.qty; nt.prod = tpl.prod; nt.maxCrew = tpl.maxCrew; if (tpl.res) nt.res = tpl.res; if (tpl.extra) nt.extra = tpl.extra.map(e => ({ res: e.res, n: e.n })); } const l = Object.assign({}, preview, { id: nextId++, trade: nt.id, qty: nt.qty, prod: nt.prod }); lines.push(l); selId = l.id; TRADES = TRADES.filter(x => !x.tmp || lines.some(q => q.trade === x.id)); }
+    if (drag.type === 'draw' && preview && commit) { /* väliaikainen pohja poistetaan alla */ const tpl = trade(drawTrade), nt = newTrade(); if (tpl) { nt.unit = tpl.unit; nt.qty = 0; nt.prod = tpl.prod; nt.maxCrew = tpl.maxCrew; if (tpl.res) nt.res = tpl.res; if (tpl.extra) nt.extra = tpl.extra.map(e => ({ res: e.res, n: e.n })); } const l = Object.assign({}, preview, { id: nextId++, trade: nt.id, qty: nt.qty, prod: nt.prod }); lines.push(l); selId = l.id; TRADES = TRADES.filter(x => !x.tmp || lines.some(q => q.trade === x.id)); }
     if (drag.type === 'tdep' && commit) {
       const f = drag.from, tg = drag.tgt;
       if (tg) {
@@ -4086,7 +4086,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '239'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '240'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
