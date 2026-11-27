@@ -1660,6 +1660,7 @@ const XLS = (() => {
     if (key === 'start') return dateOnly(fmt(r.s));
     if (key === 'end') return dateOnly(fmtE(r.e));
     if (key === 'crew') return String(r.crew);
+    if (key === 'qty' && r.nh && r.qsum > 0) { const tl = byId(r.pl), u = tl && trade(tl.trade) && trade(tl.trade).unit ? ' ' + trade(tl.trade).unit : ''; return r2(r.qsum) + u; }
     if (key === 'qty') { const u = l && trade(l.trade) && trade(l.trade).unit ? ' ' + trade(l.trade).unit : ''; return k ? r2(k.qty) + u : isGrp ? r2(totalQty(l)) + u : ''; }
     if (key === 'prod') return k || isGrp ? String(l.prod) : '';
     if (key === 'agreed') return l && (isGrp || r.flat) && l.agreed != null ? String(l.agreed) : '';
@@ -1748,7 +1749,7 @@ const XLS = (() => {
       const A = gAnc(x.locId).A, base = lvl + 1; let k = 0; while (k < shown.length && k < A.length && shown[k] === A[k].id) k++;
       shown = A.map(n => n.id);
       const hid = A.findIndex(n => nClosed(key + 'N' + n.id, n.id));
-      for (let j = k; j < A.length; j++) { if (hid >= 0 && j > hid) break; const n = A[j], o = agg.get(n.id); rows.push({ g: true, nh: true, key: key + 'N' + n.id, closed: nClosed(key + 'N' + n.id, n.id), nid: n.id, pl: l.id, label: n.name, lvl: base + j, s: o.s, e: o.e, crew: o.crew, max: mx, col: l.trade, pg: pg, pct: pctOfTasks(o.ts.map(k => ({ l: l, k: k }))), act: lineAct(l, o.ts) }); }
+      for (let j = k; j < A.length; j++) { if (hid >= 0 && j > hid) break; const n = A[j], o = agg.get(n.id); rows.push({ g: true, nh: true, key: key + 'N' + n.id, closed: nClosed(key + 'N' + n.id, n.id), nid: n.id, pl: l.id, label: n.name, lvl: base + j, s: o.s, e: o.e, crew: o.crew, max: mx, col: l.trade, pg: pg, pct: pctOfTasks(o.ts.map(k => ({ l: l, k: k }))), act: lineAct(l, o.ts), qsum: o.ts.reduce((a, k) => a + (k.qty || 0), 0) }); }
       if (hid >= 0) return;
       rows.push({ g: false, label: x.name || (gAnc(x.locId).leaf || LOCS[x.loc].name), s: x.s, e: x.e, crew: x.crew, max: mx, col: l.trade, line: l.id, locId: x.locId, lvl: base + A.length, pg: pg, pct: actOf(l, x).pct, act: actOf(l, x) });
     });
@@ -3976,7 +3977,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '222';
+  const APP_BUILD = '223';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
