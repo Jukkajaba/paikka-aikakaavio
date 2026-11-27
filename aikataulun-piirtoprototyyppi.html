@@ -2724,7 +2724,7 @@ const XLS = (() => {
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
   const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä tyhjään kohtaan luodaksesi uuden tehtävän (alku- ja loppusijainti sekä aika vedolla). Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko). Tilanne-paneeli auki: kaksoisklikkaus kirjaa valmiiksi, valitun laatikon nuppia vetämällä asetat valmiusasteen, Ctrl+klikkaus valitsee useita ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
-  let tkWk = 70, tkRowH = 44, tkHead = 34, tkMulti = new Set(), tkLast = null;
+  let tkWk = 70, tkRowH = 44, tkHead = 34, tkMulti = new Set(), tkLast = null, tkWin = null;
   const tkKey = (l, loc) => l + '|' + loc;
   let lohkoN = 3;
   function linPart(w, n) { // peräkkäisten painojen jako n osaan niin, että suurin osasumma on mahdollisimman pieni (palauttaa osien alkuindeksit)
@@ -2771,6 +2771,10 @@ const XLS = (() => {
     const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
     const XC = c => c * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), rowOf = i => i, yOf = i => HEAD + rowOf(i) * tkRowH, hp = [], p = [], lp = [];
     const weekPx = tkWk, step = weekPx < 36 ? 4 : weekPx < 56 ? 2 : 1;
+    // virtualisointi: piirretään vain näkyvä alue (+ reunus), jotta iso projekti (tuhansia laatikoita) pysyy sujuvana
+    const bx0 = document.getElementById('taktBox'), vw = bx0 ? bx0.clientWidth : 0, virt = vw > 0;
+    let wr0 = 0, wr1 = n - 1, wc0 = -1e9, wc1 = 1e9;
+    if (virt) { const sl = bx0.scrollLeft, st = bx0.scrollTop, vh = bx0.clientHeight; wr0 = Math.max(0, Math.floor((st - HEAD) / tkRowH) - 4); wr1 = Math.min(n - 1, Math.ceil((st + vh - HEAD) / tkRowH) + 4); wc0 = (sl - 400) / dayW; wc1 = (sl + vw + 400) / dayW; tkWin = { r0: wr0, r1: wr1, x0: sl - 400, x1: sl + vw + 400, n: n, head: HEAD }; } else tkWin = null;
     for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) {
       const wc = calWeekC(w); if (wc > CL + calVpw()) break; const major = w % step === 0, x = XC(wc);
       hp.push('<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (major ? 14 : HEAD - 8) + '" y2="' + HEAD + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '"/>');
@@ -2778,14 +2782,14 @@ const XLS = (() => {
     }
     hp.push(axDays(XC, 0, CL, dayW, HEAD - 5)); hp.push(axMonths(XC, 0, CL, 10)); hp.push('<line x1="0" x2="' + W + '" y1="' + (HEAD - .5) + '" y2="' + (HEAD - .5) + '" stroke="var(--grid2)"/>');
     // rivit ja viikkoviivat
-    for (let i = 0; i < n; i++) { const y = HEAD + i * tkRowH; if (i % 2 === 0) p.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); p.push('<line x1="0" x2="' + W + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/>'); }
+    for (let i = wr0; i <= wr1; i++) { const y = HEAD + i * tkRowH; if (i % 2 === 0) p.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); p.push('<line x1="0" x2="' + W + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/>'); }
     p.push(shadeSvg(XC, 0, CL, HEAD, bodyH, dayW));
     for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) { const wc = calWeekC(w); if (wc > CL + calVpw()) break; const x = XC(wc).toFixed(1); p.push('<line x1="' + x + '" x2="' + x + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--grid)" stroke-width=".6" opacity=".6"/>'); }
     // sijaintien nimet
-    LOCS.forEach((lc, i) => { const y = yOf(i), nm = lc.name.length > 22 ? lc.name.slice(0, 21) + '…' : lc.name; lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--panel)"/>'); if (rowOf(i) % 2 === 0) lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); lp.push('<line x1="0" x2="' + LW + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/><text class="gc" x="8" y="' + (y + tkRowH / 2 + 4) + '"><title>' + esc(lc.name) + '</title>' + esc(nm) + '</text>'); });
+    LOCS.forEach((lc, i) => { if (i < wr0 || i > wr1) return; const y = yOf(i), nm = lc.name.length > 22 ? lc.name.slice(0, 21) + '…' : lc.name; lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--panel)"/>'); if (rowOf(i) % 2 === 0) lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); lp.push('<line x1="0" x2="' + LW + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/><text class="gc" x="8" y="' + (y + tkRowH / 2 + 4) + '"><title>' + esc(lc.name) + '</title>' + esc(nm) + '</text>'); });
     // laatikot: jokaiselle sijaintirivillä päällekkäiset laatikot jakavat korkeuden päällekkäisyyden ajan
     const byRow = new Map(), talls = []; let cnt = 0;
-    lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; const ts0 = tasks(l); ts0.forEach(k => { if (k.loc == null || !LOCS[k.loc] || k.gi > 0) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; if (k.gn > 1) { const mem = ts0.filter(x => x.gk === k.gk), rr = mem.map(x => x.loc); talls.push({ l: l, k: k, a: a, b: b, mem: mem, rmin: Math.min.apply(null, rr), rmax: Math.max.apply(null, rr), tall: true }); cnt++; return; } if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); cnt++; }); });
+    lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; const ts0 = tasks(l); ts0.forEach(k => { if (k.loc == null || !LOCS[k.loc] || k.gi > 0) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; cnt++; if (virt && (b < wc0 || a > wc1)) return; if (k.gn > 1) { const mem = ts0.filter(x => x.gk === k.gk), rr = mem.map(x => x.loc), rmin = Math.min.apply(null, rr), rmax = Math.max.apply(null, rr); if (virt && (rmax < wr0 || rmin > wr1)) return; talls.push({ l: l, k: k, a: a, b: b, mem: mem, rmin: rmin, rmax: rmax, tall: true }); return; } if (virt && (k.loc < wr0 || k.loc > wr1)) return; if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); }); });
     const PADV = 4; tkHead = HEAD;
     const drawQ = (q, li) => {
         const sg = q.seg; if (!sg.length) return; let d = ''; sg.forEach((z, i) => { const xa = XC(z.a).toFixed(1), xb = XC(z.b).toFixed(1); d += (i ? 'L' : 'M') + xa + ' ' + z.y.toFixed(1) + 'L' + xb + ' ' + z.y.toFixed(1); });
@@ -2830,6 +2834,11 @@ const XLS = (() => {
     lines.forEach(l => { if (l.flat) return; tasks(l).forEach(k => { if (actOf(l, k).set || statusDay <= k.s) return; const pl = clamp((statusDay - k.s) / Math.max(1e-6, k.e - k.s), 0, 1); setPctAt(l, k, pl >= 1 ? 100 : Math.round(pl * 100 / 5) * 5); n++; }); });
     render(); toast(n ? 'Kirjattu suunnitelman mukaan ' + n + ' laatikolle. Korjaa poikkeukset käsin.' : 'Kaikilla laatikoilla on jo toteuma tai ne alkavat vasta tilannepäivän jälkeen.');
   });
+  { let tkRaf = 0; const bxs = document.getElementById('taktBox'); bxs.addEventListener('scroll', () => {
+      if (view !== 'takt' || tkRaf || !tkWin) return; const sl = bxs.scrollLeft, st = bxs.scrollTop, vw2 = bxs.clientWidth, vh = bxs.clientHeight, W0 = tkWin;
+      const r0v = Math.floor((st - W0.head) / tkRowH), r1v = Math.ceil((st + vh - W0.head) / tkRowH);
+      if (sl - 150 < W0.x0 || sl + vw2 + 150 > W0.x1 || (r0v - 1 < W0.r0 && W0.r0 > 0) || (r1v + 1 > W0.r1 && W0.r1 < W0.n - 1)) tkRaf = requestAnimationFrame(() => { tkRaf = 0; renderTakt(); });
+    }); }
   const tkSel = document.getElementById('tkZoom'), taktBoxEl = document.getElementById('taktBox');
   function tkSetWk(nw, clientX) { // zoom: pidetään hiiren kohdalla oleva aika paikallaan
     nw = clamp(Math.round(nw), 12, 400); if (nw === tkWk) return;
@@ -3959,7 +3968,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '218';
+  const APP_BUILD = '219';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
