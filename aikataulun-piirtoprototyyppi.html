@@ -2698,7 +2698,7 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
-  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin. Klikkaa laatikkoa valitaksesi tehtävän.';
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Klikkaa laatikkoa valitaksesi tehtävän.';
   let tkWk = 70, tkRowH = 44;
   function renderTakt() {
     if (view !== 'takt') return;
@@ -2731,10 +2731,9 @@ const XLS = (() => {
         for (let i = sg.length - 1; i >= 0; i--) { const z = sg[i]; d += 'L' + XC(z.b).toFixed(1) + ' ' + (z.y + z.h).toFixed(1) + 'L' + XC(z.a).toFixed(1) + ' ' + (z.y + z.h).toFixed(1); } d += 'Z';
         const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + LOCS[li].name + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + q.k.crew + ' hlö';
         p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity=".9" stroke="var(--ink)" stroke-opacity="' + (sel ? 1 : .35) + '" stroke-width="' + (sel ? 2 : 1) + '"><title>' + esc(tip) + '</title></path>');
-        // nimi: suurimmassa osassa, jonka korkeus riittää; päällekkäisistä laatikoista nimi vuorotellen
+        // nimi: laatikon leveimmässä osassa, jonka korkeus riittää (kaikissa laatikoissa, myös päällekkäisissä)
         let best = null; sg.forEach(z => { if (z.h >= 13 && (!best || (z.b - z.a) > (best.b - best.a))) best = z; });
-        const lane = q.seg.length ? Math.max.apply(null, q.seg.map(z => z.m)) : 1, idxIn = bx.filter(o2 => o2.a < q.b && o2.b > q.a).sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)).indexOf(q);
-        if (best && (!q.ov || (rowOf(li) + idxIn) % 2 === 0)) {
+        if (best) {
           const wpx = (best.b - best.a) * dayW - 6, chars = Math.floor(wpx / 6.2), nm = t.name || ''; if (chars >= 3) p.push('<text x="' + (XC(best.a) + 4).toFixed(1) + '" y="' + (best.y + best.h / 2 + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" pointer-events="none">' + esc(nm.length > chars ? nm.slice(0, chars - 1) + '…' : nm) + '</text>');
         }
       });
@@ -3793,7 +3792,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '200';
+  const APP_BUILD = '201';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
