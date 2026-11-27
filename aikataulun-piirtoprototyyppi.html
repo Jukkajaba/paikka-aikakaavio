@@ -1538,6 +1538,8 @@ const XLS = (() => {
   let gTxt = false; // janatekstit (rivin nimi palkin perässä) Ganttissa
   let gEntryGrp = null; // syöttörivin ryhmä: uudet tehtävät syntyvät tämän ylätehtävän alle (sisennys Tabilla)
   let gEntry = false; // Gantin syöttörivi: tyhjä rivi listan lopussa, johon kirjoitettu nimi luo tehtävän
+  let SNAPK = 'auto'; // liikutuksen tarkkuus: 'auto' (tahti 0,5 pv, muut 1 pv), '1' tai '0.5'
+  const snapStep = () => SNAPK === '1' ? 1 : SNAPK === '0.5' ? 0.5 : (view === 'takt' ? 0.5 : 1);
   let gPrint = null, gPrintW = null, gPrintRowH = null, prtBot = false, view = 'flow', gGroup = 'trade', gClosed = {}, gRows = [], lcol = new Set(), pcol = new Set(), locHid = new Set(), viewLvl = 0, selLoc = null, selNode = null, gAncC = null, gIdx = {}, gGeo = null, gRaf = 0, gOy = 0, gOff = 0, gVisW = 26, gFit = false, gSyncing = false, fSyncing = false, gCols = ['dur', 'start', 'end', 'qty', 'crew'];
   const fH = document.getElementById('chartH'), fHi = document.getElementById('chartHi'), gH = document.getElementById('ganttH'), gHi = document.getElementById('ganttHi'), gVisEl = document.getElementById('gVis');
   try { const o = JSON.parse(localStorage.getItem(VKEY) || 'null'); if (o) { if (o.view === 'gantt' || o.view === 'takt') view = o.view; if (o.group === 'loc') gGroup = 'loc'; if (o.vis >= 4 && o.vis <= 260) gVisW = Math.round(o.vis); if (o.fit) gFit = true; } } catch (err) { }
@@ -2698,7 +2700,7 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
-  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa. Liikutus puoli päivää kerrallaan.';
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
   let tkWk = 70, tkRowH = 44;
   function renderTakt() {
     if (view !== 'takt') return;
@@ -2760,7 +2762,7 @@ const XLS = (() => {
   });
   taktR.addEventListener('pointermove', e => {
     if (!drag || !drag.tk) return;
-    const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), dx = Math.round((c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW)) * 2) / 2; // tahdissa puoli päivää kerrallaan
+    const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), st = snapStep(), dx = Math.round((c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW)) / st) * st;
     lines = JSON.parse(JSON.stringify(drag.base));
     const l = byId(drag.id), o = drag.orig; if (!l) return; const room = N_DAYS - lineEnd(o), k = drag.k, nx = drag.ts[drag.idx + 1];
     const ovx = (id) => { releaseTotal(l); return ovOf(l, id); };
@@ -3315,9 +3317,9 @@ const XLS = (() => {
     return bt;
   }
   // hiirisiirtymä työpäivinä: muunnetaan kalenteriaikajanan kautta (vapaat päivät eivät ole työpäiviä)
-  function wDx(geo, ref, x0, x1) { const l = ref.getBoundingClientRect().left; return Math.round(c2w((x1 - l - geo.LEFT) / geo.dayW + gOff) - c2w((x0 - l - geo.LEFT) / geo.dayW + gOff)); }
+  function wDx(geo, ref, x0, x1) { const l = ref.getBoundingClientRect().left; const st = snapStep(); return Math.round((c2w((x1 - l - geo.LEFT) / geo.dayW + gOff) - c2w((x0 - l - geo.LEFT) / geo.dayW + gOff)) / st) * st; }
   function pt(e) { const r = svg.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  const dayAt = (x, mode) => clamp(Math[mode](c2w((x - G.LEFT) / G.dayW + gOff)), 0, N_DAYS);
+  const dayAt = (x, mode) => { const st = snapStep(); return clamp(Math[mode](c2w((x - G.LEFT) / G.dayW + gOff) / st) * st, 0, N_DAYS); };
   const locAt = y => { const r = clamp(G.L - 1 - Math.floor((y - G.TOP) / G.rowH), 0, G.L - 1); return LOCS[G.rows ? G.rows[r].a : r].id; };
 
   let drawOn = !!window.__drawOn0; // piirtotila: päällä vedolla luodaan tehtävä, muuten veto siirtää aikajanaa
@@ -3400,7 +3402,7 @@ const XLS = (() => {
     } else {
       lines = JSON.parse(JSON.stringify(drag.base));
       const l = byId(drag.id), o = drag.orig; if (!l) return;
-      if (drag.type === 'body') { Object.assign(l, o); l.start = clamp(o.start + Math.round(c2w((P.x - G.LEFT) / G.dayW + gOff) - c2w((drag.p0.x - G.LEFT) / G.dayW + gOff)), 0, N_DAYS - span(l)); }
+      if (drag.type === 'body') { Object.assign(l, o); { const st = snapStep(); l.start = clamp(o.start + Math.round((c2w((P.x - G.LEFT) / G.dayW + gOff) - c2w((drag.p0.x - G.LEFT) / G.dayW + gOff)) / st) * st, 0, N_DAYS - span(l)); } }
       else if (drag.type === 'lbl') { l.lblT = labelT(segsOf(l, true), P); }
       else if (drag.type === 'he') { Object.assign(l, o); setSpan(l, o.start, o.from, dayAt(P.x, 'round'), locAt(P.y)); }
       else { const endFixed = lineEnd(o); Object.assign(l, o); setSpan(l, dayAt(P.x, 'round'), locAt(P.y), endFixed, o.to); }
@@ -3780,7 +3782,7 @@ const XLS = (() => {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, stAuto: stAuto, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols, tx: gTxt }, imp: impSaved, res: RES, cal: CAL });
+  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, stAuto: stAuto, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols, tx: gTxt }, imp: impSaved, res: RES, cal: CAL, snap: SNAPK });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -3809,7 +3811,7 @@ const XLS = (() => {
     let o = JSON.parse(JSON.stringify(st)); o.deps = Array.isArray(o.deps) ? o.deps : []; return migrateState(o);
   }
   function applyState(st) {
-    needRoom = true;
+    needRoom = true; SNAPK = ['1', '0.5'].indexOf(String(st.snap)) >= 0 ? String(st.snap) : 'auto';
     setCal(st.cal); setWeeks(st.weeks || 26);
     LT = ltFrom(st); syncLocs(); TRADES = st.trades;
     lines = st.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
@@ -3827,7 +3829,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '204';
+  const APP_BUILD = '206';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -4008,6 +4010,7 @@ const XLS = (() => {
       '<p class="ok hlp" style="margin:0 0 4px">Viikkonumerointi alkaa projektin alkuviikosta. Aikajana näyttää oletuksena vain työviikon päivät. Pyhät ja poikkeukset näkyvät harmaina, eikä työ etene vapaina päivinä.</p>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-weeks">Kesto (vk)</label><input id="pj-weeks" class="num" type="number" min="4" max="260" value="' + N_WEEKS + '" data-pjweeks="1"></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-target">Tavoite (projektin vk)</label><input id="pj-target" class="num" type="number" min="1" max="' + N_WEEKS + '" value="' + target + '" data-pjtarget="1"></div>' +
+      '<div class="row" style="border-top:0;padding-top:0"><label for="pj-snap" title="Kuinka tarkasti tehtäviä voi liikuttaa ja niiden kestoa muuttaa vetämällä">Liikutuksen tarkkuus</label><select id="pj-snap" data-pjsnap="1"><option value="auto"' + (SNAPK === 'auto' ? ' selected' : '') + '>Automaattinen (tahti ½ pv, muut 1 pv)</option><option value="1"' + (SNAPK === '1' ? ' selected' : '') + '>1 pv kaikkialla</option><option value="0.5"' + (SNAPK === '0.5' ? ' selected' : '') + '>½ pv kaikkialla</option></select></div>' +
       '<div class="row" style="border-top:0;padding-top:0"><label for="pj-tpl" title="Mallilinkkien osoitepohja">Mallin osoitepohja</label><input id="pj-tpl" class="txt" style="max-width:170px" type="text" maxlength="500" value="' + esc(mdlTpl) + '" data-pjtpl="1" placeholder="https://…{model}…{ids}"></div>' +
       '<p class="ok hlp" style="margin:0 0 4px">Osoitepohja muodostaa mallilinkit viivoille. Käytettävät paikkamerkit: {model} (mallin tunniste), {ids} (rakenneosat), {task} (työlajin nimi) ja {id} (viivan numero). Arvot koodataan osoitteeseen sopiviksi. Suora osoite viivalla ohittaa pohjan.</p>' +
       '<p class="ok hlp" style="margin:0 0 8px">Muutokset tallentuvat automaattisesti. Uusi projekti voi olla tyhjä tai sisältää oletustyölajit ja sijainnit. Vie tiedostoon -toiminto tekee varmuuskopion, ja Tuo tiedostosta palauttaa sen.</p>' +
@@ -4068,6 +4071,7 @@ const XLS = (() => {
       pushUndo(snapshot()); setWeeks(Math.max(need, parseInt(e.target.value, 10) || 26)); target = clamp(target, 1, N_WEEKS);
       lines.forEach(fit); syncWeeks(); render(); renderProj();
     }
+    else if (e.target.dataset.pjsnap) { SNAPK = ['1', '0.5'].indexOf(e.target.value) >= 0 ? e.target.value : 'auto'; try { scheduleSave(); } catch (err) { } }
     else if (e.target.dataset.pjtarget) { pushUndo(snapshot()); target = clamp(parseInt(e.target.value, 10) || 16, 1, N_WEEKS); e.target.value = target; render(); }
     else if (e.target.dataset.pjtpl) { pushUndo(snapshot()); mdlTpl = e.target.value.trim().slice(0, 500); render(); }
     else if (e.target.dataset.pjname) { const v = e.target.value.trim().slice(0, 40); if (v) { projName = v; renderSub(); scheduleSave(); } else e.target.value = projName; }
