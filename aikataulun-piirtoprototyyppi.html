@@ -2277,7 +2277,12 @@ const XLS = (() => {
       lines.push(l); nl++;
     });
     impSaved = { txt: impBox.querySelector('#impTxt').value, roles: IMP.roles.slice(), lm: IMP.lm, locMap: Object.assign({}, IMP.locMap), inc: Object.assign({}, IMP.inc), prod: Object.assign({}, IMP.prod), crew: Object.assign({}, IMP.crew), trade: Object.assign({}, IMP.trade), dProd: IMP.dProd, dCrew: IMP.dCrew, cg: IMP.cg };
-    lines.forEach(fit); selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
+    lines.forEach(fit);
+    { // alkujärjestys: jokainen tuotu suorite alkaa vasta kun edellinen on valmis samassa sijainnissa (työjärjestys valmiiksi kunnossa)
+      const nw = lines.slice(lines.length - nl).filter(x => !x.flat); let prevEnd = null;
+      nw.forEach(l => { l.start = 0; fit(l); const ts = tasks(l); if (prevEnd) { let need = 0; ts.forEach(k => { const e = prevEnd[k.locId]; if (e != null) need = Math.max(need, e - k.s); }); l.start = clamp(need, 0, Math.max(0, N_DAYS - span(l))); fit(l); } prevEnd = {}; tasks(l).forEach(k => { prevEnd[k.locId] = k.e; }); });
+    }
+    selId = null; render(); setStatus('Tuotu ' + nl + ' suoritetta');
     const m = impBox.querySelector('#impMsg'); if (m) m.textContent = 'Tuotu ' + nl + ' suoritetta.';
     impBox.classList.remove('on');
   }
@@ -4081,7 +4086,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '238'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '239'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

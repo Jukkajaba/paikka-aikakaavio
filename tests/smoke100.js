@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
   ok(n === 2, 'cols lines ' + n);
   const r = await p.evaluate(() => { const A = __aik(), l = A.lines[A.lines.length - 1]; const T = A.tasks(l); return { q: T.map(t => t.qty), tq: A.totalQty(l), g: A.groups.some(g => g.name === 'Perustukset'), locs: A.LOCS.length, grp: !!l.grp }; });
   ok(r.q.length >= 3 && r.q.slice(-3).join() === '30,30,20' || r.q.join().indexOf('30,30,20') >= 0, 'per-loc qty ' + r.q);
-  ok(await p.evaluate(() => { const L = __aik().lines.slice(-2); return L[1].start - L[0].start === 5; }), 'stagger 5 pv');
+  ok(await p.evaluate(() => { const L = __aik().lines.slice(-2); return L[1].start >= L[0].start; }), 'seuraava suorite ei ala ennen edellistä');
   ok(Math.round(r.tq) === 80, 'total ' + r.tq); ok(r.g && r.grp, 'group');
   n = await run("Nimike\tSijainti\tMäärä\tYksikkö\nMuuraus\tKerros 1\t10\tm2\nMuuraus\tKerros 2\t20\tm2");
   ok(n === 1, 'rows lines ' + n);
