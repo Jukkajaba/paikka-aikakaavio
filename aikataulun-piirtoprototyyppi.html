@@ -279,7 +279,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   .tkctl{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:4px 2px 8px;font-size:13px}
   #taktBox{display:flex;overflow:auto;max-height:calc(100vh - 210px);border:1px solid var(--grid2);border-radius:6px;background:var(--panel)}
   #taktL{position:sticky;left:0;z-index:2;flex:none;background:var(--panel)}#taktR{flex:none}
-  #taktR .tkb{cursor:pointer}#taktR .tkb:hover{stroke-width:2}
+  #taktR .tkb{cursor:grab;touch-action:none}#taktR .tkb:hover{stroke-width:2}#taktR .tkh{cursor:ew-resize;touch-action:none}
   #impBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
   #impBox.on{display:flex}
   #schBox{position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto}
@@ -2698,7 +2698,7 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
-  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Klikkaa laatikkoa valitaksesi tehtävän.';
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa.';
   let tkWk = 70, tkRowH = 44;
   function renderTakt() {
     if (view !== 'takt') return;
@@ -2731,6 +2731,9 @@ const XLS = (() => {
         for (let i = sg.length - 1; i >= 0; i--) { const z = sg[i]; d += 'L' + XC(z.b).toFixed(1) + ' ' + (z.y + z.h).toFixed(1) + 'L' + XC(z.a).toFixed(1) + ' ' + (z.y + z.h).toFixed(1); } d += 'Z';
         const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + LOCS[li].name + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + q.k.crew + ' hlö';
         p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity=".9" stroke="var(--ink)" stroke-opacity="' + (sel ? 1 : .35) + '" stroke-width="' + (sel ? 2 : 1) + '"><title>' + esc(tip) + '</title></path>');
+        { const z0 = sg[0], z1 = sg[sg.length - 1], hw = Math.min(6, Math.max(3, ((z1.b - z0.a) * dayW) / 3)); const hd = 'data-tl="' + q.l.id + '" data-tloc="' + li + '"';
+          p.push('<rect class="tkh" ' + hd + ' data-tm="hs" x="' + (XC(z0.a) - 1).toFixed(1) + '" y="' + z0.y.toFixed(1) + '" width="' + hw + '" height="' + z0.h.toFixed(1) + '" fill="transparent"/>');
+          p.push('<rect class="tkh" ' + hd + ' data-tm="he" x="' + (XC(z1.b) - hw + 1).toFixed(1) + '" y="' + z1.y.toFixed(1) + '" width="' + hw + '" height="' + z1.h.toFixed(1) + '" fill="transparent"/>'); }
         // nimi: laatikon leveimmässä osassa, jonka korkeus riittää (kaikissa laatikoissa, myös päällekkäisissä)
         let best = null; sg.forEach(z => { if (z.h >= 13 && (!best || (z.b - z.a) > (best.b - best.a))) best = z; });
         if (best) {
@@ -2746,7 +2749,35 @@ const XLS = (() => {
   }
   document.getElementById('tkZoom').addEventListener('change', e => { tkWk = +e.target.value || 70; renderTakt(); });
   document.getElementById('tkRow').addEventListener('change', e => { tkRowH = +e.target.value || 44; renderTakt(); });
-  taktR.addEventListener('click', e => { const el = e.target.closest ? e.target.closest('[data-tl]') : null; if (!el) return; const id = +el.dataset.tl; selId = id; selGrp = null; selLoc = { l: id, loc: LOCS[+el.dataset.tloc] ? LOCS[+el.dataset.tloc].id : null }; render(); });
+  taktR.addEventListener('pointerdown', e => {
+    const el = e.target.closest ? e.target.closest('[data-tl]') : null; if (!el || e.button !== 0) return;
+    const l = byId(+el.dataset.tl), loc = LOCS[+el.dataset.tloc]; if (!l || !loc) return;
+    const ts = tasks(l), idx = ts.findIndex(t => t.locId === loc.id); if (idx < 0) return;
+    const mode = el.dataset.tm || 'body'; gEnsureRoom();
+    selId = l.id; selGrp = null; selDep = null; selLoc = { l: l.id, loc: loc.id };
+    drag = { type: mode === 'he' ? 'gend' : mode === 'hs' ? 'hs' : 'gmove', tk: true, id: l.id, x0: e.clientX, orig: JSON.parse(JSON.stringify(l)), loc: loc.id, idx: idx, ts: ts, k: ts[idx], single: e.shiftKey, minShift: idx > 0 ? ts[idx - 1].s - (ts[idx - 1].e + l.gap) : 0, snap: snapshot(), base: JSON.parse(JSON.stringify(lines)) };
+    taktR.setPointerCapture(e.pointerId); e.preventDefault(); render();
+  });
+  taktR.addEventListener('pointermove', e => {
+    if (!drag || !drag.tk) return;
+    const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), dx = Math.round(c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW));
+    lines = JSON.parse(JSON.stringify(drag.base));
+    const l = byId(drag.id), o = drag.orig; if (!l) return; const room = N_DAYS - lineEnd(o), k = drag.k, nx = drag.ts[drag.idx + 1];
+    const ovx = (id) => { releaseTotal(l); return ovOf(l, id); };
+    if (drag.type === 'gmove') {
+      if (!drag.single) l.start = clamp(o.start + dx, 0, N_DAYS - span(o));
+      else if (drag.idx === 0) { const ns = clamp(o.start + dx, 0, N_DAYS - span(o)), ap = ns - o.start; l.start = ns; if (nx) ovx(nx.locId).shift = nx.shift - ap; }
+      else { const ns = Math.max(drag.minShift, k.shift + Math.min(dx, room)), ap = ns - k.shift; ovx(drag.loc).shift = ns; if (nx) ovx(nx.locId).shift = nx.shift - ap; }
+    } else if (drag.type === 'gend') { ovx(drag.loc).d = Math.max(MIN_D, r1(k.d + Math.min(dx, room))); }
+    else { // vasen reuna: alku siirtyy, loppu pysyy
+      const dEff = Math.min(dx, k.d - MIN_D);
+      if (drag.idx === 0) { const ns = clamp(o.start + dEff, 0, N_DAYS - span(o)), ap = ns - o.start; l.start = ns; ovx(drag.loc).d = r1(k.d - ap); if (nx) ovx(nx.locId).shift = nx.shift - 0; }
+      else { const ns = Math.max(drag.minShift, k.shift + dEff), ap = ns - k.shift; ovx(drag.loc).shift = ns; ovOf(l, drag.loc).d = r1(k.d - ap); }
+    }
+    fit(l); renderSoon();
+  });
+  taktR.addEventListener('pointerup', () => { if (drag && drag.tk) finish(true); });
+  taktR.addEventListener('pointercancel', () => { if (drag && drag.tk) finish(false); });
   function applyView() {
     const isG = view === 'gantt';
     const isT = view === 'takt';
@@ -3792,7 +3823,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '201';
+  const APP_BUILD = '202';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
