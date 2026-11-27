@@ -3104,7 +3104,14 @@ const XLS = (() => {
       '<div class="row"><label for="tr-max">Enimmäismäärä (' + esc(resUnit(t)) + ')</label><input id="tr-max" class="num" type="number" min="1" max="99" step="1" value="' + t.maxCrew + '" data-field="tr-max" data-id="' + t.id + '"></div>' +
       '<div class="swatches" role="group" aria-label="Väri">' + sw + '</div></details>';
   }
-  function renderPanel() {
+  function renderPanel() { // säilyttää paneelin vierityksen ja tarkennetun kentän paikan, kun sisältö piirretään uudelleen
+    const ae = document.activeElement, inP = ae && ae !== panel && panel.contains(ae) && ae.id ? ae : null, st0 = panel.scrollTop, top0 = inP ? inP.getBoundingClientRect().top : 0, aid = inP ? inP.id : null, sel0 = inP && typeof inP.selectionStart === 'number' ? [inP.selectionStart, inP.selectionEnd] : null;
+    renderPanel0();
+    const n = aid ? document.getElementById(aid) : null;
+    if (n && panel.contains(n)) { if (document.activeElement !== n) { try { n.focus({ preventScroll: true }); if (sel0) n.setSelectionRange(sel0[0], sel0[1]); } catch (err) { } } panel.scrollTop = st0 + (n.getBoundingClientRect().top - top0); }
+    else if (panel.scrollTop !== st0) panel.scrollTop = st0;
+  }
+  function renderPanel0() {
     const l = byId(selId);
     if (l) selGrp = null;
     const gp = !l && selGrp ? groups.find(x => x.id === selGrp) : null;
@@ -3981,7 +3988,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '225';
+  const APP_BUILD = '226';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
