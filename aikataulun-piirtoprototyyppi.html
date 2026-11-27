@@ -941,7 +941,7 @@ function qlNum(s) { if (s == null) return null; const x = String(s).replace(/[\s
 function qlGuess(grid) {
   const n = grid.reduce((m, r) => Math.max(m, r.length), 0), roles = [], H = [
     ['code', /^(littera|tunnus|koodi|nro|nr\.?|jnro)$/i], ['name', /(suorite|nimike|nimi|kuvaus|työlaji|tehtävä|selite)/i],
-    ['qty', /^(määrä|maara|yhteensä|yht\.?|kokonaismäärä|kok\.? ?määrä)$/i], ['unit', /^(yksikkö|yks\.?|unit)$/i], ['locname', /^(sijainti|osa-alue|alue|tila)$/i]];
+    ['qty', /^(määrä|maara|yhteensä|yht\.?|kokonaismäärä|kok\.? ?määrä)$/i], ['unit', /^(yksikkö|yks\.?|unit)$/i], ['locname', /^(sijainti|osa-alue|alue|tila)$/i], ['prod', /^(tuottavuus|tuott\.?|prod\.?|tuotto)$/i], ['crew', /^(hlö|henkilöä|työryhmä|crew|miehitys|henkilömäärä)$/i]];
   const first = grid[0] || [];
   const head = first.some(c => c && H.some(h => h[1].test(c))) && !first.some(c => qlNum(c) != null) ? 0 : -1;
   const data = grid.slice(head >= 0 ? 1 : 0);
@@ -975,7 +975,7 @@ function qlGuess(grid) {
   return { head: head, roles: roles, names: Array.from({ length: n }, (_, j) => (head >= 0 && first[j]) ? first[j] : 'Sarake ' + (j + 1)) };
 }
 function qlBuild(grid, head, roles, names) {
-  const ix = r => roles.indexOf(r), jc = ix('code'), jn = ix('name'), jq = ix('qty'), ju = ix('unit'), jl = ix('locname');
+  const ix = r => roles.indexOf(r), jc = ix('code'), jn = ix('name'), jq = ix('qty'), ju = ix('unit'), jl = ix('locname'), jp = ix('prod'), jw = ix('crew');
   const locJ = roles.map((r, j) => r === 'loc' ? j : -1).filter(j => j >= 0);
   const layout = locJ.length ? 'cols' : (jl >= 0 ? 'rows' : 'none');
   const items = [], locNames = [], warn = []; let cur = '', curCode = '';
@@ -991,7 +991,8 @@ function qlBuild(grid, head, roles, names) {
     if (qty == null && !Object.keys(byLoc).length) { cur = name; curCode = code; continue; } // ei määrää: rakennerivi
     const unit = c(ju), key = code + '|' + name + '|' + unit;
     let it = layout === 'rows' ? items.find(x => x.key === key && x.rak === cur) : null;
-    if (!it) { it = { key: key, rak: cur, rakCode: curCode, code: code, name: name, unit: unit, byLoc: {}, unloc: 0, qtyCol: null, row: i, warns: [] }; items.push(it); }
+    if (!it) { it = { key: key, rak: cur, rakCode: curCode, code: code, name: name, unit: unit, byLoc: {}, unloc: 0, qtyCol: null, row: i, warns: [], prodCol: null, crewCol: null }; items.push(it); }
+    { const pv = qlNum(c(jp)), cw = qlNum(c(jw)); if (pv != null && pv > 0 && it.prodCol == null) it.prodCol = pv; if (cw != null && cw > 0 && it.crewCol == null) it.crewCol = Math.round(cw); }
     Object.keys(byLoc).forEach(k => { it.byLoc[k] = (it.byLoc[k] || 0) + byLoc[k]; });
     it.unloc += unloc; if (layout === 'cols' && qty != null) it.qtyCol = (it.qtyCol || 0) + qty;
   }
@@ -2191,7 +2192,7 @@ const XLS = (() => {
   const impProd = i => IMP.prod[i] != null ? IMP.prod[i] : IMP.dProd;
   const IMP = { lm: null, grid: null, g: null, roles: [], locMap: {}, items: [], inc: {}, prod: {}, crew: {}, trade: {}, dProd: 10, dCrew: 2, cg: false, B: null };
   const impBox = document.createElement('div'); impBox.id = 'impBox';
-  impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
+  impBox.innerHTML = '<div class="imp" role="dialog" aria-label="Tuo määrät"><h2>Tuo määrät</h2><p class="ok" style="margin:0 0 6px">Kopioi Excelistä taulukko (otsikkorivi mukaan) ja liitä alle. Rakenne-rivi (ei määrää) muuttuu ylätehtäväksi ja suorite-rivi tehtäväksi. Sijaintisarakkeen otsikko "Kerros 1 › Asunto 1" luo kerroksen ja sen alle asunnon. Valinnaiset sarakkeet Tuottavuus ja Työryhmä asettavat suoritteen tuottavuuden ja henkilömäärän.</p><textarea id="impTxt" placeholder="Littera\tSuorite\tMäärä\tYksikkö\tKerros 1\tKerros 2"></textarea><div class="row2"><button type="button" id="impParse">Jäsennä</button><label>tai Excel- / CSV-tiedosto <input type="file" id="impFile" accept=".xlsx,.csv,.txt,.tsv"></label><button type="button" id="impClose">Sulje</button></div><div id="impBody"></div></div>';
   document.body.appendChild(impBox);
   function impReset() { try { impSaved = null; IMP.lm = null; IMP.grid = null; IMP.g = null; IMP.B = null; IMP.roles = []; IMP.locMap = {}; IMP.items = []; IMP.inc = {}; IMP.prod = {}; IMP.crew = {}; IMP.trade = {}; impBox.querySelector('#impTxt').value = ''; impBox.querySelector('#impBody').innerHTML = ''; } catch (e) { } }
   function impLoad(o) {
@@ -2204,12 +2205,12 @@ const XLS = (() => {
       impRebuild(); impDraw(); impSaved = o;
     } catch (err) { }
   }
-  const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)']];
+  const ROLES = [['skip', '–'], ['code', 'Littera/tunnus'], ['name', 'Suorite/nimike'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['loc', 'Sijainti (sarake)'], ['locname', 'Sijainti (rivillä)'], ['prod', 'Tuottavuus (yks/hlö/pv)'], ['crew', 'Työryhmä (hlö)']];
   function impRebuild() {
     IMP.B = qlBuild(IMP.grid, IMP.g.head, IMP.roles, IMP.g.names);
     const leaves = LOCS.map(x => ({ id: x.id, name: x.name, own: (LT.find(n => n.id === x.id) || {}).name }));
     IMP.B.locNames.forEach(n => { if (!(n in IMP.locMap)) { const m = qlMatch(n, leaves); IMP.locMap[n] = m.length ? m[0] : 'new'; } });
-    IMP.items = IMP.B.items; IMP.items.forEach((it, i) => { if (!(i in IMP.inc)) IMP.inc[i] = it.total > 0; });
+    IMP.items = IMP.B.items; IMP.items.forEach((it, i) => { if (!(i in IMP.inc)) IMP.inc[i] = it.total > 0; if (it.prodCol != null && !(i in IMP.prod)) IMP.prod[i] = it.prodCol; if (it.crewCol != null && !(i in IMP.crew)) IMP.crew[i] = it.crewCol; });
   }
   function impDraw() {
     const body = impBox.querySelector('#impBody'); if (!IMP.B) { body.innerHTML = ''; return; }
@@ -2232,7 +2233,11 @@ const XLS = (() => {
   function impApply() {
     const B = IMP.B; if (!B) return; const leaves = {}; LOCS.forEach((x, i) => { leaves[x.id] = i; });
     pushUndo(snapshot()); ensureOrd();
-    const newNodes = []; if (impLM() === 'use') Object.keys(IMP.locMap).forEach(n => { if (IMP.locMap[n] === 'new' && B.locNames.indexOf(n) >= 0) { const id = uid('L'); newNodes.push({ id: id, name: n, share: 1, par: null }); IMP.locMap[n] = id; } });
+    const newNodes = [], pmap = {};
+    // uusi sijainti luodaan nimestä; "Kerros 1 › Asunto 1" luo kerroksen (jos puuttuu) ja asunnon sen alle
+    const mkPath = nm => { let par = null; const parts = String(nm).split(/\s*[›>]\s+/).map(x => x.trim()).filter(Boolean); if (!parts.length) parts.push(String(nm)); let node = null;
+      parts.forEach(pn => { const k = (par || '') + '\u0001' + pn; node = pmap[k] || LT.concat(newNodes).find(x => x.name === pn && (x.par || null) === par); if (!node) { node = { id: uid('L'), name: pn, share: 1, par: par }; newNodes.push(node); } pmap[k] = node; par = node.id; }); return node.id; };
+    if (impLM() === 'use') Object.keys(IMP.locMap).forEach(n => { if (IMP.locMap[n] === 'new' && B.locNames.indexOf(n) >= 0) IMP.locMap[n] = mkPath(n); });
     if (newNodes.length) { LT = normTree(LT.concat(newNodes)); syncLocs(); LOCS.forEach((x, i) => { leaves[x.id] = i; }); }
     const gmap = {}; let nl = 0, ord = maxOrd();
     IMP.items.forEach((it, i) => {
@@ -2424,6 +2429,11 @@ const XLS = (() => {
   window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, prtDoc: buildPrintDoc, schExport: schExport, schTsv: schTsv, schLoad: schLoad, XLS: XLS, schApply: schApply, SCH: SCH, stateObj: () => stateObj() });
   window.__aik0 = window.__aik; window.__aik = function () { const o = window.__aik0.apply(this, arguments); o.unlockQty = id => qUnl.add(id); return o; };
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
+  impBox.addEventListener('change', e => {
+    const t = e.target; if (t.id !== 'impFile' || !t.files || !t.files[0]) return; const f = t.files[0], put = tx => { impBox.querySelector('#impTxt').value = tx; impBox.querySelector('#impParse').click(); };
+    if (/\.xlsx$/i.test(f.name)) { const fr = new FileReader(); fr.onload = async () => { try { put(schTsv(await XLS.read(fr.result))); } catch (er) { impBox.querySelector('#impBody').innerHTML = '<p class="w">Excel-tiedostoa ei voitu lukea (' + esc(er.message || er) + '). Kopioi taulukko Excelistä ja liitä se yllä olevaan kenttään.</p>'; } }; fr.readAsArrayBuffer(f); return; }
+    const fr = new FileReader(); fr.onload = () => { let tx = String(fr.result || ''); if (tx.charCodeAt(0) === 0xfeff) tx = tx.slice(1); put(tx); }; fr.readAsText(f, 'utf-8');
+  });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
     if (e.target === impBox || t.id === 'impClose') { impBox.classList.remove('on'); return; }
@@ -4049,7 +4059,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '232'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '233'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
