@@ -9,9 +9,9 @@ const { chromium } = require('playwright');
   const n0 = await p.evaluate(() => __aik().lines.length);
   // vienti
   const ex = await p.evaluate(() => { const a = __aik(); return { t: a.schExport('tasks'), l: a.schExport('locs') }; });
-  ok(ex.t.length === n0 + 1 && ex.t[0][2] === 'Tehtävä', 'vienti rivit ' + ex.t.length + ' / ' + n0);
+  ok(ex.t.length === n0 + 1 && ex.t[0][1] === "Tehtävä", 'vienti rivit ' + ex.t.length + ' / ' + n0);
   ok(ex.l.length > ex.t.length, 'sijaintimuoto pidempi');
-  ok(/^\d+\.\d+\.\d{4}$/.test(ex.t[1][3]) && /^\d+\.\d+\.\d{4}$/.test(ex.t[1][4]), 'päivämäärät muodossa d.m.yyyy: ' + ex.t[1][3]);
+  ok(/^\d+\.\d+\.\d{4}$/.test(ex.t[1][2]) && /^\d+\.\d+\.\d{4}$/.test(ex.t[1][3]), 'päivämäärät muodossa d.m.yyyy: ' + ex.t[1][2]);
   // tuonti: sijaintitehtävä, sijaintiton ja ryhmä
   const L0 = loc[0], L1 = loc[1];
   const txt = ['Ryhmä\tTehtävä\tAlku\tLoppu\tSijainti alku\tSijainti loppu\tMäärä\tYksikkö', 'Piha / Maa\tKaivu\t11.1.2027\t22.1.2027\t\t\t50\tm3',
@@ -27,12 +27,18 @@ const { chromium } = require('playwright');
   ok(r.groups.some(g => g === 'Piha:') && r.groups.some(g => g === 'Maa:p') && r.groups.some(g => g === 'Runko:'), 'ryhmät luotu hierarkiana: ' + r.groups);
   ok((await p.textContent('#schMsg')).includes('Tuotu 3'), 'viesti: ' + await p.textContent('#schMsg'));
   // päivämäärät oikein: vienti -> tuonti kiertää
-  const rt = await p.evaluate(() => { const a = __aik(), t = a.schExport('tasks').find(r => r[2] === 'Kaivu'); return t.slice(3, 5).join('-'); });
+  const rt = await p.evaluate(() => { const a = __aik(), t = a.schExport('tasks').find(r => r[1] === 'Kaivu'); return t.slice(2, 4).join('-'); });
   ok(rt === '11.1.2027-22.1.2027', 'päivämäärät säilyvät: ' + rt);
   // Tehtävä × sijainti -muoto yhdistyy yhdeksi tehtäväksi
   const txt2 = 'Tehtävä\tSijainti\tAlku\tLoppu\nLattia\t' + L0 + '\t11.1.2027\t15.1.2027\nLattia\t' + L1 + '\t18.1.2027\t22.1.2027';
   await p.fill('#schTxt', txt2); await p.click('#schParse'); await p.waitForTimeout(100); await p.click('#schGo'); await p.waitForTimeout(300);
   const m = await p.evaluate(() => { const a = __aik(); return a.lines.length - 0; }); ok(m === n0 + 4, 'yhdistyi yhdeksi: ' + m);
+  // hierarkia: ylätehtävärivit ja Taso-sarake, kierto ei tuplaa ryhmiä
+  const h = await p.evaluate(() => { const a = __aik(), r = a.schExport('tasks'); return { rows: r.map(x => x[1] + ':' + x[x.length - 1]), g: Object.keys(r.grp).length, ng: a.groups.length }; });
+  ok(h.g === h.ng && h.rows.includes('Piha:0') && h.rows.includes('Maa:1') && h.rows.includes('Kaivu:2') && h.rows.includes('Valu:1'), 'hierarkia viennissä: ' + h.rows);
+  await p.evaluate(() => { const a = __aik(); a.schLoad(a.schTsv(a.schExport('tasks'))); }); await p.waitForTimeout(100); await p.click('#schGo'); await p.waitForTimeout(300);
+  const h2 = await p.evaluate(() => { const a = __aik(); return { ng: a.groups.length, nl: a.lines.length }; });
+  ok(h2.ng === h.ng, 'ryhmät eivät tuplaannu: ' + h2.ng + ' vs ' + h.ng);
   await p.click('#schClose'); await p.keyboard.press('Control+z'); await p.waitForTimeout(200);
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);

@@ -977,7 +977,7 @@ function qlMatch(name, leaves) {
   m = leaves.filter(x => qlNorm(x.own) === n); return m.map(x => x.id);
 }
 // ---- aikataulun tuonti/vienti taulukkona (liittäminen, CSV) ----
-const SCH_ROLES = [['skip', '–'], ['name', 'Tehtävä'], ['code', 'Littera'], ['grp', 'Ylätehtävä'], ['start', 'Alku'], ['end', 'Loppu'], ['dur', 'Kesto (pv)'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['crew', 'Työryhmä'], ['lfrom', 'Sijainti alku'], ['lto', 'Sijainti loppu'], ['loc', 'Sijainti']];
+const SCH_ROLES = [['skip', '–'], ['name', 'Tehtävä'], ['code', 'Littera'], ['grp', 'Ylätehtävä'], ['start', 'Alku'], ['end', 'Loppu'], ['dur', 'Kesto (pv)'], ['qty', 'Määrä'], ['unit', 'Yksikkö'], ['crew', 'Työryhmä'], ['lvl', 'Taso'], ['lfrom', 'Sijainti alku'], ['lto', 'Sijainti loppu'], ['loc', 'Sijainti']];
 function schParseDate(s, y0) { // d.m.yyyy, d.m.yy, d.m. (vuosi = y0), yyyy-mm-dd, d/m/yyyy -> ISO tai null
   s = String(s == null ? '' : s).trim().replace(/^(ma|ti|ke|to|pe|la|su)\.? */i, ''); let m;
   const iso = (y, mo, d) => { y = +y; mo = +mo; d = +d; if (y < 100) y += 2000; if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null; const t = new Date(Date.UTC(y, mo - 1, d)); return t.getUTCMonth() === mo - 1 ? t.toISOString().slice(0, 10) : null; };
@@ -988,7 +988,7 @@ function schParseDate(s, y0) { // d.m.yyyy, d.m.yy, d.m. (vuosi = y0), yyyy-mm-d
 }
 function schGuess(grid) {
   const n = grid.reduce((m, r) => Math.max(m, r.length), 0), first = grid[0] || [], H = [
-    ['lfrom', /^(sijainti ?alku|alkusijainti|alku ?sijainti|from|mistä|alkukerros)$/i], ['lto', /^(sijainti ?loppu|loppusijainti|loppu ?sijainti|to|mihin|loppukerros)$/i],
+    ['lvl', /^(taso|level|lvl|outline)$/i], ['lfrom', /^(sijainti ?alku|alkusijainti|alku ?sijainti|from|mistä|alkukerros)$/i], ['lto', /^(sijainti ?loppu|loppusijainti|loppu ?sijainti|to|mihin|loppukerros)$/i],
     ['code', /^(littera|tunnus|koodi|code|wbs|nro|nr\.?)$/i], ['grp', /^(ylätehtävä|ylatehtava|vaihe|ryhmä|ryhma|group|rakenne|parent|summary)$/i],
     ['start', /^(alku|alkupvm|alkaa|aloitus|aloitus ?pvm|start|alkupäivä|begin|alkamispäivä)$/i], ['end', /^(loppu|loppupvm|päättyy|valmis|valmistuu|finish|end|loppupäivä|päättymispäivä)$/i],
     ['dur', /^(kesto|duration|työpäivää|työpäivät|pv|days|kesto \(?pv\)?)$/i], ['qty', /^(määrä|maara|quantity|qty|yhteensä)$/i], ['unit', /^(yksikkö|yks\.?|unit)$/i],
@@ -1005,7 +1005,7 @@ function schBuild(grid, head, roles, y0) { // -> { rows, warn }
     const o = { n: ln, name: name, code: pick(r, 'code'), grp: pick(r, 'grp'), unit: pick(r, 'unit'), lfrom: pick(r, 'lfrom'), lto: pick(r, 'lto'), loc: pick(r, 'loc') };
     ['start', 'end'].forEach(k => { const v = pick(r, k); if (!v) { o[k] = null; return; } o[k] = schParseDate(v, y0); if (!o[k]) warn.push('Rivi ' + ln + ': päivämäärää ei tunnistettu (' + v + ')'); });
     const d = qlNum(pick(r, 'dur').replace(/\s*(pv|pvä|päivää|d)\.?$/i, '')); o.dur = d != null && d > 0 ? d : null;
-    const q = qlNum(pick(r, 'qty')); o.qty = q != null && q > 0 ? q : null; const c = qlNum(pick(r, 'crew')); o.crew = c != null && c > 0 ? Math.round(c) : null;
+    const q = qlNum(pick(r, 'qty')); o.qty = q != null && q > 0 ? q : null; const c = qlNum(pick(r, 'crew')); o.crew = c != null && c > 0 ? Math.round(c) : null; const lv = qlNum(pick(r, 'lvl')); o.lvl = lv != null && lv >= 0 ? Math.floor(lv) : null;
     rows.push(o);
   });
   return { rows: rows, warn: warn };
@@ -1075,7 +1075,7 @@ const XLS = (() => {
     const csz = cen.reduce((a, x) => a + x.length, 0), e = []; w32(e, 0x06054b50); w16(e, 0); w16(e, 0); w16(e, entries.length); w16(e, entries.length); w32(e, csz); w32(e, off); w16(e, 0);
     return new Blob(parts.concat(cen, [Uint8Array.from(e)]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
-  function write(rows, sheet) { // rows: [[...]], ensimmäinen rivi otsikot; d.m.yyyy -> päivämääräsolu, numerot numeroina
+  function write(rows, sheet) { const GR = rows.grp || {}, LV = rows.lvlCol, NC = rows.nameCol; // rows: [[...]], ensimmäinen rivi otsikot; d.m.yyyy -> päivämääräsolu, numerot numeroina
     const dser = s => { const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s); return m ? Math.round((Date.UTC(+m[3], +m[2] - 1, +m[1]) - Date.UTC(1899, 11, 30)) / 86400000) : null; };
     const widths = []; let x = '';
     rows.forEach((r, i) => {
@@ -1083,10 +1083,11 @@ const XLS = (() => {
       r.forEach((v, j) => {
         const ref = colName(j) + (i + 1); v = v == null ? '' : v; widths[j] = Math.max(widths[j] || 8, Math.min(40, String(v).length + 2));
         if (v === '') return; const d = i ? dser(String(v)) : null;
+        const nameSty = i && j === NC && LV != null ? ' s="' + (3 + Math.min(5, +r[LV] || 0) + (GR[i] ? 6 : 0)) + '"' : '';
         if (i === 0) x += '<c r="' + ref + '" s="2" t="inlineStr"><is><t>' + esc(v) + '</t></is></c>';
         else if (d != null) x += '<c r="' + ref + '" s="1"><v>' + d + '</v></c>';
         else if (typeof v === 'number' || (/^-?\d+(\.\d+)?$/.test(String(v)) && String(v).length < 15 && !/^0\d/.test(String(v)))) x += '<c r="' + ref + '"><v>' + v + '</v></c>';
-        else x += '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
+        else x += '<c r="' + ref + '"' + nameSty + ' t="inlineStr"><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
       });
       x += '</row>';
     });
@@ -1096,7 +1097,7 @@ const XLS = (() => {
       { name: '_rels/.rels', text: head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
       { name: 'xl/workbook.xml', text: head + '<workbook xmlns="' + M + '" xmlns:r="' + R + '"><sheets><sheet name="' + esc((sheet || 'Aikataulu').replace(/[\\\/?*\[\]:]/g, ' ').slice(0, 31)) + '" sheetId="1" r:id="rId1"/></sheets></workbook>' },
       { name: 'xl/_rels/workbook.xml.rels', text: head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="' + R + '/styles" Target="styles.xml"/></Relationships>' },
-      { name: 'xl/styles.xml', text: head + '<styleSheet xmlns="' + M + '"><numFmts count="1"><numFmt numFmtId="164" formatCode="d.m.yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
+      { name: 'xl/styles.xml', text: head + '<styleSheet xmlns="' + M + '"><numFmts count="1"><numFmt numFmtId="164" formatCode="d.m.yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="15"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' + [0,1,2,3,4,5,0,1,2,3,4,5].map((n, k) => '<xf numFmtId="0" fontId="' + (k > 5 ? 1 : 0) + '" fillId="0" borderId="0" xfId="0" applyAlignment="1"' + (k > 5 ? ' applyFont="1"' : '') + '><alignment indent="' + n + '"/></xf>').join('') + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
       { name: 'xl/worksheets/sheet1.xml', text: head + '<worksheet xmlns="' + M + '"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>' + widths.map((w, j) => '<col min="' + (j + 1) + '" max="' + (j + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols><sheetData>' + x + '</sheetData></worksheet>' }
     ]);
   }
@@ -2238,17 +2239,27 @@ const XLS = (() => {
     '<textarea id="schTxt" placeholder="Tehtävä\tAlku\tLoppu\tSijainti alku\tSijainti loppu"></textarea><div class="row2"><button type="button" id="schParse">Jäsennä</button><label>tai Excel- / CSV-tiedosto <input type="file" id="schFile" accept=".xlsx,.csv,.txt,.tsv"></label><button type="button" id="schClose">Sulje</button></div><div id="schBody"></div></div>';
   document.body.appendChild(schBox);
   function schExport(mode) {
-    const H = mode === 'locs' ? ['Littera', 'Ylätehtävä', 'Tehtävä', 'Sijainti', 'Alku', 'Loppu', 'Kesto (pv)', 'Määrä', 'Yksikkö', 'Toteuma %'] : ['Littera', 'Ylätehtävä', 'Tehtävä', 'Alku', 'Loppu', 'Kesto (pv)', 'Sijainti alku', 'Sijainti loppu', 'Määrä', 'Yksikkö', 'Työryhmä', 'Toteuma %'];
-    const rows = [H], dm = ms => { const t = new Date(ms); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.' + t.getUTCFullYear(); }, ds = d => dm(dateOfDay(d)), de = e => dm(dateOfDay(Math.max(0, Math.ceil(e - 1e-9) - 1))), rd = x => Math.round(x * 100) / 100;
-    const ordered = lines.slice().sort((a, b) => (a.ord || 0) - (b.ord || 0));
-    ordered.forEach(l => {
-      const t = trade(l.trade) || {}, gr = gChain(l.grp).map(g => g.name).join(' / '), nm = t.name || '', lit = t.lit || '', ts = tasks(l);
-      if (!ts.length) return;
-      const s0 = Math.min.apply(null, ts.map(k => k.s)), e0 = lineEnd(l), nmOf = (l.flat ? l.name : '') || nm;
-      if (l.flat) { const a = actOf(l, ts[0]); rows.push(mode === 'locs' ? [lit, gr, nm, '', ds(s0), de(e0), rd(e0 - s0), rd(l.qty || 0), t.unit || '', Math.round(a.pct || 0)] : [lit, gr, nm, ds(s0), de(e0), rd(e0 - s0), '', '', rd(l.qty || 0), t.unit || '', crewOf(l), Math.round(a.pct || 0)]); return; }
-      if (mode === 'locs') { ts.forEach(k => { const a = actOf(l, k), lc = LOCS.find(x => x.id === k.locId); rows.push([lit, gr, nm, lc ? lc.name : '', ds(k.s), de(k.e), rd(k.d), rd(k.qty), t.unit || '', Math.round(a.pct || 0)]); }); }
-      else { const a = ts.map(k => actOf(l, k).pct || 0), L = id => (LOCS.find(x => x.id === id) || {}).name || ''; rows.push([lit, gr, nm, ds(s0), de(e0), rd(e0 - s0), L(ts[0].locId), L(ts[ts.length - 1].locId), rd(totalQty(l)), t.unit || '', crewOf(l), Math.round(a.reduce((x, y) => x + y, 0) / a.length)]); }
-    });
+    const H = mode === 'locs' ? ['Littera', 'Tehtävä', 'Sijainti', 'Alku', 'Loppu', 'Kesto (pv)', 'Määrä', 'Yksikkö', 'Toteuma %', 'Taso'] : ['Littera', 'Tehtävä', 'Alku', 'Loppu', 'Kesto (pv)', 'Sijainti alku', 'Sijainti loppu', 'Määrä', 'Yksikkö', 'Työryhmä', 'Toteuma %', 'Taso'];
+    const rows = [H], gset = {}, dm = ms => { const t = new Date(ms); return t.getUTCDate() + '.' + (t.getUTCMonth() + 1) + '.' + t.getUTCFullYear(); }, ds = d => dm(dateOfDay(d)), de = e => dm(dateOfDay(Math.max(0, Math.ceil(e - 1e-9) - 1))), rd = x => Math.round(x * 100) / 100;
+    const L = id => (LOCS.find(x => x.id === id) || {}).name || '';
+    function lineRows(l, lvl) {
+      const t = trade(l.trade) || {}, nm = t.name || '', lit = t.lit || '', ts = tasks(l); if (!ts.length) return;
+      const s0 = Math.min.apply(null, ts.map(k => k.s)), e0 = lineEnd(l);
+      if (l.flat) { const a = actOf(l, ts[0]); rows.push(mode === 'locs' ? [lit, nm, '', ds(s0), de(e0), rd(e0 - s0), rd(l.qty || 0), t.unit || '', Math.round(a.pct || 0), lvl] : [lit, nm, ds(s0), de(e0), rd(e0 - s0), '', '', rd(l.qty || 0), t.unit || '', crewOf(l), Math.round(a.pct || 0), lvl]); return; }
+      if (mode === 'locs') ts.forEach(k => { const a = actOf(l, k); rows.push([lit, nm, L(k.locId), ds(k.s), de(k.e), rd(k.d), rd(k.qty), t.unit || '', Math.round(a.pct || 0), lvl]); });
+      else { const a = ts.map(k => actOf(l, k).pct || 0); rows.push([lit, nm, ds(s0), de(e0), rd(e0 - s0), L(ts[0].locId), L(ts[ts.length - 1].locId), rd(totalQty(l)), t.unit || '', crewOf(l), Math.round(a.reduce((x, y) => x + y, 0) / a.length), lvl]); }
+    }
+    function walk(cont, lvl) {
+      itemsOf(cont).forEach(it => {
+        if (it.k === 'l') { lineRows(it.o, lvl); return; }
+        const g = it.o, kids = gKidsOf(lines, g.id).filter(l => tasks(l).length), e = mode === 'locs' ? ['', '', '', '', '', ''] : ['', '', '', '', '', '', '', ''];
+        let a = '', b = '', d = '';
+        if (kids.length) { const s0 = Math.min.apply(null, kids.map(l => Math.min.apply(null, tasks(l).map(k => k.s)))), e0 = Math.max.apply(null, kids.map(lineEnd)); a = ds(s0); b = de(e0); d = rd(e0 - s0); }
+        gset[rows.length] = true; rows.push(mode === 'locs' ? [g.lit || '', g.name, '', a, b, d, '', '', '', lvl] : [g.lit || '', g.name, a, b, d, '', '', '', '', '', '', lvl]);
+        walk(g.id, lvl + 1);
+      });
+    }
+    ensureOrd(); walk(null, 0); rows.grp = gset; rows.lvlCol = H.length - 1; rows.nameCol = 1;
     return rows;
   }
   const schTsv = rows => rows.map(r => r.map(c => String(c == null ? '' : c).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\r\n');
@@ -2268,8 +2279,12 @@ const XLS = (() => {
     const leaves = LOCS.map(x => ({ id: x.id, name: x.name, own: (LT.find(n => n.id === x.id) || {}).name })), idx = id => LOCS.findIndex(x => x.id === id), warn = B.warn.slice();
     const find = nm => { if (!nm) return null; const m = qlMatch(nm, leaves); return m.length ? m[0] : null; };
     // sijaintirivit samalla tehtävällä (Tehtävä × sijainti -muoto) yhdistetään yhdeksi tehtäväksi
-    const items = [], by = {};
+    const items = [], by = {}, gl = {};
+    if (B.rows.some(r => r.lvl != null)) { // hierarkia Taso-sarakkeesta: rivi, jonka seuraava rivi on syvemmällä, on ylätehtävä
+      const st = []; B.rows.forEach((r, i) => { const lv = r.lvl == null ? 0 : r.lvl, nx = B.rows[i + 1], nl = nx && nx.lvl != null ? nx.lvl : -1; if (nl > lv) { st.length = lv; st[lv] = r.name; r.isG = true; if (r.code && litOf(r.code, 2)) gl[st.slice(0, lv + 1).join(' / ')] = litOf(r.code, 2); } else r.grp = st.slice(0, lv).join(' / '); });
+    }
     B.rows.forEach(r => {
+      if (r.isG) return;
       const single = r.loc && !r.lfrom && !r.lto, key = single ? r.grp + '|' + r.name : null;
       if (key && by[key]) { const it = by[key]; it.locs.push(r.loc); if (r.start && (!it.start || r.start < it.start)) it.start = r.start; if (r.end && (!it.end || r.end > it.end)) it.end = r.end; it.qty = (it.qty || 0) + (r.qty || 0) || null; return; }
       const it = Object.assign({}, r, { locs: single ? [r.loc] : [] }); if (key) by[key] = it; items.push(it);
@@ -2277,8 +2292,8 @@ const XLS = (() => {
     pushUndo(snapshot()); ensureOrd();
     let ord = maxOrd(), nLoc = 0, nFlat = 0; const gcache = {};
     const grpOf = path => { // "A / B" -> ryhmäketju
-      if (!path) return null; let par = null, gid = null;
-      path.split('/').map(x => x.trim()).filter(Boolean).forEach(nm => { const k = (par || '') + '>' + nm; let g = gcache[k] || groups.find(x => x.name === nm && (x.parent || null) === par); if (!g) { g = { id: uid('K'), name: nm, ord: (ord += 10) }; if (par) g.parent = par; groups.push(g); } gcache[k] = g; par = g.id; gid = g.id; });
+      if (!path) return null; let par = null, gid = null; const parts = path.split('/').map(x => x.trim()).filter(Boolean);
+      parts.forEach((nm, pi) => { const k = (par || '') + '>' + nm; let g = gcache[k] || groups.find(x => x.name === nm && (x.parent || null) === par); if (!g) { g = { id: uid('K'), name: nm, ord: (ord += 10) }; if (par) g.parent = par; if (gl[parts.slice(0, pi + 1).join(' / ')]) g.lit = gl[parts.slice(0, pi + 1).join(' / ')]; groups.push(g); } gcache[k] = g; par = g.id; gid = g.id; });
       return gid;
     };
     let seqS = 0;
@@ -3707,7 +3722,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '195';
+  const APP_BUILD = '196';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
