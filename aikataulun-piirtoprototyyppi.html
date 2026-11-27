@@ -2703,7 +2703,7 @@ const XLS = (() => {
   function renderTakt() {
     if (view !== 'takt') return;
     const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
-    const XC = c => c * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), rowOf = i => n - 1 - i, yOf = i => HEAD + rowOf(i) * tkRowH, hp = [], p = [], lp = [];
+    const XC = c => c * dayW, X = d => XC(w2cS(d)), XE = e => XC(w2cE(e)), rowOf = i => i, yOf = i => HEAD + rowOf(i) * tkRowH, hp = [], p = [], lp = [];
     const weekPx = tkWk, step = weekPx < 36 ? 4 : weekPx < 56 ? 2 : 1;
     for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) {
       const wc = calWeekC(w); if (wc > CL + calVpw()) break; const major = w % step === 0, x = XC(wc);
@@ -3793,7 +3793,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '199';
+  const APP_BUILD = '200';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
