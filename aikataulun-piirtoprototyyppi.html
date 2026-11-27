@@ -1516,7 +1516,7 @@ const XLS = (() => {
       const tgtTxt = diff > 0 ? diff + ' vk ennen tavoitetta' : diff === 0 ? 'osuu tavoitteeseen' : '<span class="bad">' + (-diff) + ' vk yli tavoitteen</span>';
       summary.innerHTML = '<span>Valmis <b>vk ' + wkNo(endW) + '</b> (' + tgtTxt + ')</span><span>Huippuväki <b>' + peakP + ' ' + esc(RES[0].unit) + '</b></span><span>' + (bad ? '<span class="bad">' + bad + ' työjärjestyshuomiota</span>' : 'Ei työjärjestyshuomioita') + '</span>';
     }
-    PH('summary'); if (drag) { renderPanel(); PH('panel'); renderGantt(); PH('gantt'); } // vedon aikana vain välttämätön; muut paneelit päivittyvät vedon päätyttyä
+    PH('summary'); if (drag) { renderPanel(); PH('panel'); renderGantt(); PH('gantt'); renderTakt(); } // vedon aikana vain välttämätön; muut paneelit päivittyvät vedon päätyttyä
     else { renderPanel(); renderList(); renderNotes(vio, dvio); renderLocs(); renderBl(); renderSt(); renderFc(); renderGantt(); renderTakt(); }
     undoBtn.disabled = !undoStack.length;
     scheduleSave();
@@ -3840,7 +3840,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '207';
+  const APP_BUILD = '208';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
