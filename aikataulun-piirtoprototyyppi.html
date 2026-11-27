@@ -2698,7 +2698,7 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
-  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa.';
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa. Liikutus puoli päivää kerrallaan.';
   let tkWk = 70, tkRowH = 44;
   function renderTakt() {
     if (view !== 'takt') return;
@@ -2760,7 +2760,7 @@ const XLS = (() => {
   });
   taktR.addEventListener('pointermove', e => {
     if (!drag || !drag.tk) return;
-    const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), dx = Math.round(c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW));
+    const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), dx = Math.round((c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW)) * 2) / 2; // tahdissa puoli päivää kerrallaan
     lines = JSON.parse(JSON.stringify(drag.base));
     const l = byId(drag.id), o = drag.orig; if (!l) return; const room = N_DAYS - lineEnd(o), k = drag.k, nx = drag.ts[drag.idx + 1];
     const ovx = (id) => { releaseTotal(l); return ovOf(l, id); };
@@ -3827,7 +3827,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '203';
+  const APP_BUILD = '204';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

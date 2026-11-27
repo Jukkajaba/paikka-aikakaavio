@@ -26,6 +26,9 @@ const { chromium } = require('playwright');
   // vasen reuna: alku siirtyy, loppu pysyy
   const hl = await box(0, 'hs'); await drag(hl, dayPx * 1);
   const s5 = await st(); ok(s5.ends[0][0] === s0.ends[0][0] + 1 && s5.ends[0][1] === s0.ends[0][1], 'vasen reuna: alku +1, loppu sama: ' + JSON.stringify(s5.ends[0]) + ' vs ' + JSON.stringify(s0.ends[0]));
+  await p.keyboard.press('Control+z'); await p.waitForTimeout(200);
+  await drag(await box(0), dayPx * 1.5); const s6 = await st();
+  ok(Math.abs(s6.start - (s0.start + 1.5)) < 0.01 || Math.abs(s6.start - (s0.start + 1)) < 0.01 && false, 'puolen päivän tarkkuus: ' + s6.start + ' vs ' + s0.start);
   ok(errs.length === 0, 'virheet ' + errs.join('|'));
   console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
