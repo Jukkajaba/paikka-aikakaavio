@@ -5,7 +5,7 @@ await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://
 console.log(await p.textContent('#ptog'));
 await p.click('[data-ptog=list]');await p.click('#listCard .item >> nth=0');
 console.log('qty',await p.inputValue('#f-tqty'),await p.inputValue('#f-qty'));
-await p.fill('#f-tqty','900');await p.dispatchEvent('#f-tqty','change');
+await p.click('[data-act=qedit]');await p.fill('#f-tqty','900');await p.dispatchEvent('#f-tqty','change');
 console.log('after',await p.inputValue('#f-tqty'),await p.inputValue('#f-qty'),await p.textContent('.fp[data-p=panel] .fp-bar span'));
 await p.click('#panel summary');console.log(await p.$$eval('#panel .tmeta',e=>e.slice(0,2).map(x=>x.textContent)));
 console.log('errors',errs);await b.close();})();

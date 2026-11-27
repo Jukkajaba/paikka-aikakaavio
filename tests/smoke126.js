@@ -12,7 +12,7 @@ const { chromium } = require('playwright');
     const gi = await p.evaluate(l => __aik().gRows.findIndex(r => r.g && r.line === l && !r.gk), line);
     await p.locator('#gantt [data-gi="' + gi + '"]').first().click({ position: { x: 300, y: 10 }, force: true }); await p.waitForTimeout(250);
     for (const f of [0.9, 0.8, 0.7, 0.6, 0.45, 0.33, 0.9, 0.9]) {
-      const s0 = await st(), inp = p.locator('#f-tqty'); await inp.fill(String(Math.round(s0.q * f * 100) / 100)); await inp.dispatchEvent('change'); await p.waitForTimeout(120);
+      const s0 = await st(), inp = p.locator('#f-tqty'); await p.click('[data-act=qedit]'); await inp.fill(String(Math.round(s0.q * f * 100) / 100)); await inp.dispatchEvent('change'); await p.waitForTimeout(120);
       const s1 = await st(); ok(s1.crew <= s0.crew, 'rivi ' + line + ' ' + mode + ' ×' + f + ': työryhmä ' + s0.crew + ' → ' + s1.crew);
     }
   }

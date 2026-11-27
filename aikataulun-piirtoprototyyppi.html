@@ -1322,6 +1322,7 @@ const XLS = (() => {
   lvlSel.addEventListener('change', () => { const v = lvlSel.value; if (v === 'c') return; lcol.clear(); Object.keys(gClosed).forEach(k => { if (/^L\d+$/.test(k) || k.indexOf('N') >= 0) delete gClosed[k]; }); const k = +v; if (v === 'x') lines.forEach(l => { if (!l.flat) gClosed['L' + l.id] = true; }); else if (k > 0) ltLevels().at(k).forEach(id => lcol.add(id)); saveView(); render(); if (vis.locs) renderLocs(); });
   // Ganttin mitat luetaan kerran piirron alussa (DOM puhdas); kesken piirron luku pakottaisi turhan asettelun (reflow) ja hidastaisi vetoa
   let gDim = null, gDimOn = false, tPanel = 0;
+  const qUnl = new Set(); // viivat, joiden kokonaismäärän muokkaus on avattu (muuten suojattu vahingolta; ei tallenneta)
   const readDim = () => ({ sw: gScroll.clientWidth, ww: gWrap.clientWidth, hw: gH.clientWidth, hsl: gH.scrollLeft, top: gScroll.getBoundingClientRect().top + window.scrollY, sh: gScroll.clientHeight, st: gScroll.scrollTop });
   function render() { gDimOn = false; if (view === 'gantt') { gDim = readDim(); gDimOn = true; } gNormGroups(); { const sl = byId(selId); if (sl && !sl.flat && trade(sl.trade)) drawTrade = sl.trade; } PH('start'); try { renderResPanel(); } catch (err) { } _tc = new Map(); const _t0 = performance.now(); try { renderInner(); } finally { _tc = null; gDimOn = false; window.__rms = Math.round(performance.now() - _t0); } try { panel.querySelectorAll('[data-partial]').forEach(x => { x.indeterminate = true; }); } catch (err) { } PH('end'); refreshLvl(); try { renderWelcome(); } catch (err) { } const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(resOn)); const w = window.__ph; if (w) w.n = (w.n || 0) + 1; const dc = document.getElementById('depClear'); if (dc) dc.disabled = !deps.length; }
   let lcache = new Map();
@@ -1667,7 +1668,7 @@ const XLS = (() => {
     if (key === 'extra') { const h = !l ? null : (isGrp || r.flat) ? extraH(l) : k ? extraH(l, k) : null; return h == null ? '' : h > 0.05 ? Math.round(h) + ' h' : '–'; }
     return '';
   }
-  function gEditable(r, key) { if (key === 'lit' && r && r.gk) return true; if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && gKidsOf(lines, r.grp).length > 0; if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (key === 'lit') return isGrp || !!r.flat; if (!isGrp && r.locId == null) return false; if (key === 'agreed') return isGrp || !!r.flat; if (key === 'extra') return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
+  function gEditable(r, key) { if (key === 'lit' && r && r.gk) return true; if (r && r.gk && !r.empty) return /^(dur|start|end)$/.test(key) && gKidsOf(lines, r.grp).length > 0; if (!r || r.empty || r.gk || r.nh || r.line == null || !byId(r.line)) return false; const isGrp = !!r.g; if (key === 'lit') return isGrp || !!r.flat; if (!isGrp && r.locId == null) return false; if (key === 'agreed') return isGrp || !!r.flat; if (key === 'extra') return false; if (key === 'qty' && isGrp && !r.flat && !qUnl.has(r.line)) return false; return isGrp ? (r.lineRow ? /^(dur|start|end|qty|crew)$/ : /^(dur|start|end|qty)$/).test(key) : /^(dur|start|end|qty|crew)$/.test(key); }
   function parseDay(txt, refIdx) { // "4.1.", "4.1.2027" tai "2027-01-04" → iso
     const s = String(txt).trim(); let y, mo, d, m;
     if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
@@ -1723,7 +1724,7 @@ const XLS = (() => {
       else { const minShift = ts[idx - 1].s - (ts[idx - 1].e + l.gap); releaseTotal(l); ovOf(l, k.locId).shift = Math.max(minShift, k.shift + (ns - k.s)); }
     } else if (key === 'qty') {
       if (!(num > 0) || num > 1e7) return false;
-      if (isGrp || (l.flat && l.lockQ != null)) chgKeep(l, () => setTotalQty(l, num)); else if (l.flat) chgKeep(l, () => { l.qty = num; }); else setLocQty(l, k.locId, num);
+      if (isGrp || (l.flat && l.lockQ != null)) { chgKeep(l, () => setTotalQty(l, num)); if (isGrp) qUnl.delete(l.id); } else if (l.flat) chgKeep(l, () => { l.qty = num; }); else setLocQty(l, k.locId, num);
     } else ok = false;
     if (!ok) return false;
     pushUndo(snap0); fit(l); absorbSlack(l.id); return true;
@@ -2077,7 +2078,7 @@ const XLS = (() => {
     const el = e.target.closest('[data-gi]'); if (!el || el.dataset.gr) return;
     const bx = e.clientX - gSvg.getBoundingClientRect().left;
     gRowClick(+el.dataset.gi, bx); gTap(+el.dataset.gi, bx);
-    if (gGeo && !gGeo.narrow && gGeo.cols) { const gi = +el.dataset.gi; for (let ci = 0; ci < gGeo.cols.length; ci++) if (bx <= gGeo.colX[ci] + 2 && bx > gGeo.colX[ci] - gGeo.cw[ci] && gEditable(gRows[gi], gGeo.cols[ci])) { openCellEdit(gi, ci); break; } }
+    if (gGeo && !gGeo.narrow && gGeo.cols) { const gi = +el.dataset.gi; for (let ci = 0; ci < gGeo.cols.length; ci++) if (bx <= gGeo.colX[ci] + 2 && bx > gGeo.colX[ci] - gGeo.cw[ci] && gEditable(gRows[gi], gGeo.cols[ci])) { openCellEdit(gi, ci); break; } else if (bx <= gGeo.colX[ci] + 2 && bx > gGeo.colX[ci] - gGeo.cw[ci] && gGeo.cols[ci] === 'qty' && gRows[gi] && gRows[gi].g && !gRows[gi].nh && !gRows[gi].gk && !gRows[gi].flat && !gRows[gi].empty) { toast('Kokonaismäärä on suojattu. Paina Tehtävä-paneelissa Muokkaa kokonaismäärän vieressä.'); break; } }
   });
   // solun muokkaus: tekstikenttä solun päällä (Enter tai poistuminen tallentaa, Esc peruu)
   let cellEd = null;
@@ -2387,6 +2388,7 @@ const XLS = (() => {
     if (t.id === 'schFile' && t.files && t.files[0]) { const fr = new FileReader(); fr.onload = () => { let tx = String(fr.result || ''); if (tx.charCodeAt(0) === 0xfeff) tx = tx.slice(1); schBox.querySelector('#schTxt').value = tx; schLoad(tx); }; fr.readAsText(t.files[0], 'utf-8'); }
   });
   window.__aik = () => ({ lines: lines, groups: groups, tasks: tasks, totalQty: totalQty, LOCS: LOCS, trade: trade, selLoc: selLoc, selId: selId, deps: deps, LT: LT, TRADES: TRADES, gRows: gRows, prtDoc: buildPrintDoc, schExport: schExport, schTsv: schTsv, schLoad: schLoad, XLS: XLS, schApply: schApply, SCH: SCH, stateObj: () => stateObj() });
+  window.__aik0 = window.__aik; window.__aik = function () { const o = window.__aik0.apply(this, arguments); o.unlockQty = id => qUnl.add(id); return o; };
   document.getElementById('impBtn').addEventListener('click', () => { impBox.classList.add('on'); });
   impBox.addEventListener('click', e => {
     const t = e.target.closest ? (e.target.closest('button') || e.target) : e.target;
@@ -3172,7 +3174,7 @@ const XLS = (() => {
       '<div class="row"><label title="Seuraava sijainti alkaa tämän verran edellisen lopun jälkeen. Negatiivinen arvo tarkoittaa päällekkäisyyttä.">Viive sijaintien välillä</label>' + stepper('gap', l.id, '', null, r1(l.gap), -30) + '</div>' + taRow(l) +
       '<div class="row"><label>' + (resIdOf(t) === RES[0].id ? 'Työryhmä (suurin)' : esc(resById(resIdOf(t)).name) + ' (suurin)') + '</label>' + stepper('crew', l.id, c + ' ' + resUnit(t)) + '</div>' + agreedRows(l, t, c) +
       (c > t.maxCrew ? '<div class="warnline">▲ Rajaksi on asetettu ' + t.maxCrew + ' ' + esc(resUnit(t)) + '. Pidennä aikaa tai lisää taukoa.</div>' : '') +
-      '<div class="row"><label for="f-tqty">Kokonaismäärä</label><span class="qrow"><button type="button" class="lockbtn" data-act="qlock" data-id="' + l.id + '" aria-pressed="' + (l.lockQ != null) + '" aria-label="' + (l.lockQ != null ? 'Poista kokonaismäärän lukitus' : 'Lukitse kokonaismäärä') + '" title="' + (l.lockQ != null ? 'Lukittu: pysyy samana, kun sijainnit muuttuvat' : 'Lukitse kokonaismäärä') + '">' + (l.lockQ != null ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>' : '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 4.8-1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>') + '</button><input id="f-tqty" class="num" type="number" min="0.01" step="any" value="' + r2(totalQty(l)) + '" data-field="tqty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
+      '<div class="row"><label for="f-tqty">Kokonaismäärä</label><span class="qrow"><button type="button" class="lockbtn" data-act="qlock" data-id="' + l.id + '" aria-pressed="' + (l.lockQ != null) + '" aria-label="' + (l.lockQ != null ? 'Poista kokonaismäärän lukitus' : 'Lukitse kokonaismäärä') + '" title="' + (l.lockQ != null ? 'Lukittu: pysyy samana, kun sijainnit muuttuvat' : 'Lukitse kokonaismäärä') + '">' + (l.lockQ != null ? '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>' : '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 4.8-1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>') + '</button><input id="f-tqty" class="num" type="number" min="0.01" step="any" value="' + r2(totalQty(l)) + '"' + (!l.flat && !qUnl.has(l.id) ? ' readonly title="Suojattu: paina Muokkaa, jos haluat muuttaa kokonaismäärää (muuttaa myös asuntojen ja kerrosten määrät)"' : '') + ' data-field="tqty" data-id="' + l.id + '"> ' + uIn + (!l.flat ? ' <button type="button" class="mini" data-act="qedit" data-id="' + l.id + '" aria-pressed="' + qUnl.has(l.id) + '">' + (qUnl.has(l.id) ? 'Valmis' : 'Muokkaa') + '</button>' : '') + '</span></div>' +
 
       '<div class="row"><label for="f-qty">Määrä / sijainti (koko)</label><span><input id="f-qty" class="num" type="number" min="1" step="any" value="' + r2(effQty(l)) + '"' + (l.lockQ != null ? ' disabled' : '') + ' data-field="qty" data-id="' + l.id + '"> ' + uIn + '</span></div>' +
       '<div class="row"><label for="f-prod">Tuottavuus</label><span><input id="f-prod" class="num" type="number" min="0.1" step="any" value="' + l.prod + '" data-field="prod" data-id="' + l.id + '"> ' + uIn + '/' + esc(resUnit(t)) + '/pv</span></div>' +
@@ -3708,6 +3710,7 @@ const XLS = (() => {
       render(); return;
     }
     const l = byId(id); if (!l) return;
+    if (a === 'qedit') { if (qUnl.has(l.id)) qUnl.delete(l.id); else qUnl.add(l.id); render(); return; }
     if ((a === 'crew+' || a === 'crew-') && l.lockD) { toast('Kesto on lukittu, joten työryhmää ei voi asettaa. Avaa lukitus tai muuta kestoa.'); return; }
     pushUndo(snapshot());
     if (a === 'del') { lines = lines.filter(x => x.id !== l.id); if (!lines.some(x => x.trade === l.trade)) TRADES = TRADES.filter(x => x.id !== l.trade); if (!trade(drawTrade)) { const nt = TRADES.find(x => !x.flat) || TRADES[0]; drawTrade = nt ? nt.id : null; } selId = null; pruneDeps(); }
@@ -3774,7 +3777,7 @@ const XLS = (() => {
     }
     else if (f === 'lgrp') { const l = byId(id); if (l) { ensureOrd(); const v2 = e.target.value; if (v2 && groups.some(x => x.id === v2)) { l.grp = v2; } else delete l.grp; l.ord = maxOrd() + 10; } }
     else if (f === 'total') { const l = byId(id); if (l && v > 0) setTotalScaled(l, v); }
-    else if (f === 'tqty') { const l = byId(id); if (l && v > 0) chgKeep(l, () => setTotalQty(l, v)); }
+    else if (f === 'tqty') { const l = byId(id); if (l && v > 0 && (l.flat || qUnl.has(l.id))) { chgKeep(l, () => setTotalQty(l, v)); qUnl.delete(l.id); } }
     else if (f === 'dur-v') { const l = byId(id); if (l && v >= MIN_D) { if (l.total != null && l.lockC == null) setTotal(l, (taF(l) === 1 ? r1(v) : v / taF(l)) * shareW(l) + fixedDays(l)); else setPerLoc(l, v); } }
     else if (f === 'gap-v') { const l = byId(id); if (l && isFinite(v)) { l.gap = clamp(r1(v), -30, 60); fit(l); } }
     else if (f === 'tq-v') { const l = byId(id); if (l && v > 0 && !l.flat) setLocQty(l, e.target.dataset.loc, v); }
@@ -3977,7 +3980,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '223';
+  const APP_BUILD = '224';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

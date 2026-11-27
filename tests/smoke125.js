@@ -20,10 +20,10 @@ const { chromium } = require('playwright');
     await p.mouse.click(pos.x, pos.y); await p.waitForTimeout(150); if (!(await p.locator('input.gced').count())) return false; await p.fill('input.gced', val); await p.keyboard.press('Enter'); await p.waitForTimeout(300); return true;
   };
   // 1. määrä x2 → työryhmä pysyy, kesto kasvaa
-  const a0 = await st(1); await edit(1, 'Määrä', String(a0.qty * 2)); const a1 = await st(1);
+  const a0 = await st(1); await p.evaluate(() => __aik().unlockQty(1)); await edit(1, 'Määrä', String(a0.qty * 2)); const a1 = await st(1);
   ok(a1.crew === a0.crew, 'työryhmä pysyi (' + a0.crew + ' → ' + a1.crew + ')'); ok(a1.dur > a0.dur * 1.8 && a1.dur < a0.dur * 2.2, 'kesto ~2× (' + a0.dur + ' → ' + a1.dur + ')');
   // 2. kestolukko: määrä x2 → kesto pysyy, työryhmä kasvaa
-  await p.evaluate(() => { __aik().lines.find(x => x.id === 2).lockD = true; }); const b0 = await st(2); await edit(2, 'Määrä', String(b0.qty * 2)); const b1 = await st(2);
+  await p.evaluate(() => { __aik().lines.find(x => x.id === 2).lockD = true; }); const b0 = await st(2); await p.evaluate(() => __aik().unlockQty(2)); await edit(2, 'Määrä', String(b0.qty * 2)); const b1 = await st(2);
   ok(Math.abs(b1.dur - b0.dur) < 0.2, 'lukittu kesto pysyi (' + b0.dur + ' → ' + b1.dur + ')'); ok(b1.crew > b0.crew, 'työryhmä kasvoi (' + b0.crew + ' → ' + b1.crew + ')');
   // 3. kestolukko estää työryhmän asetuksen
   await edit(2, 'Resurssi', '9'); const b2 = await st(2); ok(b2.crew === b1.crew, 'työryhmän asetus estetty');
