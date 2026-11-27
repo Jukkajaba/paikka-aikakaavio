@@ -388,7 +388,8 @@ function normTree(nodes) {
   const seen = new Set(), clean = [];
   (nodes || []).forEach(x => {
     if (!x || x.id == null || seen.has(String(x.id))) return;
-    const n = { id: String(x.id), name: String(x.name == null ? '' : x.name).slice(0, 24) || 'Sijainti', share: Math.max(0.05, Math.min(4, +x.share || 1)), par: x.par != null && seen.has(String(x.par)) ? String(x.par) : null };
+    const n = { id: String(x.id), name: String(x.name == null ? '' : x.name).slice(0, 24) || 'Sijainti', share: Math.max(0.05, Math.min(8, +x.share || 1)), par: x.par != null && seen.has(String(x.par)) ? String(x.par) : null };
+    if (+x.area > 0) n.area = Math.round(+x.area * 100) / 100;
     seen.add(n.id); clean.push(n);
   });
   const kids = new Map(); clean.forEach(n => { const k = n.par || ''; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(n); });
@@ -396,6 +397,11 @@ function normTree(nodes) {
   return out;
 }
 const ltFrom = o => (o && Array.isArray(o.lt) && o.lt.length ? normTree(o.lt) : normTree(((o && o.locs) || []).map(x => ({ id: x.id, name: x.name, share: x.share, par: null }))));
+function applyAreas() { // ala (m²) -> osuus: ala / alallisten lehtisijaintien keskiarvo; ilman alaa oleva sijainti säilyttää osuutensa
+  const hasKid = new Set(); LT.forEach(n => { if (n.par) hasKid.add(n.par); });
+  const L = LT.filter(n => !hasKid.has(n.id) && n.area > 0); if (!L.length) return;
+  const mean = L.reduce((a, n) => a + n.area, 0) / L.length; L.forEach(n => { n.share = Math.max(0.05, Math.min(8, Math.round(n.area / mean * 1000) / 1000)); });
+}
 function syncLocs() {
   const hasKid = new Set(); LT.forEach(n => { if (n.par) hasKid.add(n.par); });
   const byId = new Map(LT.map(n => [n.id, n])), leaves = LT.filter(n => !hasKid.has(n.id));
@@ -3162,7 +3168,7 @@ const XLS = (() => {
       '<p class="ok hlp" style="margin:4px 0">Sisennys (välilyönnit tai tab) kertoo tason. Ensimmäinen rivi on alinna kaaviossa. Voit liittää rakenteen suoraan Excelistä.</p>' +
       '<div class="btns" style="border-top:0;padding-top:4px"><button type="button" data-act="locimp" data-mode="replace">Korvaa rakenne</button><button type="button" data-act="locimp" data-mode="append">Lisää loppuun</button></div>' +
       (locMsg ? '<div class="warnline">' + esc(locMsg) + '</div>' : '') + '</details>';
-    h += '<div class="ok" style="margin:6px 0 0">' + LOCS.length + ' sijaintia alimmalla tasolla</div>';
+    { const ta = LT.reduce((a, n) => a + (n.area > 0 && !LT.some(q => q.par === n.id) ? n.area : 0), 0); h += '<div class="ok" style="margin:6px 0 0">' + LOCS.length + ' sijaintia alimmalla tasolla' + (ta > 0 ? ' · ala yhteensä ' + Math.round(ta).toLocaleString('fi-FI') + ' m²' : '') + '</div>'; }
     const walk = (par, depth) => {
       const arr = (kids.get(par) || []).slice().reverse(), tot = arr.length;
       arr.forEach((n, vi) => {
@@ -3170,7 +3176,7 @@ const XLS = (() => {
         h += '<div class="locrow' + (isG ? ' grp' : '') + '" style="padding-left:' + (depth * 14) + 'px">' +
           (isG ? '<button type="button" class="mini-b" data-act="loccol" data-id="' + n.id + '" aria-label="' + (open ? 'Sulje' : 'Avaa') + '" aria-expanded="' + open + '">' + (open ? '▾' : '▸') + '</button>' : '<span class="mini-b sp"></span>') +
           '<input class="txt" type="text" maxlength="24" value="' + esc(n.name) + '" aria-label="Sijainnin nimi" data-field="locname" data-id="' + n.id + '">' +
-          (isG ? '<span class="pct">' + cntLeaves(n) + ' alasij.</span>' : '<span class="pct"><input class="num" type="number" min="5" max="400" step="5" value="' + Math.round(n.share * 100) + '" aria-label="Osuus prosentteina" data-field="locshare" data-id="' + n.id + '"> %</span>') +
+          (isG ? '<span class="pct">' + cntLeaves(n) + ' alasij.</span>' : '<span class="pct"><input class="num" type="number" min="0" step="any" value="' + (n.area > 0 ? n.area : '') + '" placeholder="m²" title="Ala (m²): osuus lasketaan alasta" aria-label="Ala neliömetreinä" data-field="locarea" data-id="' + n.id + '"> m² <input class="num" type="number" min="5" max="800" step="5" value="' + Math.round(n.share * 100) + '" aria-label="Osuus prosentteina" data-field="locshare" data-id="' + n.id + '"> %</span>') +
           '<span class="mini"><button type="button" data-act="locup" data-id="' + n.id + '" aria-label="Siirrä ylös" title="Siirrä ylös"' + (nat === tot - 1 ? ' disabled' : '') + '>↑</button>' +
           '<button type="button" data-act="locdown" data-id="' + n.id + '" aria-label="Siirrä alas" title="Siirrä alas"' + (nat === 0 ? ' disabled' : '') + '>↓</button>' +
           '<button type="button" data-act="locchild" data-id="' + n.id + '" title="Lisää alasijainti">↳+</button>' +
@@ -3411,7 +3417,7 @@ const XLS = (() => {
     const n = LT[i], e = ltEnd(i);
     if (a === 'locchild') { const c = { id: uid('l'), name: 'Sijainti', share: 1, par: n.id }, wasLeaf = e === i + 1; const last = LT[e - 1]; LT.splice(e, 0, c); pcol.delete(n.id); const r = {}; if (wasLeaf) r[n.id] = [c.id]; else r[last.id] = [last.id, c.id]; return r; }
     if (a === 'locsib') { const last = LT[e - 1], c = { id: uid('l'), name: 'Sijainti', share: 1, par: n.par }; LT.splice(e, 0, c); const r = {}; r[last.id] = [last.id, c.id]; return r; }
-    if (a === 'locsplit') { if (e !== i + 1) return false; const half = Math.round(n.share / 2 * 1000) / 1000, nl = { id: uid('l'), name: n.name + ' B', share: half, par: n.par }; n.name = n.name + ' A'; n.share = half; LT.splice(i + 1, 0, nl); const r = {}; r[n.id] = [n.id, nl.id]; return r; }
+    if (a === 'locsplit') { if (e !== i + 1) return false; const half = Math.round(n.share / 2 * 1000) / 1000, nl = { id: uid('l'), name: n.name + ' B', share: half, par: n.par }; if (n.area > 0) { n.area = Math.round(n.area / 2 * 100) / 100; nl.area = n.area; } n.name = n.name + ' A'; n.share = half; LT.splice(i + 1, 0, nl); const r = {}; r[n.id] = [n.id, nl.id]; return r; }
     if (a === 'locdel') { const rm = new Set(LT.slice(i, e).map(x => x.id)); if (!LT.some((x, q) => (q < i || q >= e) && !LT.some(y => y.par === x.id))) return false; LT.splice(i, e - i); return {}; }
     if (a === 'locup' || a === 'locdown') {
       const sib = []; LT.forEach((x, q) => { if (x.par === n.par) sib.push(q); });
@@ -3552,7 +3558,8 @@ const XLS = (() => {
     }
     else if (f === 'tname') { const l = byId(id); if (l) { const o = ovOf(l, e.target.dataset.loc); if (txt) o.name = txt.slice(0, 40); else delete o.name; } }
     else if (f === 'locname') { const x = LT.find(q => q.id === id); if (x && txt) { x.name = txt.slice(0, 24); syncLocs(); } }
-    else if (f === 'locshare') { const x = LT.find(q => q.id === id); if (x && v > 0) { x.share = clamp(v / 100, 0.05, 4); syncLocs(); lines.forEach(fit); } }
+    else if (f === 'locshare') { const x = LT.find(q => q.id === id); if (x && v > 0) { x.share = clamp(v / 100, 0.05, 8); delete x.area; applyAreas(); syncLocs(); lines.forEach(fit); } }
+    else if (f === 'locarea') { const x = LT.find(q => q.id === id); if (x) { if (v > 0) x.area = Math.round(v * 100) / 100; else delete x.area; applyAreas(); syncLocs(); lines.forEach(fit); } }
     else if (f.indexOf('tr-') === 0) {
       const t = trade(id); if (!t) return;
       if (f === 'tr-name' && txt) t.name = txt.slice(0, 24);
@@ -3728,7 +3735,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '197';
+  const APP_BUILD = '198';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
