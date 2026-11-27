@@ -338,7 +338,7 @@ body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depen
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
     <section class="card" id="chartWrap"><div class="gadd"><button id="cDraw" type="button" class="gplus big" aria-pressed="false" title="Piirtotila: kun päällä, vedä kaavioon uusi tehtävä. Muuten veto siirtää aikajanaa." aria-label="Piirtotila">+</button></div><svg id="chart" role="group" aria-label="Paikka-aikakaavio"></svg><div id="chartH" title="Vierittää aikaa vaakasuunnassa"><div id="chartHi"></div></div></section>
-    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
+    <section class="card" id="taktWrap" hidden><div class="tkctl"><label>Zoomaus <button id="tkOut" title="Loitonna (Ctrl + rullaus)">−</button><button id="tkIn" title="Lähennä (Ctrl + rullaus)">+</button><button id="tkFit" title="Sovita koko aikajana näkyviin">Koko</button></label><label>Viikon leveys <select id="tkZoom"><option value="30">kapea</option><option value="46">pieni</option><option value="70" selected>normaali</option><option value="100">leveä</option><option value="150">erittäin leveä</option></select></label><label>Rivikorkeus <select id="tkRow"><option value="30">matala</option><option value="44" selected>normaali</option><option value="62">korkea</option></select></label><span class="ok" id="tkNote"></span></div><div id="taktBox"><svg id="taktL" aria-hidden="true"></svg><svg id="taktR" role="img" aria-label="Tahtiaikataulu"></svg></div></section>
     <section class="card" id="ganttWrap" hidden><div class="gadd"><button id="gAddTask" type="button" class="gplus big" title="Lisää tehtävä ilman sijaintia" aria-label="Lisää tehtävä">+</button><button id="gAddSub" type="button" class="gplus small" title="Lisää alatehtävä valitun rivin alle" aria-label="Lisää alatehtävä">+</button><button id="gAddGrp" type="button" style="display:none" aria-hidden="true" tabindex="-1" title="Luo ylätehtävä valitun rivin alapuolelle">+</button></div><svg id="ganttHead" aria-hidden="true"></svg><div id="ganttScroll"><div id="ganttSpacer"><svg id="gantt" role="group" aria-label="Gantt-näkymä"></svg></div></div><div id="ganttH" title="Vierittää aikaa vaakasuunnassa"><div id="ganttHi"></div></div></section>
     <section class="fp" data-p="panel" hidden><div class="fp-bar"><span>Tehtävä</span><button type="button" data-close="panel" aria-label="Piilota paneeli Tehtävä">×</button></div><div class="fp-body" id="panel"></div></section>
     <section class="fp" data-p="list" hidden><div class="fp-bar"><span>Työvaiheet</span><button type="button" data-close="list" aria-label="Piilota paneeli Työvaiheet">×</button></div><div class="fp-body" id="listCard"></div></section>
@@ -2749,7 +2749,18 @@ const XLS = (() => {
     taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('');
     document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Piirrä tehtävät Paikka-aika-näkymässä.';
   }
-  document.getElementById('tkZoom').addEventListener('change', e => { tkWk = +e.target.value || 70; renderTakt(); });
+  const tkSel = document.getElementById('tkZoom'), taktBoxEl = document.getElementById('taktBox');
+  function tkSetWk(nw, clientX) { // zoom: pidetään hiiren kohdalla oleva aika paikallaan
+    nw = clamp(Math.round(nw), 12, 400); if (nw === tkWk) return;
+    const r = taktBoxEl.getBoundingClientRect(), L = document.getElementById('taktL').getBoundingClientRect().width || 150, vx = clientX == null ? (r.width + L) / 2 : clientX - r.left;
+    const t = (taktBoxEl.scrollLeft + vx - L) / tkWk; tkWk = nw; renderTakt(); taktBoxEl.scrollLeft = Math.max(0, t * tkWk - (vx - L));
+    if (![...tkSel.options].some(o => +o.value === nw && !o.dataset.c)) { let c = tkSel.querySelector('[data-c]'); if (!c) { c = document.createElement('option'); c.dataset.c = 1; tkSel.appendChild(c); } c.value = nw; c.textContent = nw + ' px / vk'; tkSel.value = nw; } else { const c = tkSel.querySelector('[data-c]'); if (c) c.remove(); tkSel.value = nw; }
+  }
+  document.getElementById('tkIn').addEventListener('click', () => tkSetWk(tkWk * 1.3));
+  document.getElementById('tkOut').addEventListener('click', () => tkSetWk(tkWk / 1.3));
+  document.getElementById('tkFit').addEventListener('click', () => { const L = document.getElementById('taktL').getBoundingClientRect().width || 150; taktBoxEl.scrollLeft = 0; tkSetWk(Math.floor((taktBoxEl.clientWidth - L - 24) / (calLen() / calVpw()))); });
+  taktBoxEl.addEventListener('wheel', e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); tkSetWk(tkWk * (e.deltaY > 0 ? 1 / 1.2 : 1.2), e.clientX); }, { passive: false });
+  tkSel.addEventListener('change', e => { tkWk = +e.target.value || 70; renderTakt(); });
   document.getElementById('tkRow').addEventListener('change', e => { tkRowH = +e.target.value || 44; renderTakt(); });
   taktR.addEventListener('pointerdown', e => {
     const el = e.target.closest ? e.target.closest('[data-tl]') : null; if (!el || e.button !== 0) return;
@@ -3829,7 +3840,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '206';
+  const APP_BUILD = '207';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
