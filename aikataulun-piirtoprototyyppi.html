@@ -2732,7 +2732,12 @@ const XLS = (() => {
         const sg = q.seg; if (!sg.length) return; let d = ''; sg.forEach((z, i) => { const xa = XC(z.a).toFixed(1), xb = XC(z.b).toFixed(1); d += (i ? 'L' : 'M') + xa + ' ' + z.y.toFixed(1) + 'L' + xb + ' ' + z.y.toFixed(1); });
         for (let i = sg.length - 1; i >= 0; i--) { const z = sg[i]; d += 'L' + XC(z.b).toFixed(1) + ' ' + (z.y + z.h).toFixed(1) + 'L' + XC(z.a).toFixed(1) + ' ' + (z.y + z.h).toFixed(1); } d += 'Z';
         const t = trade(q.l.trade) || {}, sel = String(selId) === String(q.l.id), tip = (t.name || '') + ' · ' + LOCS[li].name + ' · ' + fmt(q.k.s) + '–' + fmtE(q.k.e) + ' · ' + Math.round(q.k.d * 10) / 10 + ' pv · ' + q.k.crew + ' hlö';
-        p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity=".9" stroke="var(--ink)" stroke-opacity="' + (sel ? 1 : .35) + '" stroke-width="' + (sel ? 2 : 1) + '"><title>' + esc(tip) + '</title></path>');
+        // toteuma: vaalea laatikko, jonka tumma täyttö etenee vasemmalta prosentin verran; myöhässä (tilannepäivään verrattuna) punainen reuna
+        const sOn = stOn(), act = sOn ? actOf(q.l, q.k) : null, pc = act ? act.pct : 0; let late = false;
+        if (sOn && statusDay != null && pc < 100 && statusDay > q.k.s) late = pc < Math.min(100, (statusDay - q.k.s) / Math.max(1e-6, q.k.e - q.k.s) * 100) - 0.5;
+        const tip2 = sOn ? tip + ' · valmis ' + Math.round(pc) + ' %' + (late ? ' · myöhässä' : '') : tip;
+        p.push('<path class="tkb" data-tl="' + q.l.id + '" data-tloc="' + li + '" d="' + d + '" fill="' + colorOf(q.l.trade) + '" fill-opacity="' + (sOn ? '.3' : '.9') + '" stroke="' + (late ? '#d62828' : 'var(--ink)') + '" stroke-opacity="' + (late || sel ? 1 : .35) + '" stroke-width="' + (late || sel ? 2 : 1) + '"><title>' + esc(tip2) + '</title></path>');
+        if (sOn && pc > 0) { const cx0 = XC(q.a), cx1 = XC(q.b), cid = 'tkc' + q.l.id + '_' + li; p.push('<clipPath id="' + cid + '"><rect x="' + cx0.toFixed(1) + '" y="' + yOf(li) + '" width="' + Math.max(0, (cx1 - cx0) * Math.min(100, pc) / 100).toFixed(1) + '" height="' + tkRowH + '"/></clipPath><path class="tkf" d="' + d + '" clip-path="url(#' + cid + ')" fill="' + colorOf(q.l.trade) + '" fill-opacity=".92" pointer-events="none"/>'); }
         { const z0 = sg[0], z1 = sg[sg.length - 1], hw = Math.min(6, Math.max(3, ((z1.b - z0.a) * dayW) / 3)); const hd = 'data-tl="' + q.l.id + '" data-tloc="' + li + '"';
           p.push('<rect class="tkh" ' + hd + ' data-tm="hs" x="' + (XC(z0.a) - 1).toFixed(1) + '" y="' + z0.y.toFixed(1) + '" width="' + hw + '" height="' + z0.h.toFixed(1) + '" fill="transparent"/>');
           p.push('<rect class="tkh" ' + hd + ' data-tm="he" x="' + (XC(z1.b) - hw + 1).toFixed(1) + '" y="' + z1.y.toFixed(1) + '" width="' + hw + '" height="' + z1.h.toFixed(1) + '" fill="transparent"/>'); }
@@ -3857,7 +3862,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '209';
+  const APP_BUILD = '210';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
