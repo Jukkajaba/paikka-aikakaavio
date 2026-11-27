@@ -2800,7 +2800,7 @@ const XLS = (() => {
         // nimi: laatikon leveimmässä osassa, jonka korkeus riittää (kaikissa laatikoissa, myös päällekkäisissä)
         let best = null; sg.forEach(z => { if (z.h >= 13 && (!best || (z.b - z.a) > (best.b - best.a))) best = z; });
         if (best) {
-          const wpx = (best.b - best.a) * dayW - 6, chars = Math.floor(wpx / 6.2), nm = t.name || ''; if (chars >= 3) p.push('<text x="' + (XC(best.a) + 4).toFixed(1) + '" y="' + (best.y + best.h / 2 + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" pointer-events="none">' + esc(nm.length > chars ? nm.slice(0, chars - 1) + '…' : nm) + '</text>');
+          const wpx = (best.b - best.a) * dayW - 6, chars = Math.floor(wpx / 6.2), nm = t.name || ''; if (chars >= 3) p.push('<text x="' + ((XC(best.a) + XC(best.b)) / 2).toFixed(1) + '" y="' + (best.y + best.h / 2 + 4).toFixed(1) + '" text-anchor="middle" font-size="11" fill="var(--ink)" pointer-events="none">' + esc(nm.length > chars ? nm.slice(0, chars - 1) + '…' : nm) + '</text>');
         }
     };
     talls.sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)).forEach(q => { const y0 = yOf(q.rmin) + PADV, y1 = yOf(q.rmax) + tkRowH - PADV; q.seg = [{ a: q.a, b: q.b, y: y0, h: y1 - y0, m: 1 }]; drawQ(q, q.k.loc); });
@@ -3954,7 +3954,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '213';
+  const APP_BUILD = '214';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
