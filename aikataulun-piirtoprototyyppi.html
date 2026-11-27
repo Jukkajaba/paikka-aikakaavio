@@ -2700,8 +2700,8 @@ const XLS = (() => {
   });
   gSvg.addEventListener('pointerup', () => finish(true));
   gSvg.addEventListener('pointercancel', () => finish(false));
-  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
-  let tkWk = 70, tkRowH = 44;
+  const TAKT_HINT = 'Tahti: sijainnit riveinä, aika sarakkeina. Päällekkäiset tehtävät jakavat rivin ja jokaisessa näkyy nimi. Vedä tyhjään kohtaan luodaksesi uuden tehtävän (alku- ja loppusijainti sekä aika vedolla). Vedä laatikkoa siirtääksesi tehtävää (Shift: vain tämä laatikko) ja reunoista muuttaaksesi kestoa. Liikutuksen tarkkuus valitaan Projektit-paneelissa.';
+  let tkWk = 70, tkRowH = 44, tkHead = 34;
   function renderTakt() {
     if (view !== 'takt') return;
     const n = LOCS.length, HEAD = CAL.ax === 'wd' ? 46 : 34, LW = 150, dayW = tkWk / calVpw(), CL = calLen(), W = Math.ceil(CL * dayW) + 16, bodyH = Math.max(1, n) * tkRowH, H = HEAD + bodyH;
@@ -2722,7 +2722,7 @@ const XLS = (() => {
     // laatikot: jokaiselle sijaintirivillä päällekkäiset laatikot jakavat korkeuden päällekkäisyyden ajan
     const byRow = new Map(); let cnt = 0;
     lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; tasks(l).forEach(k => { if (k.loc == null || !LOCS[k.loc]) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); cnt++; }); });
-    const PADV = 4;
+    const PADV = 4; tkHead = HEAD;
     byRow.forEach((bx, li) => {
       bx.sort((u, v) => (u.a - v.a) || (u.l.id - v.l.id)); const cuts = []; bx.forEach(q => { cuts.push(q.a, q.b); }); const cs = Array.from(new Set(cuts)).sort((u, v) => u - v), segs = [];
       for (let c = 0; c + 1 < cs.length; c++) { const a = cs[c], b = cs[c + 1], act = bx.filter(q => q.a <= a + 1e-9 && q.b >= b - 1e-9); if (act.length) segs.push({ a: a, b: b, act: act }); }
@@ -2745,9 +2745,10 @@ const XLS = (() => {
     });
     if (stOn() && statusDay != null) p.push('<line x1="' + X(statusDay).toFixed(1) + '" x2="' + X(statusDay).toFixed(1) + '" y1="' + HEAD + '" y2="' + H + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"><title>Tilanne ' + fmtE(statusDay) + '</title></line>');
     const tx = XC(calWeekC(target)).toFixed(1); p.push('<line x1="' + tx + '" x2="' + tx + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4" pointer-events="none"/>');
+    if (preview && drag && drag.type === 'draw' && drag.tk) tasks(preview).forEach(t => { if (t.loc < 0 || t.loc >= n) return; p.push('<rect x="' + X(t.s).toFixed(1) + '" y="' + (yOf(t.loc) + PADV) + '" width="' + Math.max(2, XE(t.e) - X(t.s)).toFixed(1) + '" height="' + (tkRowH - 2 * PADV) + '" fill="' + colorOf(preview.trade) + '" fill-opacity=".35" stroke="' + colorOf(preview.trade) + '" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"/>'); });
     taktL.setAttribute('width', LW); taktL.setAttribute('height', H); taktL.setAttribute('viewBox', '0 0 ' + LW + ' ' + H); taktL.innerHTML = '<rect x="0" y="0" width="' + LW + '" height="' + HEAD + '" fill="var(--panel)"/>' + lp.join('') + '<line x1="' + (LW - .5) + '" x2="' + (LW - .5) + '" y1="0" y2="' + H + '" stroke="var(--grid2)"/>';
     taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('');
-    document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Piirrä tehtävät Paikka-aika-näkymässä.';
+    document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Vedä tyhjään kohtaan luodaksesi tehtävän.';
   }
   const tkSel = document.getElementById('tkZoom'), taktBoxEl = document.getElementById('taktBox');
   function tkSetWk(nw, clientX) { // zoom: pidetään hiiren kohdalla oleva aika paikallaan
@@ -2763,7 +2764,14 @@ const XLS = (() => {
   tkSel.addEventListener('change', e => { tkWk = +e.target.value || 70; renderTakt(); });
   document.getElementById('tkRow').addEventListener('change', e => { tkRowH = +e.target.value || 44; renderTakt(); });
   taktR.addEventListener('pointerdown', e => {
-    const el = e.target.closest ? e.target.closest('[data-tl]') : null; if (!el || e.button !== 0) return;
+    const el = e.target.closest ? e.target.closest('[data-tl]') : null;
+    if (!el && e.button === 0) { // tyhjä kohta: veto luo uuden tehtävän (kuten paikka-aikakaaviossa)
+      const r0 = taktR.getBoundingClientRect(); if (e.clientY - r0.top < tkHead) return;
+      if (!trade(drawTrade)) { const tt = newTrade(); tt.tmp = true; drawTrade = tt.id; }
+      selId = null; selGrp = null; selDep = null; selLoc = null; drag = { type: 'draw', tk: true, x0: e.clientX, y0: e.clientY, snap: snapshot() };
+      taktR.setPointerCapture(e.pointerId); e.preventDefault(); render(); return;
+    }
+    if (!el || e.button !== 0) return;
     const l = byId(+el.dataset.tl), loc = LOCS[+el.dataset.tloc]; if (!l || !loc) return;
     const ts = tasks(l), idx = ts.findIndex(t => t.locId === loc.id); if (idx < 0) return;
     const mode = el.dataset.tm || 'body'; gEnsureRoom();
@@ -2773,6 +2781,15 @@ const XLS = (() => {
   });
   taktR.addEventListener('pointermove', e => {
     if (!drag || !drag.tk) return;
+    if (drag.type === 'draw') {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) {
+        const r0 = taktR.getBoundingClientRect(), dW = tkWk / calVpw(), stp = snapStep(), nL = LOCS.length;
+        const dayX = (cx, m) => clamp(Math[m](c2w((cx - r0.left) / dW) / stp) * stp, 0, N_DAYS), rowY = cy => clamp(Math.floor((cy - r0.top - tkHead) / tkRowH), 0, nL - 1);
+        const from = LOCS[rowY(drag.y0)].id, to = LOCS[rowY(e.clientY)].id, s0 = dayX(drag.x0, 'floor'), en = Math.max(dayX(e.clientX, 'round'), s0 + 1);
+        const tmp = mk(drawTrade, from, to, s0, 1, 0, -1); setSpan(tmp, s0, from, en, to); preview = tmp;
+      } else preview = null;
+      renderSoon(); return;
+    }
     const left = taktR.getBoundingClientRect().left, dayW = tkWk / calVpw(), st = snapStep(), dx = Math.round((c2w((e.clientX - left) / dayW) - c2w((drag.x0 - left) / dayW)) / st) * st;
     lines = JSON.parse(JSON.stringify(drag.base));
     const l = byId(drag.id), o = drag.orig; if (!l) return; const room = N_DAYS - lineEnd(o), k = drag.k, nx = drag.ts[drag.idx + 1];
@@ -3840,7 +3857,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '208';
+  const APP_BUILD = '209';
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
