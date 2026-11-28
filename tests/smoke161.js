@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 (async () => {
   let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log('FAIL', m); } };
   const b = await chromium.launch(), p = await b.newPage({ viewport: { width: 1500, height: 900 } }), errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
+  await p.addInitScript(() => { window.__drawOn0 = true; }); await p.goto('file://' + process.cwd() + '/aikataulun-piirtoprototyyppi.html'); await p.waitForSelector('#chart path'); await p.waitForTimeout(400);
   await p.click('#vTakt'); await p.waitForTimeout(300);
   const n0 = await p.evaluate(() => __aik().lines.length), nB = await p.locator('#taktR .tkb').count();
   const r = await p.locator('#taktR').boundingBox();
