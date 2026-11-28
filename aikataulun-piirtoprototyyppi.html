@@ -243,9 +243,9 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #gantt [data-gr] { pointer-events: all; }
 #gantt [data-gr="gmove"] { cursor: grab; }
 #gantt [data-gr="gend"] { cursor: ew-resize; }
-/* riippuvuuksia voi koskea vain Ctrl pohjassa */
-#chart [data-role="dep"], #chart [data-role="depend"], #gantt [data-gr="gdeppick"], #gantt [data-gr="gdepend"] { pointer-events: none; }
-body.ctrl-held #chart [data-role="dep"], body.ctrl-held #chart [data-role="depend"], body.ctrl-held #gantt [data-gr="gdeppick"], body.ctrl-held #gantt [data-gr="gdepend"] { pointer-events: all; }
+/* riippuvuuden valinta onnistuu klikkaamalla; päätepisteet ja luonti vain Ctrl pohjassa */
+#chart [data-role="depend"], #gantt [data-gr="gdepend"] { pointer-events: none; }
+body.ctrl-held #chart [data-role="depend"], body.ctrl-held #gantt [data-gr="gdepend"] { pointer-events: all; }
 .gt { fill: var(--ink); font: 500 12px var(--sans); }
 .gt.gnew { fill: var(--muted); font-style: italic; font-weight: 400; }
 .gg { font-weight: 600; }
@@ -1459,7 +1459,7 @@ const XLS = (() => {
         const hx = g.bx - nx * 7, hy = g.by - ny * 7, w = sel ? 2.2 : 1, f = v => v.toFixed(1);
         p.push('<line x1="' + f(g.ax) + '" y1="' + f(g.ay) + '" x2="' + f(g.bx) + '" y2="' + f(g.by) + '" stroke="' + dc + '" stroke-width="' + w + '"' + (g.viol ? ' stroke-dasharray="3 2"' : '') + ' pointer-events="none"/>');
         p.push('<path d="M' + f(g.bx) + ' ' + f(g.by) + 'L' + f(hx - ny * 3) + ' ' + f(hy + nx * 3) + 'L' + f(hx + ny * 3) + ' ' + f(hy - nx * 3) + 'Z" fill="' + dc + '" pointer-events="none"/>');
-        p.push('<line x1="' + f(g.ax) + '" y1="' + f(g.ay) + '" x2="' + f(g.bx) + '" y2="' + f(g.by) + '" stroke="transparent" stroke-width="9" data-role="dep" data-id="' + d.id + '" style="cursor:pointer"><title>' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + (d.rigid ? ' (kiinteä)' : '') + (!d.rigid && g.slack > 1e-9 ? ' (hukka-aikaa ' + dd(g.slack) + ' pv)' : '') + (g.viol ? ' (rikkoutuu)' : '') + '</title></line>');
+        p.push('<line x1="' + f(g.ax) + '" y1="' + f(g.ay) + '" x2="' + f(g.bx) + '" y2="' + f(g.by) + '" stroke="transparent" stroke-width="6" data-role="dep" data-id="' + d.id + '" style="cursor:pointer"><title>' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + (d.rigid ? ' (kiinteä)' : '') + (!d.rigid && g.slack > 1e-9 ? ' (hukka-aikaa ' + dd(g.slack) + ' pv)' : '') + (g.viol ? ' (rikkoutuu)' : '') + '</title></line>');
         if (d.lag) p.push('<text class="tl" x="' + f((g.ax + g.bx) / 2 + 5) + '" y="' + f((g.ay + g.by) / 2) + '" style="fill:' + dc + '" pointer-events="none">' + (d.lag > 0 ? '+' : '−') + Math.abs(d.lag) + ' pv</text>');
       });
       if (drag && drag.type === 'dep') {
@@ -2011,7 +2011,7 @@ const XLS = (() => {
         p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="' + (sel ? 2 : 1) + '"/>');
         p.push('<path d="M' + x2.toFixed(1) + ' ' + yb + 'l-5 -3v6Z" fill="' + dc + '"/>');
         if (d.lag) p.push('<text class="gc" x="' + (x1 + 8).toFixed(1) + '" y="' + (yb - 4) + '" style="fill:' + dc + '" pointer-events="none">' + (d.lag > 0 ? '+' : '−') + Math.abs(d.lag) + ' pv</text>');
-        gdh.push('<path d="' + pth + '" fill="none" stroke="transparent" stroke-width="8" data-gr="gdeppick" data-id="' + d.id + '" style="cursor:pointer"><title>' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + (d.rigid ? ' (kiinteä)' : '') + (!d.rigid && slk > 1e-9 ? ' (hukka-aikaa ' + dd(slk) + ' pv)' : '') + '</title></path>');
+        gdh.push('<path d="' + pth + '" fill="none" stroke="transparent" stroke-width="6" data-gr="gdeppick" data-id="' + d.id + '" style="cursor:pointer"><title>' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + (d.rigid ? ' (kiinteä)' : '') + (!d.rigid && slk > 1e-9 ? ' (hukka-aikaa ' + dd(slk) + ' pv)' : '') + '</title></path>');
         [['a', x1, ya], ['b', x2, yb]].forEach(q => gdh.push('<circle cx="' + q[1].toFixed(1) + '" cy="' + q[2] + '" r="3.4" fill="' + dc + '" stroke="transparent" stroke-width="5" data-gr="gdepend" data-id="' + d.id + '" data-end="' + q[0] + '" style="cursor:grab"/>'));
       });
     }
@@ -2718,7 +2718,7 @@ const XLS = (() => {
       if (rr && rr.gk) { selGrp = rr.grp; selId = null; selDep = null; drag = { type: 'gorder', kind: 'group', id: rr.grp, px: gPt(e).x, row: +gel.dataset.gi, y0: e.clientY, cur: gPt(e), moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
       if (l0) { selId = l0.id; selLoc = null; selGrp = null; selDep = null; drag = { type: 'gorder', kind: 'line', id: l0.id, px: gPt(e).x, row: +gel.dataset.gi, y0: e.clientY, cur: gPt(e), moved: false, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
     }
-    if (grole === 'gdeppick' && ctrl) { const d0 = deps.find(x => x.id === Number(gel.dataset.id)); selDep = Number(gel.dataset.id); if (d0) { drag = { type: 'gdeplag', id: d0.id, x0: e.clientX, lag0: lagStart(d0), rigid0: !!d0.rigid, last: null, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); } e.preventDefault(); render(); return; }
+    if (grole === 'gdeppick') { const d0 = deps.find(x => x.id === Number(gel.dataset.id)); selDep = Number(gel.dataset.id); if (d0) { drag = { type: 'gdeplag', id: d0.id, x0: e.clientX, lag0: lagStart(d0), rigid0: !!d0.rigid, last: null, snap: snapshot() }; gSvg.setPointerCapture(e.pointerId); } e.preventDefault(); render(); return; }
     if (grole === 'gdepend' && ctrl) {
       const d = deps.find(x => x.id === Number(gel.dataset.id));
       if (d) {
@@ -3584,7 +3584,7 @@ const XLS = (() => {
     if (e.button === 1 || ((!role || role === 'bg') && P.x >= G.LEFT && (P.y < G.TOP || P.y > G.TOP + G.bodyH || !drawOn))) {
       drag = { type: 'fpan', x0: e.clientX, off0: gOff, snap: snapshot() }; svg.setPointerCapture(e.pointerId); e.preventDefault(); return;
     }
-    if (role === 'dep' && ctrl) {
+    if (role === 'dep') {
       const d = deps.find(x => x.id === Number(el.dataset.id));
       if (d) { selDep = d.id; drag = { type: 'deplag', id: d.id, x0: e.clientX, lag0: lagStart(d), rigid0: !!d.rigid, last: null, snap: snapshot() }; svg.setPointerCapture(e.pointerId); e.preventDefault(); render(); return; }
     }
@@ -4093,7 +4093,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '241'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '242'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
