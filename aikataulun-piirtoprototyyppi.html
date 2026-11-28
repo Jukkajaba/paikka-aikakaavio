@@ -1456,7 +1456,8 @@ const XLS = (() => {
           return;
         }
         const sel = d.id === selDep, ux = g.bx - g.ax, uy = g.by - g.ay, ul = Math.hypot(ux, uy) || 1, nx = ux / ul, ny = uy / ul;
-        const hx = g.bx - nx * 7, hy = g.by - ny * 7, w = sel ? 2.2 : 1, f = v => v.toFixed(1);
+        const hx = g.bx - nx * 7, hy = g.by - ny * 7, w = sel ? 3.6 : 1, f = v => v.toFixed(1);
+        if (sel) p.push('<line x1="' + f(g.ax) + '" y1="' + f(g.ay) + '" x2="' + f(g.bx) + '" y2="' + f(g.by) + '" stroke="' + dc + '" stroke-width="11" stroke-linecap="round" opacity=".22" pointer-events="none"/>');
         p.push('<line x1="' + f(g.ax) + '" y1="' + f(g.ay) + '" x2="' + f(g.bx) + '" y2="' + f(g.by) + '" stroke="' + dc + '" stroke-width="' + w + '"' + (g.viol ? ' stroke-dasharray="3 2"' : '') + ' pointer-events="none"/>');
         p.push('<path d="M' + f(g.bx) + ' ' + f(g.by) + 'L' + f(hx - ny * 3) + ' ' + f(hy + nx * 3) + 'L' + f(hx + ny * 3) + ' ' + f(hy - nx * 3) + 'Z" fill="' + dc + '" pointer-events="none"/>');
         p.push('<line x1="' + f(g.ax) + '" y1="' + f(g.ay) + '" x2="' + f(g.bx) + '" y2="' + f(g.by) + '" stroke="transparent" stroke-width="6" data-role="dep" data-id="' + d.id + '" style="cursor:pointer"><title>' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + (d.rigid ? ' (kiinteä)' : '') + (!d.rigid && g.slack > 1e-9 ? ' (hukka-aikaa ' + dd(g.slack) + ' pv)' : '') + (g.viol ? ' (rikkoutuu)' : '') + '</title></line>');
@@ -2008,7 +2009,8 @@ const XLS = (() => {
           return;
         }
         const pth = 'M' + x1.toFixed(1) + ' ' + ya + 'H' + (x1 + 5).toFixed(1) + 'V' + yb + 'H' + x2.toFixed(1);
-        p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="' + (sel ? 2 : 1) + '"/>');
+        if (sel) p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="9" stroke-linejoin="round" opacity=".22" pointer-events="none"/>');
+        p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="' + (sel ? 3.4 : 1) + '"/>');
         p.push('<path d="M' + x2.toFixed(1) + ' ' + yb + 'l-5 -3v6Z" fill="' + dc + '"/>');
         if (d.lag) p.push('<text class="gc" x="' + (x1 + 8).toFixed(1) + '" y="' + (yb - 4) + '" style="fill:' + dc + '" pointer-events="none">' + (d.lag > 0 ? '+' : '−') + Math.abs(d.lag) + ' pv</text>');
         gdh.push('<path d="' + pth + '" fill="none" stroke="transparent" stroke-width="6" data-gr="gdeppick" data-id="' + d.id + '" style="cursor:pointer"><title>' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + (d.rigid ? ' (kiinteä)' : '') + (!d.rigid && slk > 1e-9 ? ' (hukka-aikaa ' + dd(slk) + ' pv)' : '') + '</title></path>');
@@ -2904,7 +2906,8 @@ const XLS = (() => {
       if (Math.max(ta.loc, tb.loc) < wr0 || Math.min(ta.loc, tb.loc) > wr1) return;
       const x1 = XE(ta.e), x2 = X(tb.s), ya = yOf(ta.loc) + tkRowH / 2, yb = yOf(tb.loc) + tkRowH / 2; if (Math.max(x1, x2) < wc0 * dayW - 50 || Math.min(x1, x2) > wc1 * dayW + 50) return;
       const slk = tb.s - (ta.e + (d.lag || 0)), dc = depCol(d, slk), sel = d.id === selDep, pth = 'M' + x1.toFixed(1) + ' ' + ya.toFixed(1) + 'H' + (x1 + 5).toFixed(1) + 'V' + yb.toFixed(1) + 'H' + x2.toFixed(1);
-      p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="' + (sel ? 2.4 : 1.4) + '" pointer-events="none"/>');
+      if (sel) p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="9" stroke-linejoin="round" opacity=".22" pointer-events="none"/>');
+      p.push('<path d="' + pth + '" fill="none" stroke="' + dc + '" stroke-width="' + (sel ? 3.6 : 1.4) + '" pointer-events="none"/>');
       p.push('<path d="M' + x2.toFixed(1) + ' ' + yb.toFixed(1) + 'l-5 -3v6Z" fill="' + dc + '" pointer-events="none"/>');
       if (d.lag) p.push('<text class="tl" x="' + (x1 + 8).toFixed(1) + '" y="' + (ya - 4).toFixed(1) + '" style="fill:' + dc + '" pointer-events="none">' + (d.lag > 0 ? '+' : '−') + Math.abs(d.lag) + '</text>');
       p.push('<path d="' + pth + '" fill="none" stroke="transparent" stroke-width="9" data-td="' + d.id + '" style="cursor:pointer"><title>Riippuvuus: ' + esc(descRef(d.a)) + ' → ' + esc(descRef(d.b)) + (d.lag ? ' (viive ' + d.lag + ' pv)' : '') + '</title></path>');
@@ -4093,7 +4096,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '243'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '244'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
