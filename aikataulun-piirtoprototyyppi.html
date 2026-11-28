@@ -773,7 +773,7 @@ function depOrderOk(lines, a, b) {
   return ia >= 0 && ib > ia;
 }
 // Työntää seuraajia: tehtävän b alku >= tehtävän a loppu + viive. Kiinteä riippuvuus (rigid) vetää seuraajan myös aikaisemmaksi,
-// mutta ei aikaisemmaksi kuin muut seuraajaan kohdistuvat riippuvuudet, viivan alku (0) tai edellisen tehtävän loppu sallivat. Raja ylhäällä on kaavion loppu.
+// mutta ei aikaisemmaksi kuin muut seuraajaan kohdistuvat riippuvuudet, viivan alku (0) tai edellisen sijainnin alku (limitys) sallivat. Raja ylhäällä on kaavion loppu.
 function enforceDeps(lines, deps, freeId) {
   const isFree = id => Array.isArray(freeId) ? freeId.some(x => String(x) === String(id)) : String(id) === String(freeId);
   const find = id => lines.find(x => String(x.id) === String(id));
@@ -807,7 +807,7 @@ function enforceDeps(lines, deps, freeId) {
         });
         let room = cur - floor;
         if (B.grp) room = Math.min(room, Math.min.apply(null, B.kids.map(k => k.start)));
-        else room = B.i === 0 ? Math.min(room, B.l.start) : Math.min(room, (B.l.ov && B.l.ov[B.loc] && B.l.ov[B.loc].shift) || 0);
+        else if (B.i === 0) room = Math.min(room, B.l.start); else { const pv = tasks(B.l)[B.i - 1]; room = Math.min(room, cur - (pv ? pv.s : 0)); } // limitys sallittu: seuraava sijainti voi alkaa aikaisintaan edellisen sijainnin alussa
         if (room > 1e-9) { if (B.grp) moveKids(B.kids, -room); else shiftTask(B.l, B.i, B.loc, -room); ch = true; }
       }
     }
@@ -4093,7 +4093,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '242'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '243'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
