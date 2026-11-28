@@ -1437,7 +1437,7 @@ const XLS = (() => {
       const ts = mergeRows(tasks(l), RM), asc = range(l).dir >= 0, a = ts[0], b = ts[ts.length - 1];
       return { sx: X(a.s), sy: asc ? Ybot(a.loc) : Ytop(a.loc), ex: XE(b.e), ey: asc ? Ytop(b.loc) : Ybot(b.loc), asc: asc };
     }
-    const MSf = mileSvg(XC, LEFT, W, 22 + hy, histTop + HH, (a, b) => { let t = Infinity, bt = -Infinity; for (let i = a; i <= b; i++) { if (RM && RM[i] < 0) continue; t = Math.min(t, Ytop(i)); bt = Math.max(bt, Ybot(i)); } return t === Infinity ? null : [t, bt]; }, TOP);
+    const MSf = mileSvg(XC, LEFT, W, 22 + hy, histTop + HH, (a, b) => { let t = Infinity, bt = -Infinity; for (let i = a; i <= b; i++) { if (RM && RM[i] < 0) continue; t = Math.min(t, Ytop(i)); bt = Math.max(bt, Ybot(i)); } return t === Infinity ? null : [[t, bt]]; }, TOP);
     p.push(MSf.back);
     if (curBl()) vlines().forEach(l => { const a = blLine(l.id); if (a && a.length) p.push('<path d="' + pathOf(l, a) + '" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round" stroke-linejoin="round" opacity=".4" pointer-events="none"/>'); });
     // viivakohtainen välimuisti: muuttumaton viiva käyttää edellisen piirron SVG-palaa (raahauksessa laskentaa vain raahatulle viivalle)
@@ -1634,19 +1634,22 @@ const XLS = (() => {
   const mileC = u => Math.max(0, Math.round(u2c(u)) - 1);
   function mileIdx(m, LR) { if (!m.la) return null; const a = LR.get(m.la), b = LR.get(m.lb || m.la); return a && b ? [Math.min(a[0], b[0]), Math.max(a[1], b[1])] : null; }
   function mileScope(m, LR) { const ix = mileIdx(m, LR); if (!m.la) return 'Koko aikataulu'; if (!ix) return '(sijainti poistettu)'; const LL = leafLabels(), nm = i => LL[i] || (LOCS[i] && LOCS[i].name) || ''; return nm(ix[0]) + (ix[1] > ix[0] ? ' – ' + nm(ix[1]) : ''); }
-  function mileSvg(XC, xmin, xmax, y0, y1, span, ly) { // palauttaa {back: taustaviivat, hit: muokkaustilan tartuntaviivat}
+  function mileSvg(XC, xmin, xmax, y0, y1, span, ly) { // palauttaa {back: taustaviivat, hit: muokkaustilan tartuntaviivat}; span palauttaa pystysegmentit [[ya,yb],...]
     const back = [], hit = []; if (!miles.length) return { back: '', hit: '' };
     const LR = leafRanges(), C = cc();
     miles.forEach((m, k) => {
-      const x = XC(c2u(m.c + 1)); if (x < xmin - 120 || x > xmax + 4) return;
-      let ya = y0, yb = y1, ty = ly + 11 + (k % 3) * 11;
-      if (m.la) { const ix = mileIdx(m, LR); if (!ix) return; const sp = span(ix[0], ix[1], LR); if (!sp) return; ya = sp[0]; yb = sp[1]; ty = ya + 11; }
-      const sel = m.id === mileSel && mEdit(), col = m.col || '#d23b3b', xs = x.toFixed(1), tip = (m.name || 'Välitavoite') + ' · ' + fmtMs(C.s0 + m.c * DAY_MS);
-      const wd = Math.max(0, Math.round(m.w || 0)), xa = wd ? XC(c2u(m.c)) : x, xb = wd ? XC(c2u(m.c + wd)) : x;
-      if (wd) back.push('<rect class="mile" x="' + xa.toFixed(1) + '" y="' + ya.toFixed(1) + '" width="' + Math.max(1, xb - xa).toFixed(1) + '" height="' + (yb - ya).toFixed(1) + '" fill="' + col + '" opacity=".22" pointer-events="none"/>');
-      back.push('<line class="mile" x1="' + (wd ? xa : x).toFixed(1) + '" x2="' + (wd ? xa : x).toFixed(1) + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="' + col + '" stroke-width="' + (sel ? 3.6 : 2.2) + '" opacity=".85" pointer-events="none"/>');
-      if (m.name) back.push('<text class="tgtl mile" x="' + ((wd ? xa : x) + 3).toFixed(1) + '" y="' + ty.toFixed(1) + '" style="fill:' + col + '" pointer-events="none">' + esc(m.name) + '</text>');
-      if (mEdit()) hit.push('<line x1="' + (wd ? xa + (xb - xa) / 2 : x).toFixed(1) + '" x2="' + (wd ? xa + (xb - xa) / 2 : x).toFixed(1) + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="transparent" stroke-width="' + (wd ? Math.max(12, xb - xa) : 12).toFixed(1) + '" data-ms="' + m.id + '" style="cursor:ew-resize"><title>' + esc(tip) + '</title></line>');
+      const x = XC(c2u(m.c + 1)); if (x < xmin - 120 || x > xmax + 4 + (m.w || 0) * 40) return;
+      let segs = [[y0, y1]], ty = ly + 11 + (k % 3) * 11;
+      if (m.la) { const ix = mileIdx(m, LR); if (!ix) return; segs = span(ix[0], ix[1], LR); if (!segs || !segs.length) return; ty = segs[0][0] + 11; }
+      const sel = m.id === mileSel && mEdit(), col = m.col || '#d23b3b', tip = (m.name || 'Välitavoite') + ' · ' + fmtMs(C.s0 + m.c * DAY_MS);
+      const wd = Math.max(0, Math.round(m.w || 0)), xa = wd ? XC(c2u(m.c)) : x, xb = wd ? XC(c2u(m.c + wd)) : x, xl = xa.toFixed(1), xm = (xa + (xb - xa) / 2).toFixed(1);
+      segs.forEach(sg => {
+        const ya = sg[0], yb = sg[1];
+        if (wd) back.push('<rect class="mile" x="' + xl + '" y="' + ya.toFixed(1) + '" width="' + Math.max(1, xb - xa).toFixed(1) + '" height="' + (yb - ya).toFixed(1) + '" fill="' + col + '" opacity=".22" pointer-events="none"/>');
+        back.push('<line class="mile" x1="' + xl + '" x2="' + xl + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="' + col + '" stroke-width="' + (sel ? 3.6 : 2.2) + '" opacity=".85" pointer-events="none"/>');
+        if (mEdit()) hit.push('<line x1="' + xm + '" x2="' + xm + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="transparent" stroke-width="' + (wd ? Math.max(12, xb - xa) : 12).toFixed(1) + '" data-ms="' + m.id + '" style="cursor:ew-resize"><title>' + esc(tip) + '</title></line>');
+      });
+      if (m.name) back.push('<text class="tgtl mile" x="' + (xa + 3).toFixed(1) + '" y="' + ty.toFixed(1) + '" style="fill:' + col + '" pointer-events="none">' + esc(m.name) + '</text>');
     });
     return { back: back.join(''), hit: hit.join('') };
   }
@@ -2045,7 +2048,7 @@ const XLS = (() => {
       const major = w % step === 0, x = XC(wc).toFixed(1);
       p.push('<line x1="' + x + '" x2="' + x + '" y1="0" y2="' + h + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .55) + '"/>');
     }
-    const MSg = mileSvg(XC, 0, W, 0, h, (a, b, LR) => { let t = null, bt = null; for (let i = first; i < last; i++) { const r = gRows[i]; if (r.locId == null) continue; const q = LR.get(r.locId); if (!q || q[1] < a || q[0] > b) continue; const y = (i - first) * rowH; if (t === null) t = y; bt = y + rowH; } return t === null ? null : [t, bt]; }, 0);
+    const MSg = mileSvg(XC, 0, W, 0, h, (a, b, LR) => { const sg = []; let t = null; for (let i = first; i <= last; i++) { const r = i < last ? gRows[i] : null, q = r && r.locId != null ? LR.get(r.locId) : null, hitR = q && !(q[1] < a || q[0] > b), y = (i - first) * rowH; if (hitR) { if (t === null) t = y; } else if (t !== null) { sg.push([t, y]); t = null; } } return sg; }, 0);
     p.push(MSg.back);
     const tx = XC(calWeekC(target)).toFixed(1);
     p.push('<line x1="' + tx + '" x2="' + tx + '" y1="0" y2="' + h + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4"/>');
@@ -2948,7 +2951,7 @@ const XLS = (() => {
     for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) { const wc = calWeekC(w); if (wc > CL + calVpw()) break; const x = XC(wc).toFixed(1); p.push('<line x1="' + x + '" x2="' + x + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--grid)" stroke-width=".6" opacity=".6"/>'); }
     // sijaintien nimet
     LOCS.forEach((lc, i) => { if (i < wr0 || i > wr1) return; const y = yOf(i), nm = lc.name.length > 22 ? lc.name.slice(0, 21) + '…' : lc.name; lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--panel)"/>'); if (rowOf(i) % 2 === 0) lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); lp.push('<line x1="0" x2="' + LW + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/><text class="gc" x="8" y="' + (y + tkRowH / 2 + 4) + '"><title>' + esc(lc.name) + '</title>' + esc(nm) + '</text>'); });
-    const MSt = mileSvg(XC, 0, W, HEAD, H, (a, b) => [yOf(a), yOf(b) + tkRowH], HEAD); p.push(MSt.back);
+    const MSt = mileSvg(XC, 0, W, HEAD, H, (a, b) => [[yOf(a), yOf(b) + tkRowH]], HEAD); p.push(MSt.back);
     // laatikot: jokaiselle sijaintirivillä päällekkäiset laatikot jakavat korkeuden päällekkäisyyden ajan
     const byRow = new Map(), talls = []; let cnt = 0;
     lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; const ts0 = tasks(l); ts0.forEach(k => { if (k.loc == null || !LOCS[k.loc] || k.gi > 0) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; cnt++; if (virt && (b < wc0 || a > wc1)) return; if (k.gn > 1) { const mem = ts0.filter(x => x.gk === k.gk), rr = mem.map(x => x.loc), rmin = Math.min.apply(null, rr), rmax = Math.max.apply(null, rr); if (virt && (rmax < wr0 || rmin > wr1)) return; talls.push({ l: l, k: k, a: a, b: b, mem: mem, rmin: rmin, rmax: rmax, tall: true }); return; } if (virt && (k.loc < wr0 || k.loc > wr1)) return; if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); }); });
@@ -4222,7 +4225,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '249'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '250'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä

@@ -41,5 +41,9 @@ const { chromium } = require('playwright');
   await p.fill('[data-mlw]', '10'); await p.press('[data-mlw]', 'Tab'); await p.waitForTimeout(300);
   ok((await ms()).some(q => q.w === 10), 'kesto tallentui');
   ok(await p.locator('#chart rect.mile').count() >= 1, 'vyöhyke piirtyy');
+  // 9) gantti: sijaintikohtainen viiva ei peitä kaikkia rivejä
+  await p.click('#vGantt'); await p.waitForTimeout(400);
+  const cov = await p.evaluate(() => { const ls = [...document.querySelectorAll('#gantt line.mile')]; const H = +document.getElementById('gantt').getAttribute('height'); let tot = 0; const col = {}; ls.forEach(l => { const k = l.getAttribute('stroke'); col[k] = (col[k] || 0) + Math.abs(l.getAttribute('y2') - l.getAttribute('y1')); }); return { H: H, col: col }; });
+  ok(Object.values(cov.col).some(v => v < cov.H * 0.95), 'gantissa on rajattu viiva (ei koko korkeus) ' + JSON.stringify(cov));
   ok(errs.length === 0, 'virheet ' + errs.join('|')); console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();
