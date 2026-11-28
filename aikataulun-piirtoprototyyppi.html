@@ -1191,7 +1191,7 @@ const XLS = (() => {
   const undoBtn = document.getElementById('undo');
   let needRoom = true, newForm = false;
   let impSaved = null, hRes = 'hlo';
-  let mdlTpl = '', lines = [], deps = [], FC = null, fcProd = true, baselines = [], blShow = null, statusDay = null, stAuto = false, selGrp = null, nextId = 1, nextDepId = 1, selDep = null, showDeps = true, selId = null, drawTrade = 'levytys', target = 16, tasksOpen = false;
+  let mdlTpl = '', lines = [], deps = [], FC = null, fcProd = true, baselines = [], blShow = null, miles = [], mileEdit = false, mileSel = null, statusDay = null, stAuto = false, selGrp = null, nextId = 1, nextDepId = 1, selDep = null, showDeps = true, selId = null, drawTrade = 'levytys', target = 16, tasksOpen = false;
   let db = null, dl = null, dbState = 'pending', projId = null, projName = 'Esimerkkihanke', projList = [], baseline = '', saving = false, pendingSave = false, saveTimer = null, suspend = false, statusText = '', confirmDel = null;
   let undoStack = [], drag = null, preview = null, G = null;
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1209,14 +1209,14 @@ const XLS = (() => {
     ];
   }
   const byId = id => lines.find(l => String(l.id) === String(id));
-  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, stAuto: stAuto, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES, cal: CAL });
+  const snapshot = () => JSON.stringify({ lines: lines, groups: groups, baselines: baselines, blShow: blShow, miles: miles, statusDay: statusDay, stAuto: stAuto, locs: LOCS, lt: LT, trades: TRADES, deps: deps, weeks: N_WEEKS, target: target, mdlTpl: mdlTpl, res: RES, cal: CAL });
   function syncWeeks() {
     const w = document.getElementById('weeks'), t = document.getElementById('target');
     if (w) w.value = N_WEEKS; if (t) { t.max = N_WEEKS; t.value = target; }
     const pw = document.getElementById('pj-weeks'), pt = document.getElementById('pj-target'); if (pw) pw.value = N_WEEKS; if (pt) { pt.max = N_WEEKS; pt.value = target; }
   }
   function restore(s) {
-    const o = JSON.parse(s); setCal(o.cal); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; statusDay = o.statusDay != null ? o.statusDay : null; stAuto = !!o.stAuto; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
+    const o = JSON.parse(s); setCal(o.cal); setWeeks(o.weeks || 26); lines = o.lines; groups = o.groups || []; baselines = o.baselines || []; blShow = o.blShow || null; miles = Array.isArray(o.miles) ? o.miles : []; statusDay = o.statusDay != null ? o.statusDay : null; stAuto = !!o.stAuto; LT = ltFrom(o); syncLocs(); TRADES = o.trades; deps = o.deps || []; selDep = null; mdlTpl = typeof o.mdlTpl === 'string' ? o.mdlTpl : ''; if (o.target) target = o.target; syncWeeks();
     if (Array.isArray(o.res) && o.res.length) RES = o.res; if (!RES.some(r => r.id === hRes)) hRes = RES[0].id;
     if (!trade(drawTrade)) drawTrade = TRADES.length ? TRADES[0].id : null;
     if (selId !== null && !byId(selId)) selId = null;
@@ -1436,6 +1436,8 @@ const XLS = (() => {
       const ts = mergeRows(tasks(l), RM), asc = range(l).dir >= 0, a = ts[0], b = ts[ts.length - 1];
       return { sx: X(a.s), sy: asc ? Ybot(a.loc) : Ytop(a.loc), ex: XE(b.e), ey: asc ? Ytop(b.loc) : Ybot(b.loc), asc: asc };
     }
+    const MSf = mileSvg(XC, LEFT, W, 22 + hy, histTop + HH, (a, b) => { let t = Infinity, bt = -Infinity; for (let i = a; i <= b; i++) { if (RM && RM[i] < 0) continue; t = Math.min(t, Ytop(i)); bt = Math.max(bt, Ybot(i)); } return t === Infinity ? null : [t, bt]; }, TOP);
+    p.push(MSf.back);
     if (curBl()) vlines().forEach(l => { const a = blLine(l.id); if (a && a.length) p.push('<path d="' + pathOf(l, a) + '" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round" stroke-linejoin="round" opacity=".4" pointer-events="none"/>'); });
     // viivakohtainen välimuisti: muuttumaton viiva käyttää edellisen piirron SVG-palaa (raahauksessa laskentaa vain raahatulle viivalle)
     const gkey = [W, LEFT, RIGHT, TOP, rowH, gOff, visD, dayW, L, hy, calVer, N_DAYS, VR ? VR.rows.map(r => r.name + r.n).join('|') : '', LOCS.map(x => x.id + ':' + x.name + ':' + x.share).join('|')].join(';'), ncache = new Map();
@@ -1577,7 +1579,7 @@ const XLS = (() => {
     }
     svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     p.push('</g>'); p.push(lab.join(''));
-    PH('histdraw'); svg.innerHTML = p.join(''); PH('innerHTML');
+    PH('histdraw'); p.push(MSf.hit); svg.innerHTML = p.join(''); PH('innerHTML');
     svg.classList.toggle('dragging', !!drag);
     drawHandles();
 
@@ -1618,6 +1620,59 @@ const XLS = (() => {
   let panelSelLoc = null, gRowK = 'n'; const ROWH = { c: 22, n: 26, w: 32 }, ROWF = { c: .8, n: 1, w: 1.25 };
   const saveView = () => { try { localStorage.setItem(VKEY, JSON.stringify({ view: view, group: gGroup, vis: gVisW, fit: gFit })); } catch (err) { } try { scheduleSave(); } catch (err) { } };
 
+  // välitavoitteet: {id, name, c (kalenteripäivä; viiva päivän lopussa), col, la, lb (sijaintien id:t; null = koko aikataulu)}
+  const MCOL = ['#d23b3b', '#2a7fd4', '#2e9e5b', '#8a4fd1', '#e08a1e', '#0e9aa7'];
+  const mEdit = () => mileEdit && vis.bl;
+  function leafRanges() { // solmun id -> [ensimmäinen, viimeinen lehtiindeksi]
+    const hasKid = new Set(); LT.forEach(n => { if (n.par) hasKid.add(n.par); });
+    const M = new Map(), lf = []; let li = 0;
+    LT.forEach((n, i) => { if (!hasKid.has(n.id)) { M.set(n.id, [li, li]); lf[i] = li; li++; } });
+    LT.forEach((n, i) => { if (!hasKid.has(n.id)) return; let a = -1, b = -1; const e = ltEnd(i); for (let j = i + 1; j < e; j++) if (lf[j] != null) { if (a < 0) a = lf[j]; b = lf[j]; } if (a >= 0) M.set(n.id, [a, b]); });
+    return M;
+  }
+  const mileC = u => Math.max(0, Math.round(u2c(u)) - 1);
+  function mileIdx(m, LR) { if (!m.la) return null; const a = LR.get(m.la), b = LR.get(m.lb || m.la); return a && b ? [Math.min(a[0], b[0]), Math.max(a[1], b[1])] : null; }
+  function mileScope(m, LR) { const ix = mileIdx(m, LR); if (!m.la) return 'Koko aikataulu'; if (!ix) return '(sijainti poistettu)'; const LL = leafLabels(), nm = i => LL[i] || (LOCS[i] && LOCS[i].name) || ''; return nm(ix[0]) + (ix[1] > ix[0] ? ' – ' + nm(ix[1]) : ''); }
+  function mileSvg(XC, xmin, xmax, y0, y1, span, ly) { // palauttaa {back: taustaviivat, hit: muokkaustilan tartuntaviivat}
+    const back = [], hit = []; if (!miles.length) return { back: '', hit: '' };
+    const LR = leafRanges(), C = cc();
+    miles.forEach((m, k) => {
+      const x = XC(c2u(m.c + 1)); if (x < xmin - 120 || x > xmax + 4) return;
+      let ya = y0, yb = y1, ty = ly + 11 + (k % 3) * 11;
+      if (m.la) { const ix = mileIdx(m, LR); if (!ix) return; const sp = span(ix[0], ix[1], LR); if (!sp) return; ya = sp[0]; yb = sp[1]; ty = ya + 11; }
+      const sel = m.id === mileSel && mEdit(), col = m.col || '#d23b3b', xs = x.toFixed(1), tip = (m.name || 'Välitavoite') + ' · ' + fmtMs(C.s0 + m.c * DAY_MS);
+      back.push('<line class="mile" x1="' + xs + '" x2="' + xs + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="' + col + '" stroke-width="' + (sel ? 3.6 : 2.2) + '" opacity=".85" pointer-events="none"/>');
+      if (m.name) back.push('<text class="tgtl mile" x="' + (x + 3).toFixed(1) + '" y="' + ty.toFixed(1) + '" style="fill:' + col + '" pointer-events="none">' + esc(m.name) + '</text>');
+      if (mEdit()) hit.push('<line x1="' + xs + '" x2="' + xs + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="transparent" stroke-width="12" data-ms="' + m.id + '" style="cursor:ew-resize"><title>' + esc(tip) + '</title></line>');
+    });
+    return { back: back.join(''), hit: hit.join('') };
+  }
+  function mileSetScope(m, r0, r1) {
+    if (r0 === 'all' || r1 === 'all') { m.la = null; m.lb = null; return; }
+    const LR = leafRanges(), a = LR.get(r0), b = LR.get(r1); if (!a || !b) return;
+    m.la = LOCS[Math.min(a[0], b[0])].id; m.lb = LOCS[Math.max(a[1], b[1])].id;
+  }
+  function mileDown(e, ctx) {
+    if (!mEdit() || e.button !== 0) return false;
+    const hit = e.target.closest ? e.target.closest('[data-ms]') : null; let m = null, anchor = null, pushed = false;
+    const push = () => { if (!pushed) { pushUndo(snapshot()); pushed = true; } };
+    if (hit) { m = miles.find(x => x.id === hit.dataset.ms); if (!m) return false; mileSel = m.id; }
+    else {
+      const r0 = ctx.rowAt(e.clientY); if (r0 === null) return false;
+      push(); anchor = r0; m = { id: uid('M'), name: 'Välitavoite ' + (miles.length + 1), c: ctx.toC(e.clientX), col: MCOL[miles.length % MCOL.length], la: null, lb: null };
+      mileSetScope(m, r0, r0); miles.push(m); mileSel = m.id;
+    }
+    render(); let moved = false;
+    const mv = ev => {
+      if (!moved && Math.abs(ev.clientX - e.clientX) < 3 && Math.abs(ev.clientY - e.clientY) < 3) return; moved = true;
+      push(); m.c = ctx.toC(ev.clientX);
+      if (anchor !== null && anchor !== 'all') { const r1 = ctx.rowAt(ev.clientY); if (r1 !== null) mileSetScope(m, anchor, r1); }
+      render();
+    };
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); render(); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    return true;
+  }
   // baseline: jäädytetty kopio tehtävien ajoista. baselines[] = {id, name, date, t: {viivanId: [[sijaintiId, alku, loppu], ...]}}; blShow = näytettävän id
   const curBl = () => (vis.bl && baselines.find(b => b.id === blShow)) || null; // näkyy vain, kun Baseline-paneeli on auki
   function blLine(lid) {
@@ -1987,6 +2042,8 @@ const XLS = (() => {
       const major = w % step === 0, x = XC(wc).toFixed(1);
       p.push('<line x1="' + x + '" x2="' + x + '" y1="0" y2="' + h + '" stroke="var(--grid)" stroke-width="' + (major ? 1 : .6) + '" opacity="' + (major ? 1 : .55) + '"/>');
     }
+    const MSg = mileSvg(XC, 0, W, 0, h, (a, b, LR) => { let t = null, bt = null; for (let i = first; i < last; i++) { const r = gRows[i]; if (r.locId == null) continue; const q = LR.get(r.locId); if (!q || q[1] < a || q[0] > b) continue; const y = (i - first) * rowH; if (t === null) t = y; bt = y + rowH; } return t === null ? null : [t, bt]; }, 0);
+    p.push(MSg.back);
     const tx = XC(calWeekC(target)).toFixed(1);
     p.push('<line x1="' + tx + '" x2="' + tx + '" y1="0" y2="' + h + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4"/>');
     if (stOn() && statusDay != null) p.push('<line x1="' + X(statusDay).toFixed(1) + '" x2="' + X(statusDay).toFixed(1) + '" y1="0" y2="' + h + '" stroke="#e08a1e" stroke-width="1.8" pointer-events="none"><title>Tilanne ' + fmtE(statusDay) + '</title></line>');
@@ -2066,7 +2123,7 @@ const XLS = (() => {
       else p.push('<line x1="' + (dp.grp ? 12 : 0) + '" x2="' + W + '" y1="' + by + '" y2="' + by + '" stroke="var(--ink)" stroke-width="2.5" pointer-events="none"/>');
     }
     gSvg.classList.toggle('dragging', !!drag);
-    gSvg.innerHTML = p.join('');
+    p.push(MSg.hit); gSvg.innerHTML = p.join('');
   }
   gScroll.addEventListener('scroll', () => { if (gRaf) return; gRaf = requestAnimationFrame(() => { gRaf = 0; drawGanttBody(); }); });
   function gRowSel(r) { if (r.line == null || r.line !== selId) return false; if (r.g && selLoc && selLoc.l === r.line) return false; /* yksittäinen sijainti valittu: yhteenvetorivi ei korostu */ if (r.g || r.flat || r.locId == null) return true; return !!(selLoc && selLoc.l === r.line && selLoc.loc === r.locId); }
@@ -2888,6 +2945,7 @@ const XLS = (() => {
     for (let w = 0; w <= Math.ceil(CL / calVpw()) + 2; w++) { const wc = calWeekC(w); if (wc > CL + calVpw()) break; const x = XC(wc).toFixed(1); p.push('<line x1="' + x + '" x2="' + x + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--grid)" stroke-width=".6" opacity=".6"/>'); }
     // sijaintien nimet
     LOCS.forEach((lc, i) => { if (i < wr0 || i > wr1) return; const y = yOf(i), nm = lc.name.length > 22 ? lc.name.slice(0, 21) + '…' : lc.name; lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--panel)"/>'); if (rowOf(i) % 2 === 0) lp.push('<rect x="0" y="' + y + '" width="' + LW + '" height="' + tkRowH + '" fill="var(--band)" opacity=".7"/>'); lp.push('<line x1="0" x2="' + LW + '" y1="' + (y + tkRowH) + '" y2="' + (y + tkRowH) + '" stroke="var(--grid2)" stroke-width=".5"/><text class="gc" x="8" y="' + (y + tkRowH / 2 + 4) + '"><title>' + esc(lc.name) + '</title>' + esc(nm) + '</text>'); });
+    const MSt = mileSvg(XC, 0, W, HEAD, H, (a, b) => [yOf(a), yOf(b) + tkRowH], HEAD); p.push(MSt.back);
     // laatikot: jokaiselle sijaintirivillä päällekkäiset laatikot jakavat korkeuden päällekkäisyyden ajan
     const byRow = new Map(), talls = []; let cnt = 0;
     lines.forEach(l => { if (l.flat || grpClosedOf(l)) return; const ts0 = tasks(l); ts0.forEach(k => { if (k.loc == null || !LOCS[k.loc] || k.gi > 0) return; const a = w2cS(k.s), b = w2cE(k.e); if (!(b > a)) return; cnt++; if (virt && (b < wc0 || a > wc1)) return; if (k.gn > 1) { const mem = ts0.filter(x => x.gk === k.gk), rr = mem.map(x => x.loc), rmin = Math.min.apply(null, rr), rmax = Math.max.apply(null, rr); if (virt && (rmax < wr0 || rmin > wr1)) return; talls.push({ l: l, k: k, a: a, b: b, mem: mem, rmin: rmin, rmax: rmax, tall: true }); return; } if (virt && (k.loc < wr0 || k.loc > wr1)) return; if (!byRow.has(k.loc)) byRow.set(k.loc, []); byRow.get(k.loc).push({ l: l, k: k, a: a, b: b }); }); });
@@ -2940,7 +2998,7 @@ const XLS = (() => {
     const tx = XC(calWeekC(target)).toFixed(1); p.push('<line x1="' + tx + '" x2="' + tx + '" y1="' + HEAD + '" y2="' + H + '" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4" pointer-events="none"/>');
     if (preview && drag && drag.type === 'draw' && drag.tk) tasks(preview).forEach(t => { if (t.loc < 0 || t.loc >= n) return; p.push('<rect x="' + X(t.s).toFixed(1) + '" y="' + (yOf(t.loc) + PADV) + '" width="' + Math.max(2, XE(t.e) - X(t.s)).toFixed(1) + '" height="' + (tkRowH - 2 * PADV) + '" fill="' + colorOf(preview.trade) + '" fill-opacity=".35" stroke="' + colorOf(preview.trade) + '" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"/>'); });
     taktL.setAttribute('width', LW); taktL.setAttribute('height', H); taktL.setAttribute('viewBox', '0 0 ' + LW + ' ' + H); taktL.innerHTML = '<rect x="0" y="0" width="' + LW + '" height="' + HEAD + '" fill="var(--panel)"/>' + lp.join('') + '<line x1="' + (LW - .5) + '" x2="' + (LW - .5) + '" y1="0" y2="' + H + '" stroke="var(--grid2)"/>';
-    taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('');
+    taktR.setAttribute('width', W); taktR.setAttribute('height', H); taktR.setAttribute('viewBox', '0 0 ' + W + ' ' + H); taktR.innerHTML = hp.join('') + p.join('') + MSt.hit;
     document.getElementById('tkNote').textContent = cnt ? cnt + ' laatikkoa' + (lines.some(l => l.flat) ? ' · sijaintittomat tehtävät eivät näy tässä näkymässä' : '') : 'Ei sijaintitehtäviä. Vedä tyhjään kohtaan luodaksesi tehtävän.';
   }
   document.getElementById('tkPlan').addEventListener('click', () => {
@@ -3500,6 +3558,20 @@ const XLS = (() => {
       if (ends.length) { const ce = Math.max.apply(null, ends.map(q => q.c)), be = Math.max.apply(null, ends.map(q => q.b)), dv = r1(ce - be);
         h += '<p class="ok" style="margin:8px 0 0">Valmistuminen: tavoite ' + fmtE(be) + ', nyt ' + fmtE(ce) + ' (' + (dv > 0 ? '+' : dv < 0 ? '−' : '') + dd(Math.abs(dv)) + ' pv)</p>'; }
     }
+    { // välitavoitteet
+      const LR = leafRanges(), C = cc();
+      h += '<div class="lab2" style="margin:14px 0 2px">Välitavoitteet</div><p class="ok hlp" style="margin:0 0 6px">Taustalla näkyvä viiva ganttissa, paikka-aikakaaviossa ja tahdissa. Viiva ei muutu vahingossa: lisäys ja muokkaus tapahtuu vain, kun alla oleva painike on päällä. Viivat tulostuvat.</p>' +
+        '<div class="btns" style="border-top:0;padding-top:0"><button type="button" data-ml="edit" aria-pressed="' + mEdit() + '">Lisää ja muokkaa välitavoitteita</button></div>';
+      if (mEdit()) h += '<p class="ok hlp" style="margin:6px 0">Napsauta aika-akselia (yläreuna): viiva koko aikataululle. Napsauta sijaintiriviä: viiva vain sille sijainnille. Vedä pystysuunnassa laajentaaksesi usealle riville. Siirrä viivaa vetämällä sivusuunnassa. Delete poistaa valitun viivan.</p>';
+      if (!miles.length) h += '<p class="ok">Ei vielä välitavoitteita.</p>';
+      miles.forEach(m => {
+        h += '<div class="row" style="padding:6px 0;flex-wrap:wrap;gap:4px' + (m.id === mileSel ? ';background:var(--band)' : '') + '"><input type="color" data-mlcol="' + m.id + '" value="' + esc(m.col || '#d23b3b') + '" aria-label="Viivan väri" style="width:28px;height:24px;padding:0;border:0;background:none">' +
+          '<input type="text" class="txt" style="max-width:130px" maxlength="40" value="' + esc(m.name) + '" data-mlname="' + m.id + '" aria-label="Välitavoitteen nimi">' +
+          '<input type="date" class="txt" style="max-width:140px" value="' + msIso(C.s0 + m.c * DAY_MS) + '" data-mldate="' + m.id + '" aria-label="Päivämäärä (päivän loppu)">' +
+          '<span class="qrow"><button type="button" data-ml="del" data-id="' + m.id + '" aria-label="Poista välitavoite">✕</button></span>' +
+          '<div style="flex-basis:100%;font-size:11.5px;color:var(--muted)">' + esc(mileScope(m, LR)) + (m.la ? ' · <a href="#" data-ml="whole" data-id="' + m.id + '">koko aikataululle</a>' : '') + '</div></div>';
+      });
+    }
     blCard.innerHTML = h;
   }
   const blCard = document.getElementById('blCard');
@@ -3519,6 +3591,31 @@ const XLS = (() => {
     else if (a === 'restoreok') restoreBl(id);
     else if (a === 'del') { pushUndo(snapshot()); baselines = baselines.filter(x => x.id !== id); if (blShow === id) blShow = null; render(); }
   });
+  blCard.addEventListener('change', e => {
+    const t = e.target, d = t.dataset || {}, id = d.mlcol || d.mlname || d.mldate; if (!id) return; const m = miles.find(x => x.id === id); if (!m) return;
+    if (d.mlcol) { pushUndo(snapshot()); m.col = t.value; }
+    else if (d.mlname) { pushUndo(snapshot()); m.name = t.value.trim().slice(0, 40); }
+    else { const ms = isoMs(t.value); if (ms == null) return; pushUndo(snapshot()); m.c = Math.max(0, Math.round((ms - cc().s0) / DAY_MS)); }
+    render();
+  });
+  blCard.addEventListener('click', e => {
+    const bt = e.target.closest('[data-ml]'); if (!bt) return; e.preventDefault(); const a = bt.dataset.ml, id = bt.dataset.id;
+    if (a === 'edit') { mileEdit = !mileEdit; render(); }
+    else if (a === 'del') { pushUndo(snapshot()); miles = miles.filter(x => x.id !== id); if (mileSel === id) mileSel = null; render(); }
+    else if (a === 'whole') { const m = miles.find(x => x.id === id); if (m) { pushUndo(snapshot()); m.la = null; m.lb = null; render(); } }
+  });
+  { // välitavoitteiden piirto- ja siirtotila: tarttuu tapahtumiin ennen näkymien omia käsittelijöitä
+    const gC = () => gGeo, rc = el => el.getBoundingClientRect();
+    const flowCtx = { toC: x => mileC((x - rc(svg).left - G.LEFT) / G.dayW + gOff), rowAt: y => { const yy = y - rc(svg).top; if (yy < G.TOP) return 'all'; const i = G.L - 1 - Math.floor((yy - G.TOP) / G.rowH); if (i < 0 || i >= G.L) return null; return G.rows ? G.rows[i].id : LOCS[i].id; } };
+    const gantCtx = { toC: x => mileC((x - rc(gSvg).left - gC().LEFT) / gC().dayW + gOff), rowAt: y => { const g = gC(), i = Math.round(gOy / g.rowH) + Math.floor((y - rc(gSvg).top) / g.rowH), r = gRows[i]; return r && r.locId != null ? r.locId : null; } };
+    const ghdCtx = { toC: gantCtx.toC, rowAt: () => 'all' };
+    const takCtx = { toC: x => mileC((x - rc(taktR).left) / (tkWk / calVpw())), rowAt: y => { const yy = y - rc(taktR).top; if (yy < tkHead) return 'all'; const i = Math.floor((yy - tkHead) / tkRowH); return i >= 0 && i < LOCS.length ? LOCS[i].id : null; } };
+    [[svg, flowCtx], [gSvg, gantCtx], [gHead, ghdCtx], [taktR, takCtx]].forEach(x => x[0].addEventListener('pointerdown', e => { if (mileDown(e, x[1])) { e.preventDefault(); e.stopImmediatePropagation(); } }, true));
+    document.addEventListener('keydown', e => {
+      if (!mEdit() || mileSel == null || e.key !== 'Delete') return; const ae = document.activeElement; if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+      if (!miles.some(m => m.id === mileSel)) return; pushUndo(snapshot()); miles = miles.filter(m => m.id !== mileSel); mileSel = null; render(); e.preventDefault(); e.stopImmediatePropagation();
+    }, true);
+  }
   let locDraft = { text: '', tl: 1, rp: 1, kr: 6, as: 0 }, locMsg = '', locTools = false;
   function renderLocs() {
     if (!vis.locs) return;
@@ -4074,7 +4171,7 @@ const XLS = (() => {
   stage.addEventListener('pointerup', endPn); stage.addEventListener('pointercancel', endPn);
 
   // ---------- tallennus (db: projects/<id>), vienti ja tuonti ----------
-  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, statusDay: statusDay, stAuto: stAuto, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols, tx: gTxt }, imp: impSaved, res: RES, cal: CAL, snap: SNAPK });
+  const stateObj = () => ({ v: SCHEMA(), lines: lines, groups: groups, baselines: baselines, blShow: blShow, miles: miles, statusDay: statusDay, stAuto: stAuto, mdlTpl: mdlTpl, deps: deps, locs: LOCS, lt: LT, trades: TRADES, target: target, weeks: N_WEEKS, nextId: nextId, nextDepId: nextDepId, drawTrade: drawTrade, view: { lcol: [...lcol], hid: [...locHid], gc: gClosed, zv: gVisW, rh: gRowK, cols: gCols, tx: gTxt }, imp: impSaved, res: RES, cal: CAL, snap: SNAPK });
   const stateJson = () => JSON.stringify({ n: projName, s: stateObj() });
   const newPid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const hhmm = d => d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
@@ -4107,7 +4204,7 @@ const XLS = (() => {
     setCal(st.cal); setWeeks(st.weeks || 26);
     LT = ltFrom(st); syncLocs(); TRADES = st.trades;
     lines = st.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
-    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; stAuto = !!st.stAuto && statusDay != null; if (stAuto) statusDay = todayDay(); target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
+    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; miles = Array.isArray(st.miles) ? st.miles.filter(m => m && m.id && typeof m.c === 'number') : []; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; stAuto = !!st.stAuto && statusDay != null; if (stAuto) statusDay = todayDay(); target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
     nextId = Math.max(parseInt(st.nextId, 10) || 1, maxNum(lines) + 1);
     nextDepId = Math.max(parseInt(st.nextDepId, 10) || 1, maxNum(deps) + 1);
     _uid = Math.max(_uid, maxNum(LOCS), maxNum(LT), maxNum(TRADES), maxNum(groups), maxNum(baselines));
@@ -4121,7 +4218,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '247'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '248'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -4272,7 +4369,7 @@ const XLS = (() => {
     if (st) applyState(st);
     else {
       setCal(Object.assign(CAL_DEF(), { hol: true })); if (kind === 'blank') { LT = []; syncLocs(); TRADES = []; drawTrade = null; } else { LT = ltFrom({ locs: defaultLocs() }); syncLocs(); TRADES = defaultTrades(); drawTrade = 'levytys'; } target = 16; setWeeks(26); syncWeeks(); needRoom = true;
-      RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; statusDay = null; stAuto = false; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
+      RES = DEF_RES(); hRes = RES[0].id; groups = []; baselines = []; blShow = null; miles = []; mileSel = null; statusDay = null; stAuto = false; mdlTpl = ''; if (kind === 'example') { lines = seed(); deps = seedDeps(); } else { lines = []; deps = []; nextId = 1; nextDepId = 1; }
       selId = null; selDep = null; undoStack = []; lcol = new Set(); locHid = new Set(); gClosed = {}; gVisW = 26; gRowK = 'n'; gCols = COLDEFAULT.slice(); gTxt = false; try { document.getElementById('rowSel').value = 'n'; } catch (e) { }
     }
     projId = null; projName = name; renderSub(); render(); suspend = false; baseline = ''; try { renderWelcome(); } catch (err) { }
