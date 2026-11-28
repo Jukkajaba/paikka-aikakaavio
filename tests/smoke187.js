@@ -36,5 +36,10 @@ const { chromium } = require('playwright');
   // 7) päivämäärän muutos paneelista ja tallennus
   const iso = await p.inputValue('[data-mldate]'); ok(/^\d{4}-\d\d-\d\d$/.test(iso), 'päivämääräkenttä');
   const st = await p.evaluate(() => JSON.stringify(__aik().stateObj().miles)); ok(JSON.parse(st).length === 3, 'stateObj sisältää viivat');
+  // 8) kesto: leveä vyöhyke
+  await p.click('#vFlow'); await p.waitForTimeout(300);
+  await p.fill('[data-mlw]', '10'); await p.press('[data-mlw]', 'Tab'); await p.waitForTimeout(300);
+  ok((await ms()).some(q => q.w === 10), 'kesto tallentui');
+  ok(await p.locator('#chart rect.mile').count() >= 1, 'vyöhyke piirtyy');
   ok(errs.length === 0, 'virheet ' + errs.join('|')); console.log(fail ? 'EPÄONNISTUI ' + fail : 'OK'); await b.close(); process.exit(fail ? 1 : 0);
 })();

@@ -211,6 +211,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #ganttWrap { padding: 8px 6px; position: relative; }
 .gadd { position: absolute; left: 12px; top: 10px; z-index: 5; display: flex; align-items: center; gap: 6px; }
 .gplus { padding: 0; line-height: 1; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+#blCard [data-ml=edit][aria-pressed=true] { background: #ffe9b8; color: #3a2a00; border-color: #e0a93a; font-weight: 600; }
 .gplus[aria-pressed=true] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .gplus.big { width: 28px; height: 28px; font-size: 20px; }
 .gplus.small { width: 20px; height: 20px; font-size: 14px; }
@@ -1641,9 +1642,11 @@ const XLS = (() => {
       let ya = y0, yb = y1, ty = ly + 11 + (k % 3) * 11;
       if (m.la) { const ix = mileIdx(m, LR); if (!ix) return; const sp = span(ix[0], ix[1], LR); if (!sp) return; ya = sp[0]; yb = sp[1]; ty = ya + 11; }
       const sel = m.id === mileSel && mEdit(), col = m.col || '#d23b3b', xs = x.toFixed(1), tip = (m.name || 'Välitavoite') + ' · ' + fmtMs(C.s0 + m.c * DAY_MS);
-      back.push('<line class="mile" x1="' + xs + '" x2="' + xs + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="' + col + '" stroke-width="' + (sel ? 3.6 : 2.2) + '" opacity=".85" pointer-events="none"/>');
-      if (m.name) back.push('<text class="tgtl mile" x="' + (x + 3).toFixed(1) + '" y="' + ty.toFixed(1) + '" style="fill:' + col + '" pointer-events="none">' + esc(m.name) + '</text>');
-      if (mEdit()) hit.push('<line x1="' + xs + '" x2="' + xs + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="transparent" stroke-width="12" data-ms="' + m.id + '" style="cursor:ew-resize"><title>' + esc(tip) + '</title></line>');
+      const wd = Math.max(0, Math.round(m.w || 0)), xa = wd ? XC(c2u(m.c)) : x, xb = wd ? XC(c2u(m.c + wd)) : x;
+      if (wd) back.push('<rect class="mile" x="' + xa.toFixed(1) + '" y="' + ya.toFixed(1) + '" width="' + Math.max(1, xb - xa).toFixed(1) + '" height="' + (yb - ya).toFixed(1) + '" fill="' + col + '" opacity=".22" pointer-events="none"/>');
+      back.push('<line class="mile" x1="' + (wd ? xa : x).toFixed(1) + '" x2="' + (wd ? xa : x).toFixed(1) + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="' + col + '" stroke-width="' + (sel ? 3.6 : 2.2) + '" opacity=".85" pointer-events="none"/>');
+      if (m.name) back.push('<text class="tgtl mile" x="' + ((wd ? xa : x) + 3).toFixed(1) + '" y="' + ty.toFixed(1) + '" style="fill:' + col + '" pointer-events="none">' + esc(m.name) + '</text>');
+      if (mEdit()) hit.push('<line x1="' + (wd ? xa + (xb - xa) / 2 : x).toFixed(1) + '" x2="' + (wd ? xa + (xb - xa) / 2 : x).toFixed(1) + '" y1="' + ya.toFixed(1) + '" y2="' + yb.toFixed(1) + '" stroke="transparent" stroke-width="' + (wd ? Math.max(12, xb - xa) : 12).toFixed(1) + '" data-ms="' + m.id + '" style="cursor:ew-resize"><title>' + esc(tip) + '</title></line>');
     });
     return { back: back.join(''), hit: hit.join('') };
   }
@@ -3567,8 +3570,8 @@ const XLS = (() => {
       miles.forEach(m => {
         h += '<div class="row" style="padding:6px 0;flex-wrap:wrap;gap:4px' + (m.id === mileSel ? ';background:var(--band)' : '') + '"><input type="color" data-mlcol="' + m.id + '" value="' + esc(m.col || '#d23b3b') + '" aria-label="Viivan väri" style="width:28px;height:24px;padding:0;border:0;background:none">' +
           '<input type="text" class="txt" style="max-width:130px" maxlength="40" value="' + esc(m.name) + '" data-mlname="' + m.id + '" aria-label="Välitavoitteen nimi">' +
-          '<input type="date" class="txt" style="max-width:140px" value="' + msIso(C.s0 + m.c * DAY_MS) + '" data-mldate="' + m.id + '" aria-label="Päivämäärä (päivän loppu)">' +
-          '<span class="qrow"><button type="button" data-ml="del" data-id="' + m.id + '" aria-label="Poista välitavoite">✕</button></span>' +
+          '<input type="date" class="txt" style="max-width:140px" value="' + msIso(C.s0 + m.c * DAY_MS) + '" data-mldate="' + m.id + '" aria-label="Päivämäärä (kesto 0: päivän loppu, muuten ensimmäinen päivä)">' +
+          '<label style="font-size:11.5px;color:var(--muted)">kesto <input type="number" class="num" min="0" max="999" step="1" style="width:56px" value="' + Math.round(m.w || 0) + '" data-mlw="' + m.id + '" aria-label="Kesto kalenteripäivinä (0 = pelkkä viiva)"> pv</label><span class="qrow"><button type="button" data-ml="del" data-id="' + m.id + '" aria-label="Poista välitavoite">✕</button></span>' +
           '<div style="flex-basis:100%;font-size:11.5px;color:var(--muted)">' + esc(mileScope(m, LR)) + (m.la ? ' · <a href="#" data-ml="whole" data-id="' + m.id + '">koko aikataululle</a>' : '') + '</div></div>';
       });
     }
@@ -3592,8 +3595,9 @@ const XLS = (() => {
     else if (a === 'del') { pushUndo(snapshot()); baselines = baselines.filter(x => x.id !== id); if (blShow === id) blShow = null; render(); }
   });
   blCard.addEventListener('change', e => {
-    const t = e.target, d = t.dataset || {}, id = d.mlcol || d.mlname || d.mldate; if (!id) return; const m = miles.find(x => x.id === id); if (!m) return;
+    const t = e.target, d = t.dataset || {}, id = d.mlcol || d.mlname || d.mldate || d.mlw; if (!id) return; const m = miles.find(x => x.id === id); if (!m) return;
     if (d.mlcol) { pushUndo(snapshot()); m.col = t.value; }
+    else if (d.mlw) { pushUndo(snapshot()); m.w = Math.max(0, Math.min(999, Math.round(+t.value || 0))); }
     else if (d.mlname) { pushUndo(snapshot()); m.name = t.value.trim().slice(0, 40); }
     else { const ms = isoMs(t.value); if (ms == null) return; pushUndo(snapshot()); m.c = Math.max(0, Math.round((ms - cc().s0) / DAY_MS)); }
     render();
@@ -4204,7 +4208,7 @@ const XLS = (() => {
     setCal(st.cal); setWeeks(st.weeks || 26);
     LT = ltFrom(st); syncLocs(); TRADES = st.trades;
     lines = st.lines.filter(l => trade(l.trade) && (l.flat || (locIdx(l.from) >= 0 && locIdx(l.to) >= 0)));
-    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; miles = Array.isArray(st.miles) ? st.miles.filter(m => m && m.id && typeof m.c === 'number') : []; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; stAuto = !!st.stAuto && statusDay != null; if (stAuto) statusDay = todayDay(); target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
+    deps = st.deps; groups = Array.isArray(st.groups) ? st.groups.filter(g => g && g.id) : []; gFixParents(); baselines = Array.isArray(st.baselines) ? st.baselines.filter(b => b && b.id && b.t) : []; blShow = baselines.some(b => b.id === st.blShow) ? st.blShow : null; miles = Array.isArray(st.miles) ? st.miles.filter(m => m && m.id && typeof m.c === 'number').map(m => { m.w = Math.max(0, Math.round(+m.w || 0)); return m; }) : []; statusDay = typeof st.statusDay === 'number' ? st.statusDay : null; stAuto = !!st.stAuto && statusDay != null; if (stAuto) statusDay = todayDay(); target = clamp(parseInt(st.target, 10) || 16, 1, N_WEEKS); mdlTpl = typeof st.mdlTpl === 'string' ? st.mdlTpl.slice(0, 500) : '';
     nextId = Math.max(parseInt(st.nextId, 10) || 1, maxNum(lines) + 1);
     nextDepId = Math.max(parseInt(st.nextDepId, 10) || 1, maxNum(deps) + 1);
     _uid = Math.max(_uid, maxNum(LOCS), maxNum(LT), maxNum(TRADES), maxNum(groups), maxNum(baselines));
@@ -4218,7 +4222,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '248'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '249'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
