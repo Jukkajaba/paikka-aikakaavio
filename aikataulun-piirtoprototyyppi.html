@@ -298,6 +298,22 @@ body.ctrl-held #chart [data-role="depend"], body.ctrl-held #gantt [data-gr="gdep
   #impBox textarea{width:100%;height:110px;font:12px monospace;box-sizing:border-box}
   #impBox table{border-collapse:collapse;font-size:12px;width:100%}#impBox td,#impBox th{border:1px solid #bbb;padding:2px 5px;text-align:left}
   #impBox input.num{width:64px}#impBox .w{color:#b45309}#impBox .row2{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:4px 0}
+
+/* asettelun muokkaus */
+.lay-br { flex-basis: 100%; width: 100%; height: 0; }
+body.lay-edit .lay-br { height: 22px; border: 1px dashed var(--muted); border-radius: 4px; display: flex; align-items: center; font-size: 11px; color: var(--muted); padding: 0 8px; cursor: grab; }
+body.lay-edit .lay-br::before { content: "⏎ rivinvaihto (vedä roskaan poistaaksesi)"; }
+body.lay-edit [data-lay] { outline: 1px dashed var(--muted); outline-offset: 2px; cursor: grab; border-radius: 4px; }
+body.lay-edit [data-lay] * { pointer-events: none; }
+body.lay-edit [data-lay].lay-drag { opacity: .35; }
+body.lay-edit .lay-ins { box-shadow: -4px 0 0 0 var(--ink); }
+#layBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 9999; width: min(980px, 96vw); background: var(--panel); color: var(--ink); border: 1px solid var(--muted); border-radius: 10px; box-shadow: 0 6px 28px rgba(0,0,0,.35); padding: 10px 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
+#layBar[hidden] { display: none; }
+#layBar .lrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#layTray { min-height: 34px; border: 1px dashed var(--muted); border-radius: 6px; padding: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1 1 300px; }
+#layTray:empty::before { content: "Piilotetut napit: vedä tähän piilottaaksesi"; color: var(--muted); }
+#layTray.lay-over { background: rgba(127,127,127,.18); }
+#layOut { width: 100%; height: 90px; font: 11px/1.35 ui-monospace, monospace; background: var(--bg); color: var(--ink); border: 1px solid var(--muted); border-radius: 6px; padding: 6px; }
 </style>
 
 <div class="wrap">
@@ -334,7 +350,7 @@ body.ctrl-held #chart [data-role="depend"], body.ctrl-held #gantt [data-gr="gdep
     </div>
   </div>
   <p class="hint" id="hint">Piirrä: valitse työlaji ja vedä tyhjästä kohdasta kaaviossa. Siirrä: vedä viivaa. Venytä: vedä päätepistettä. Sijainnit, työlajit ja muut tiedot ovat paneeleissa: avaa ne Paneelit-painikkeilla, raahaa otsikosta minne tahansa kaavion päälle ja piilota ×-painikkeella. Riippuvuus: pidä Ctrl pohjassa ja vedä tehtävältä toiselle, niin edellinen työntää seuraavaa, ja viiveen voi asettaa Tehtävä-paneelissa. Shift + veto viivan päällä siirtää vain sitä tehtävää (sijaintia) ja sen jälkeisiä. Ctrl pohjassa nuolen vetäminen sivusuunnassa muuttaa viivettä ja pään pallon vetäminen siirtää riippuvuuden toiseen tehtävään. Delete poistaa valitun viivan tai riippuvuuden.</p>
-  <div class="ptog" id="ptog" role="group" aria-label="Paneelit"></div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px"><div class="ptog" id="ptog" role="group" aria-label="Paneelit" style="flex:1 1 auto"></div><button id="layBtn" type="button" class="chip" aria-pressed="false" title="Muokkaa nappien asettelua: raahaa nappeja, lisää rivinvaihtoja, piilota napit">Asettelu</button></div>
 
   <div class="stage" id="stage">
     <div id="welcome" role="dialog" aria-label="Aloita"></div>
@@ -353,6 +369,12 @@ body.ctrl-held #chart [data-role="depend"], body.ctrl-held #gantt [data-gr="gdep
   </div>
 </div>
 
+<div id="layBar" hidden role="dialog" aria-label="Asettelun muokkaus">
+  <div class="lrow"><b>Asettelun muokkaus</b><span>Raahaa nappeja (työkalupalkki, Paneelit-rivi, Tahti-rivi). Näkymän omat napit näet vaihtamalla näkymää:</span>
+    <button type="button" data-layview="vFlow">Paikka-aika</button><button type="button" data-layview="vGantt">Gantt</button><button type="button" data-layview="vTakt">Tahti</button></div>
+  <div class="lrow"><button type="button" id="layAddBr">+ Rivinvaihto</button><button type="button" id="layReset">Palauta oletus</button><button type="button" id="layCopy">Kopioi asettelu</button><button type="button" id="layDone">Valmis</button><div id="layTray"></div></div>
+  <textarea id="layOut" readonly hidden aria-label="Asettelu tekstinä"></textarea>
+</div>
 <script>
 // diagnostiikka: viimeisimmät virheet ja toiminnot ongelmailmoitusta varten (ei tallenneta mihinkään ilman käyttäjän lupaa)
 window.__diag = { errs: [], acts: [] };
@@ -4019,6 +4041,7 @@ const XLS = (() => {
     { const pb = document.getElementById('projBtn'); if (pb) pb.setAttribute('aria-pressed', String(!!vis.proj)); }
     const chip = x => '<button type="button" class="chip' + (x[0] === 'bl' ? ' pgap' : '') + '" data-ptog="' + x[0] + '" aria-pressed="' + !!vis[x[0]] + '">' + x[1] + '</button>';
     { const rb = document.getElementById('resBtn'); if (rb) rb.setAttribute('aria-pressed', String(!!vis.res)); }
+    if (ptog.querySelector('[data-ptog]')) { ptog.querySelectorAll('[data-ptog]').forEach(b => b.setAttribute('aria-pressed', String(!!vis[b.dataset.ptog]))); return; }
     ptog.innerHTML = '<span class="lab2">Paneelit</span>' + PN.filter(x => ['panel', 'list', 'notes', 'locs'].indexOf(x[0]) >= 0).map(chip).join('') + PN.filter(x => ['bl', 'st', 'fc'].indexOf(x[0]) >= 0).map(chip).join('');
   }
   function setVis(n, v) {
@@ -4098,7 +4121,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '246'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '247'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
@@ -4388,5 +4411,71 @@ const XLS = (() => {
   });
   document.getElementById('depClear').addEventListener('click', () => { if (!deps.length) return; pushUndo(snapshot()); deps = []; selDep = null; render(); });
   lines = seed(); deps = seedDeps(); syncDep(); renderSub(); render(); renderToggles(); placeAll(); baseline = stateJson(); renderProj(); initDb();
+})();
+</script>
+
+<script>
+(function () {
+  const KEY = 'aik-layout-v1', cont = { A: document.querySelector('.toolbar .actions'), P: document.getElementById('ptog'), T: document.querySelector('#taktWrap .tkctl') };
+  const tray = document.getElementById('layTray'), bar = document.getElementById('layBar'), out = document.getElementById('layOut'), btn = document.getElementById('layBtn');
+  if (!cont.A || !cont.P || !cont.T || !btn) return;
+  const skip = el => el.id === 'layBtn' || el.id === 'tkNote' || el.tagName === 'SCRIPT';
+  const keyOf = el => el.dataset.lay || el.id || (el.querySelector('[id]') || {}).id || el.dataset.ptog || (el.querySelector('[data-ptog]') || {}).dataset && el.querySelector('[data-ptog]').dataset.ptog || (el.textContent || '').trim().slice(0, 24);
+  const labelOf = el => { if (el.classList.contains('lay-br')) return '⏎'; const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim(); return (t || el.getAttribute('aria-label') || keyOf(el)).slice(0, 48); };
+  const items = c => [...c.children].filter(e => !skip(e));
+  const mark = () => { Object.keys(cont).forEach(k => items(cont[k]).forEach(e => { if (!e.classList.contains('lay-br')) { if (!e.dataset.lay) e.dataset.lay = keyOf(e); e._home = k; } })); [...tray.children].forEach(e => { if (!e.dataset.lay) e.dataset.lay = keyOf(e); }); };
+  const read = () => { const o = { A: [], P: [], T: [], H: [] }; Object.keys(cont).forEach(k => items(cont[k]).forEach(e => o[k].push(e.classList.contains('lay-br') ? 'br' : e.dataset.lay))); [...tray.children].forEach(e => o.H.push(e.dataset.lay)); return o; };
+  const mkBr = () => { const b = document.createElement('span'); b.className = 'lay-br'; b.dataset.layBr = '1'; return b; };
+  const apply = o => {
+    const all = {}; Object.keys(cont).forEach(k => items(cont[k]).forEach(e => { if (!e.classList.contains('lay-br')) all[e.dataset.lay] = e; })); [...tray.children].forEach(e => { all[e.dataset.lay] = e; });
+    Object.keys(cont).forEach(k => { items(cont[k]).filter(e => e.classList.contains('lay-br')).forEach(e => e.remove()); });
+    const placed = new Set(), hid = new Set(o.H || []);
+    Object.keys(cont).forEach(k => { const c = cont[k], anchor = [...c.children].filter(e => skip(e)); (o[k] || []).forEach(key => { if (key === 'br') { const b = mkBr(); if (anchor.length) c.insertBefore(b, anchor[0]); else c.appendChild(b); return; } const e = all[key]; if (!e || placed.has(key) || hid.has(key) || e._home !== k) return; placed.add(key); if (anchor.length) c.insertBefore(e, anchor[0]); else c.appendChild(e); }); });
+    hid.forEach(key => { const e = all[key]; if (e) { placed.add(key); tray.appendChild(e); } });
+    Object.keys(all).forEach(key => { if (!placed.has(key)) { const e = all[key], c = cont[e._home]; if (c) { const anchor = [...c.children].filter(x => skip(x)); if (anchor.length) c.insertBefore(e, anchor[0]); else c.appendChild(e); } } });
+  };
+  mark(); const DEF = read();
+  try { const sv = JSON.parse(localStorage.getItem(KEY) || 'null'); if (sv) apply(sv); } catch (e) { }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(read())); } catch (e) { } };
+  // vetäminen
+  let dragEl = null;
+  const setDrag = on => { document.querySelectorAll('[data-lay],.lay-br').forEach(e => { e.draggable = on; }); };
+  const home = e => e.classList.contains('lay-br') ? e.parentNode : cont[e._home];
+  const clearIns = () => document.querySelectorAll('.lay-ins').forEach(e => e.classList.remove('lay-ins'));
+  document.addEventListener('dragstart', e => { if (!document.body.classList.contains('lay-edit')) return; const t = e.target.closest && e.target.closest('[data-lay],.lay-br'); if (!t) return; dragEl = t; t.classList.add('lay-drag'); try { e.dataTransfer.setData('text/plain', t.dataset.lay || 'br'); e.dataTransfer.effectAllowed = 'move'; } catch (er) { } });
+  document.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('lay-drag'); dragEl = null; clearIns(); tray.classList.remove('lay-over'); });
+  const targetIn = (c, e) => { const t = e.target.closest && e.target.closest('[data-lay],.lay-br'); return t && t.parentNode === c && t !== dragEl ? t : null; };
+  const over = (c, e, isTray) => {
+    if (!dragEl) return; const ok = isTray || home(dragEl) === c; if (!ok) return; e.preventDefault(); clearIns();
+    if (isTray) { tray.classList.add('lay-over'); return; } const t = targetIn(c, e); if (t) t.classList.add('lay-ins');
+  };
+  const drop = (c, e, isTray) => {
+    if (!dragEl) return; const ok = isTray || home(dragEl) === c; if (!ok) return; e.preventDefault(); clearIns(); tray.classList.remove('lay-over');
+    if (isTray) { if (dragEl.classList.contains('lay-br')) dragEl.remove(); else tray.appendChild(dragEl); save(); return; }
+    const t = targetIn(c, e);
+    if (t) { if (t.classList.contains('lay-br')) c.insertBefore(dragEl, t); else { const r = t.getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) c.insertBefore(dragEl, t); else c.insertBefore(dragEl, t.nextSibling && !skip(t.nextSibling) ? t.nextSibling : (t.nextSibling || null)); } }
+    else { const anchor = [...c.children].filter(x => skip(x)); if (anchor.length) c.insertBefore(dragEl, anchor[0]); else c.appendChild(dragEl); }
+    // piilotettu nappi palaa kotiinsa: _home säilyy
+    save(); setDrag(true);
+  };
+  Object.keys(cont).forEach(k => { cont[k].addEventListener('dragover', e => over(cont[k], e, false)); cont[k].addEventListener('drop', e => drop(cont[k], e, false)); });
+  tray.addEventListener('dragover', e => over(tray, e, true)); tray.addEventListener('drop', e => drop(tray, e, true));
+  // piilotettu nappi voidaan vetää takaisin tarjottimelta kotirivilleen
+  tray.addEventListener('dblclick', e => { const t = e.target.closest && e.target.closest('[data-lay]'); if (!t) return; const c = cont[t._home]; const anchor = [...c.children].filter(x => skip(x)); if (anchor.length) c.insertBefore(t, anchor[0]); else c.appendChild(t); save(); setDrag(true); });
+  // napit
+  const edit = on => { document.body.classList.toggle('lay-edit', on); bar.hidden = !on; btn.setAttribute('aria-pressed', String(on)); if (on) { mark(); setDrag(true); } else { setDrag(false); out.hidden = true; } };
+  btn.addEventListener('click', () => edit(!document.body.classList.contains('lay-edit')));
+  document.getElementById('layDone').addEventListener('click', () => edit(false));
+  document.getElementById('layAddBr').addEventListener('click', () => { const b = mkBr(), c = cont.A, anchor = [...c.children].filter(x => skip(x)); if (anchor.length) c.insertBefore(b, anchor[0]); else c.appendChild(b); b.draggable = true; save(); });
+  document.getElementById('layReset').addEventListener('click', () => { apply(DEF); try { localStorage.removeItem(KEY); } catch (e) { } mark(); setDrag(true); });
+  bar.querySelectorAll('[data-layview]').forEach(b => b.addEventListener('click', () => document.getElementById(b.dataset.layview).click()));
+  const names = { A: 'Työkalupalkki (kaavion yläpuolella)', P: 'Paneelit-rivi', T: 'Tahti-näkymän oma rivi (kaavion yläreunassa)' };
+  document.getElementById('layCopy').addEventListener('click', () => {
+    const o = read(); let t = 'ASETTELU ' + new Date().toISOString().slice(0, 10) + '\n';
+    Object.keys(cont).forEach(k => { t += '\n' + names[k] + ':\n'; let row = [], n = 1; const flush = () => { t += '  Rivi ' + (n++) + ': ' + (row.join(' | ') || '(tyhjä)') + '\n'; row = []; }; items(cont[k]).forEach(e => { if (e.classList.contains('lay-br')) flush(); else row.push(labelOf(e)); }); flush(); });
+    t += '\nPiilotetut: ' + ([...tray.children].map(labelOf).join(' | ') || '-') + '\n\nJSON: ' + JSON.stringify(o);
+    out.value = t; out.hidden = false; out.select(); try { navigator.clipboard && navigator.clipboard.writeText(t).catch(() => { }); } catch (e) { }
+  });
+  window.__lay = { read: read, apply: apply, edit: edit };
 })();
 </script>
