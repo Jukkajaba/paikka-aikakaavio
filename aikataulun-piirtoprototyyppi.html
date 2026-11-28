@@ -211,7 +211,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0 
 #ganttWrap { padding: 8px 6px; position: relative; }
 .gadd { position: absolute; left: 12px; top: 10px; z-index: 5; display: flex; align-items: center; gap: 6px; }
 .gplus { padding: 0; line-height: 1; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
-.gplus[aria-pressed=true] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.gplus[aria-pressed=true] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .gplus.big { width: 28px; height: 28px; font-size: 20px; }
 .gplus.small { width: 20px; height: 20px; font-size: 14px; }
 #ganttWrap[hidden], .chips[hidden] { display: none; }
@@ -4098,7 +4098,7 @@ const XLS = (() => {
   // ---------- Ilmoita ongelma ----------
   // Raportti kootaan paikallisesti eikä lähde minnekään automaattisesti: käyttäjä kopioi sen tai lataa tiedostona.
   // Myöhemmin sama sisältö voidaan lähettää rajapinnan kautta käyttäjän luvalla.
-  const APP_BUILD = '245'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
+  const APP_BUILD = '246'; document.title = document.title.replace(/ ·? ?v\d+$/, '') + ' · v' + APP_BUILD;
   const actLog = []; const pushAct = s => { actLog.push(s); if (actLog.length > 40) actLog.shift(); };
   document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('button,[data-act],[data-role],[data-field],[data-pj]'); if (el) pushAct('click ' + (el.id || el.dataset.act || el.dataset.role || el.dataset.field || el.dataset.pj || el.tagName)); }, true);
   document.addEventListener('change', e => { const el = e.target, f = el.dataset && el.dataset.field || el.id || el.tagName, n = parseFloat(el.value); pushAct('change ' + f + (el.type === 'number' && isFinite(n) ? '=' + n : '')); }, true); // vain numerot, ei vapaata tekstiä
